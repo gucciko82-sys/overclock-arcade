@@ -1,0 +1,1730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Flyway — Duck Season After Dark</title>
+<link rel="manifest" href="../manifest.json">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0f1e">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #0b0f1e; color: #fff;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    user-select: none; -webkit-user-select: none;
+    overscroll-behavior: none touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #stage.aiming { cursor: none; }
+
+  /* ---------------------------------------------------------------- HUD */
+  #hud {
+    position: absolute; inset: 0; pointer-events: none;
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+             max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+  .row { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+  .panel {
+    background: rgba(11,15,30,0.72); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 14px; padding: 9px 13px; backdrop-filter: blur(6px);
+  }
+  .lab {
+    font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase;
+    color: rgba(255,255,255,0.50); margin-bottom: 2px;
+  }
+  .val { font-size: 21px; font-weight: 800; line-height: 1; }
+  .accent { color: #ffcc4d; }
+  .small { font-size: 13px; font-weight: 700; }
+
+  #shells { display: flex; gap: 6px; margin-top: 3px; }
+  .shell {
+    width: 9px; height: 20px; border-radius: 3px;
+    background: linear-gradient(#ffcc4d, #c8860f);
+    box-shadow: 0 0 9px rgba(255,204,77,0.65);
+  }
+  .shell.spent { background: rgba(255,255,255,0.13); box-shadow: none; }
+
+  #tally { display: flex; gap: 5px; flex-wrap: wrap; max-width: 210px; margin-top: 4px; }
+  .tk { width: 12px; height: 12px; border-radius: 3px; background: rgba(255,255,255,0.13); }
+  .tk.hit  { background: #ffcc4d; box-shadow: 0 0 9px rgba(255,204,77,0.7); }
+  .tk.miss { background: #ff5f6d; }
+
+  #quota { margin-top: 6px; width: 100%; height: 6px; border-radius: 4px;
+           background: rgba(255,255,255,0.13); overflow: hidden; }
+  #quota i { display: block; height: 100%; width: 0%;
+             background: linear-gradient(90deg, #6fe3ff, #ffcc4d); transition: width 0.25s; }
+
+  /* ------------------------------------------------------------ overlay */
+  #overlay {
+    position: absolute; inset: 0; display: none;
+    align-items: flex-start; justify-content: center; overflow-y: auto;
+    background: rgba(6,9,20,0.86); backdrop-filter: blur(3px);
+    padding: 22px 16px; pointer-events: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    background: linear-gradient(180deg, rgba(29,36,80,0.92), rgba(11,15,30,0.95));
+    border: 1px solid rgba(255,255,255,0.16); border-radius: 20px;
+    padding: clamp(20px, 5vw, 34px); max-width: 560px; width: 100%;
+    text-align: center; margin: auto;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.30em; text-transform: uppercase;
+             color: #6fe3ff; margin-bottom: 10px; }
+  h1 { margin: 0 0 10px; font-size: clamp(30px, 9vw, 52px); font-weight: 800;
+       letter-spacing: 0.06em; color: #ffcc4d; text-shadow: 0 0 30px rgba(255,204,77,0.45); }
+  h2 { margin: 0 0 8px; font-size: clamp(20px, 6vw, 30px); font-weight: 800; letter-spacing: 0.04em; }
+  .card p { margin: 0 0 14px; color: rgba(255,255,255,0.76); line-height: 1.6; font-size: 15px; }
+  .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 6px 18px; text-align: left; margin: 16px 0 18px; font-size: 14px;
+          color: rgba(255,255,255,0.72); }
+  .keys b { color: #ffcc4d; }
+  .stats { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 16px 0; }
+  .stat { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+          border-radius: 12px; padding: 10px 16px; min-width: 96px; }
+  .stat .k { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+             color: rgba(255,255,255,0.5); }
+  .stat .v { font-size: 22px; font-weight: 800; color: #ffcc4d; }
+  button.b {
+    appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 800;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    background: linear-gradient(#ffd964, #e5a51d); color: #201400;
+    padding: 15px 34px; border-radius: 13px; font-size: 16px;
+    min-height: 48px; min-width: 150px; margin: 5px;
+    box-shadow: 0 0 26px rgba(255,204,77,0.35);
+  }
+  button.b.ghost { background: rgba(255,255,255,0.08); color: #fff;
+                   border: 1px solid rgba(255,255,255,0.20); box-shadow: none; }
+  button.b:active { transform: translateY(1px); }
+
+  /* ------------------------------------------------------ touch buttons */
+  /* The touch bar is pinned to the bottom, so the HUD's own bottom row has to
+     get out of its way — otherwise PAUSE lands on top of the bagged tally and
+     nothing automated catches it, because the tally is a DOM panel and the
+     collision only shows up on a phone-sized viewport. */
+  body.touch #hud { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+
+  #tbar { position: absolute; left: 0; right: 0; bottom: 0; display: none;
+          justify-content: center; gap: 10px; padding: 10px;
+          padding-bottom: max(10px, env(safe-area-inset-bottom)); pointer-events: auto; }
+  #tbar.on { display: flex; }
+  .tb {
+    min-width: 92px; min-height: 46px; border-radius: 13px;
+    background: rgba(11,15,30,0.82); border: 1px solid rgba(255,255,255,0.18);
+    color: #fff; font-size: 13px; font-weight: 700; letter-spacing: 0.10em;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tb:active { background: rgba(255,204,77,0.22); }
+
+  #banner {
+    position: absolute; left: 50%; top: 26%; transform: translate(-50%, -50%);
+    text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.2s;
+  }
+  #banner.on { opacity: 1; }
+  #banner .b1 { font-size: clamp(26px, 8vw, 46px); font-weight: 800; color: #ffcc4d;
+                letter-spacing: 0.08em; text-shadow: 0 0 34px rgba(255,204,77,0.6); }
+  #banner .b2 { font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase;
+                color: rgba(255,255,255,0.72); margin-top: 5px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div class="row">
+      <div class="panel">
+        <div class="lab">Score</div>
+        <div class="val accent" id="score">0</div>
+        <div class="lab" style="margin-top:6px">Best</div>
+        <div class="val small" id="best">0</div>
+      </div>
+
+      <div class="panel" style="text-align:right">
+        <div class="lab">Round</div>
+        <div class="val" id="round">1</div>
+        <div class="lab" style="margin-top:6px">Shells</div>
+        <div id="shells"></div>
+      </div>
+    </div>
+
+    <div class="row" style="align-items:flex-end">
+      <div class="panel" style="flex:1; max-width:260px">
+        <div class="lab">Bagged <span id="qtxt" class="accent"></span></div>
+        <div id="tally"></div>
+        <div id="quota"><i></i></div>
+      </div>
+      <div class="panel" id="sndbtn" style="pointer-events:auto; cursor:pointer;
+           min-height:44px; display:flex; align-items:center">
+        <span class="small" id="sndtxt">SOUND ON</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="banner"><div class="b1"></div><div class="b2"></div></div>
+
+  <div id="tbar">
+    <div class="tb" id="tpause">PAUSE</div>
+  </div>
+
+  <div id="overlay"></div>
+</div>
+
+<script>
+"use strict";
+(function () {
+
+/* ============================================================================
+   FLYWAY
+   A light-gun duck shoot in the Overclock house style. Everything is drawn
+   procedurally to a single canvas: the dusk sky, the moon, the treeline, the
+   cattails, the dog and the birds. No images, no fonts, no dependencies.
+
+   Aiming is a real pointer: mouse position on desktop, the tap point on touch,
+   and a stick-driven reticle on a controller. Firing is instant hit-scan
+   against every live duck, which is what makes a light-gun game feel honest.
+   ========================================================================= */
+
+/* ------------------------------------------------------------- constants */
+var SAVE_KEY = 'flyway_v1';
+var MUTE_KEY = 'flyway_mute';
+
+var DUCKS_PER_ROUND = 10;
+var SHELLS          = 5;
+
+var GOLD  = '#ffcc4d';
+var CYAN  = '#6fe3ff';
+var ROSE  = '#ff5f9e';
+
+var clamp = function (v, a, b) { return v < a ? a : (v > b ? b : v); };
+var lerp  = function (a, b, t) { return a + (b - a) * t; };
+var rnd   = function (a, b) { return a + Math.random() * (b - a); };
+var rndi  = function (a, b) { return Math.floor(rnd(a, b + 1)); };
+
+/* Round rules. Ducks get quicker and jumpier, flushes get bigger, and the
+   quota climbs — but never past 9 of 10, so a round is always survivable. */
+function roundRule(r) {
+  return {
+    speed:   lerp(150, 430, clamp((r - 1) / 13, 0, 1)),
+    turn:    lerp(0.55, 1.7, clamp((r - 1) / 13, 0, 1)),
+    escape:  lerp(7.0, 3.6, clamp((r - 1) / 13, 0, 1)),   // seconds before it bolts
+    perFlush: r < 3 ? 1 : (r < 8 ? 2 : 3),
+    quota:   Math.min(9, 5 + Math.floor((r + 1) / 2))
+  };
+}
+
+/* ------------------------------------------------------------------ save */
+function loadSave() {
+  try {
+    var r = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+    return { score: +r.score || 0, round: +r.round || 0, ducks: +r.ducks || 0 };
+  } catch (e) { return { score: 0, round: 0, ducks: 0 }; }
+}
+function writeSave(s) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch (e) {} }
+var best = loadSave();
+
+/* ============================================================================
+   AUDIO — oscillators only, no sample buffers.
+   A shotgun without a noise source is a cheat: it is built from a stack of
+   detuned saws collapsing in pitch, plus a bright click on top.
+   ========================================================================= */
+var Audio_ = {
+  ac: null, master: null, muted: localStorage.getItem(MUTE_KEY) === '1',
+
+  init: function () {
+    if (this.ac) return;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      this.ac = new AC();
+      this.master = this.ac.createGain();
+      this.master.gain.value = this.muted ? 0 : 0.30;
+      this.master.connect(this.ac.destination);
+    } catch (e) { this.ac = null; }
+  },
+  resume: function () { if (this.ac && this.ac.state === 'suspended') this.ac.resume(); },
+  setMute: function (m) {
+    this.muted = m;
+    try { localStorage.setItem(MUTE_KEY, m ? '1' : '0'); } catch (e) {}
+    if (this.master) this.master.gain.value = m ? 0 : 0.30;
+  },
+
+  // one enveloped oscillator
+  tone: function (type, f0, f1, dur, vol, delay) {
+    if (!this.ac || this.muted) return;
+    var t = this.ac.currentTime + (delay || 0);
+    var o = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol), t + Math.min(0.012, dur * 0.2));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+
+  shot: function () {
+    // three detuned saws dropping hard = the body of the blast
+    this.tone('sawtooth', 150, 42, 0.20, 0.34);
+    this.tone('sawtooth', 118, 34, 0.24, 0.28);
+    this.tone('sawtooth', 196, 50, 0.16, 0.20);
+    // bright crack on the front
+    this.tone('square', 1750, 380, 0.05, 0.16);
+    this.tone('square', 2600, 700, 0.03, 0.10);
+  },
+  empty:   function () { this.tone('square', 320, 150, 0.05, 0.10);
+                         this.tone('square', 200,  90, 0.06, 0.08, 0.05); },
+  quack:   function () { this.tone('square', 400, 300, 0.09, 0.13);
+                         this.tone('square', 330, 250, 0.08, 0.11, 0.09); },
+  flush:   function () { this.tone('square', 300, 460, 0.10, 0.12);
+                         this.tone('square', 460, 330, 0.10, 0.10, 0.10); },
+  fall:    function () { this.tone('sine', 900, 90, 0.75, 0.16); },
+  thud:    function () { this.tone('sine', 120, 40, 0.16, 0.22); },
+  laugh:   function () {
+    for (var i = 0; i < 5; i++)
+      this.tone('triangle', 300 + (i % 2) * 130, 250 + (i % 2) * 110, 0.10, 0.15, i * 0.135);
+  },
+  retrieve: function () {
+    this.tone('triangle', 480, 490, 0.10, 0.14, 0.00);
+    this.tone('triangle', 640, 650, 0.10, 0.14, 0.10);
+    this.tone('triangle', 820, 830, 0.16, 0.15, 0.20);
+  },
+  roundWin: function () {
+    var n = [523, 659, 784, 1047];
+    for (var i = 0; i < n.length; i++)
+      this.tone('triangle', n[i], n[i], 0.20, 0.16, i * 0.11);
+  },
+  over: function () {
+    var n = [523, 415, 330, 247];
+    for (var i = 0; i < n.length; i++)
+      this.tone('sawtooth', n[i], n[i] * 0.98, 0.30, 0.15, i * 0.16);
+  }
+};
+
+/* ============================================================================
+   CANVAS
+   ========================================================================= */
+var cvs = document.getElementById('game');
+var ctx = cvs.getContext('2d', { alpha: false });
+var stage = document.getElementById('stage');
+var W = 0, H = 0, DPR = 1;
+var horizon = 0;              // y of the grass line
+
+var bg = document.createElement('canvas');   // static scenery, redrawn on resize
+var bgx = bg.getContext('2d');
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  W = stage.clientWidth; H = stage.clientHeight;
+  cvs.width  = Math.round(W * DPR);
+  cvs.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  horizon = H * 0.70;
+  buildBackground();
+}
+window.addEventListener('resize', resize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+
+/* ------------------------------------------------------------- scenery */
+var stars = [], hills = [], trees = [], reeds = [];
+
+function seedScenery() {
+  var i;
+  stars.length = 0;
+  for (i = 0; i < 150; i++)
+    stars.push({ x: Math.random(), y: Math.random() * 0.66, r: rnd(0.4, 1.5), a: rnd(0.18, 0.85) });
+
+  // Hills sit just above the treeline, not halfway up the sky. They fill all
+  // the way down, so crests any higher bury the warm dusk band the sky
+  // gradient exists to produce — which is exactly what they did at 0.60.
+  hills.length = 0;
+  for (i = 0; i < 3; i++)
+    hills.push({ off: rnd(0, 6.28), amp: rnd(0.012, 0.030), freq: rnd(1.1, 2.6), y: 0.875 + i * 0.035 });
+
+  trees.length = 0;
+  for (i = 0; i < 46; i++)
+    trees.push({ x: Math.random(), h: rnd(0.030, 0.085), w: rnd(0.006, 0.017), k: rndi(0, 2) });
+
+  reeds.length = 0;
+  for (i = 0; i < 130; i++)
+    reeds.push({ x: Math.random(), h: rnd(0.06, 0.20), lean: rnd(-0.30, 0.30),
+                 ph: rnd(0, 6.28), cat: Math.random() < 0.30, w: rnd(1.2, 2.8) });
+}
+seedScenery();
+
+function buildBackground() {
+  bg.width = Math.round(W * DPR); bg.height = Math.round(H * DPR);
+  bgx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  var i;
+
+  // --- sky
+  var sky = bgx.createLinearGradient(0, 0, 0, horizon);
+  sky.addColorStop(0.00, '#05070f');
+  sky.addColorStop(0.38, '#141a3e');
+  sky.addColorStop(0.72, '#33285c');
+  sky.addColorStop(1.00, '#7a3f63');
+  bgx.fillStyle = sky;
+  bgx.fillRect(0, 0, W, horizon + 2);
+
+  // --- stars, fading out toward the warm horizon
+  for (i = 0; i < stars.length; i++) {
+    var s = stars[i];
+    var sy = s.y * horizon;
+    var fade = clamp(1 - (sy / horizon) * 1.25, 0, 1);
+    if (fade <= 0.02) continue;
+    bgx.globalAlpha = s.a * fade;
+    bgx.fillStyle = '#ffffff';
+    bgx.beginPath(); bgx.arc(s.x * W, sy, s.r, 0, 6.283); bgx.fill();
+  }
+  bgx.globalAlpha = 1;
+
+  // --- moon with a broad glow
+  var mx = W * 0.78, my = horizon * 0.26, mr = Math.max(26, Math.min(W, H) * 0.052);
+  var glow = bgx.createRadialGradient(mx, my, mr * 0.3, mx, my, mr * 7);
+  glow.addColorStop(0, 'rgba(255,204,77,0.30)');
+  glow.addColorStop(0.35, 'rgba(255,204,77,0.09)');
+  glow.addColorStop(1, 'rgba(255,204,77,0)');
+  bgx.fillStyle = glow;
+  bgx.fillRect(mx - mr * 7, my - mr * 7, mr * 14, mr * 14);
+  bgx.fillStyle = '#ffe9a8';
+  bgx.beginPath(); bgx.arc(mx, my, mr, 0, 6.283); bgx.fill();
+  // craters
+  bgx.fillStyle = 'rgba(190,150,70,0.20)';
+  bgx.beginPath(); bgx.arc(mx - mr * 0.30, my - mr * 0.20, mr * 0.20, 0, 6.283); bgx.fill();
+  bgx.beginPath(); bgx.arc(mx + mr * 0.26, my + mr * 0.28, mr * 0.14, 0, 6.283); bgx.fill();
+  bgx.beginPath(); bgx.arc(mx + mr * 0.06, my - mr * 0.44, mr * 0.10, 0, 6.283); bgx.fill();
+
+  // --- layered hills
+  for (i = 0; i < hills.length; i++) {
+    var hl = hills[i];
+    var shade = ['rgba(14,18,42,0.62)', 'rgba(11,15,34,0.76)', 'rgba(8,11,26,0.88)'][i];
+    bgx.fillStyle = shade;
+    bgx.beginPath();
+    bgx.moveTo(0, H);
+    for (var x = 0; x <= W; x += 8) {
+      var t = x / W;
+      var y = horizon * (hl.y) - Math.sin(t * hl.freq * 6.283 + hl.off) * H * hl.amp;
+      bgx.lineTo(x, y);
+    }
+    bgx.lineTo(W, H); bgx.closePath(); bgx.fill();
+  }
+
+  // --- treeline silhouette just above the grass
+  bgx.fillStyle = '#05070f';
+  bgx.fillRect(0, horizon - 2, W, 4);
+  for (i = 0; i < trees.length; i++) {
+    var tr = trees[i];
+    var tx = tr.x * W, th = tr.h * H, tw = tr.w * W;
+    bgx.fillStyle = '#070a16';
+    if (tr.k === 0) {           // conifer
+      bgx.beginPath();
+      bgx.moveTo(tx, horizon - th);
+      bgx.lineTo(tx + tw, horizon);
+      bgx.lineTo(tx - tw, horizon);
+      bgx.closePath(); bgx.fill();
+    } else if (tr.k === 1) {    // round crown
+      bgx.beginPath(); bgx.arc(tx, horizon - th * 0.6, tw * 1.5, 0, 6.283); bgx.fill();
+      bgx.fillRect(tx - tw * 0.18, horizon - th * 0.6, tw * 0.36, th * 0.6);
+    } else {                    // bare
+      bgx.fillRect(tx - tw * 0.14, horizon - th, tw * 0.28, th);
+    }
+  }
+
+  // --- water / marsh band under the treeline
+  var marsh = bgx.createLinearGradient(0, horizon, 0, H);
+  marsh.addColorStop(0.00, '#0a1226');
+  marsh.addColorStop(0.30, '#0c1730');
+  marsh.addColorStop(1.00, '#070a16');
+  bgx.fillStyle = marsh;
+  bgx.fillRect(0, horizon, W, H - horizon);
+
+  // Moon reflection. This has to fade on every side — a linear gradient in a
+  // fillRect keeps its hard left and right edges and reads as a grey box
+  // sitting on the water, which is precisely how it looked before.
+  var rr = mr * 3.4;
+  bgx.save();
+  bgx.beginPath(); bgx.rect(0, horizon, W, H - horizon); bgx.clip();
+  var refl = bgx.createRadialGradient(mx, horizon, 0, mx, horizon, rr);
+  refl.addColorStop(0.00, 'rgba(255,204,77,0.20)');
+  refl.addColorStop(0.45, 'rgba(255,204,77,0.07)');
+  refl.addColorStop(1.00, 'rgba(255,204,77,0)');
+  bgx.fillStyle = refl;
+  bgx.fillRect(mx - rr, horizon, rr * 2, rr);
+  bgx.restore();
+}
+
+/* ============================================================================
+   GAME STATE
+   ========================================================================= */
+var S_TITLE = 0, S_INTRO = 1, S_FLY = 2, S_RESOLVE = 3, S_DOG = 4,
+    S_ROUND = 5, S_OVER = 6, S_PAUSE = 7;
+var state = S_TITLE;
+
+var score = 0, round = 1, shells = SHELLS;
+var ducksThisRound = 0;      // released so far
+var hitsThisRound = 0;
+var tally = [];              // 'hit' | 'miss' per duck this round
+var totalDucks = 0;
+var rule = roundRule(1);
+
+var ducks = [], feathers = [], pops = [];
+var dog = null;
+var shake = 0, flash = 0, vignette = 0;
+var timer = 0, stateT = 0;
+var lastShotAt = -99, muzzle = null;
+var newRecord = false;
+
+/* reticle */
+var aim = { x: 0, y: 0, has: false };
+var padAim = false;
+
+/* ------------------------------------------------------------------ duck */
+function Duck(r) {
+  var fromLeft = Math.random() < 0.5;
+  this.x = rnd(W * 0.18, W * 0.82);
+  this.y = horizon - rnd(4, 26);
+  var ang = rnd(-1.05, -0.42) * (fromLeft ? 1 : 1);
+  this.vx = Math.cos(ang) * r.speed * (fromLeft ? 1 : -1);
+  this.vy = Math.sin(ang) * r.speed;
+  this.alive = true; this.falling = false; this.gone = false;
+  this.t = 0; this.turnCd = rnd(0.3, 0.9);
+  this.flap = Math.random() * 6.283;
+  this.hue = [GOLD, CYAN, ROSE][rndi(0, 2)];
+  this.size = rnd(0.95, 1.15);
+  this.escape = r.escape;
+  this.bolting = false;
+  this.spin = 0;
+}
+
+Duck.prototype.update = function (dt, r) {
+  this.t += dt;
+  this.flap += dt * (this.falling ? 3 : 13);
+
+  if (this.falling) {
+    this.vy += 1500 * dt;
+    this.vx *= (1 - 1.6 * dt);
+    this.spin += dt * 9;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    if (this.y > horizon + (H - horizon) * 0.35) {
+      this.gone = true;
+      Audio_.thud();
+      splash(this.x, this.y);
+    }
+    return;
+  }
+
+  if (!this.alive) return;
+
+  // bolt for the sky once the clock runs out
+  if (!this.bolting && this.t > this.escape) {
+    this.bolting = true;
+    var sp = Math.hypot(this.vx, this.vy) * 1.5;
+    this.vx *= 0.35; this.vy = -sp;
+  }
+
+  if (!this.bolting) {
+    this.turnCd -= dt;
+    if (this.turnCd <= 0) {
+      this.turnCd = rnd(0.45, 1.25);
+      var sp2 = Math.hypot(this.vx, this.vy);
+      var a = Math.atan2(this.vy, this.vx) + rnd(-1, 1) * r.turn;
+      // keep it out of the dirt and off the ceiling
+      if (this.y > horizon - H * 0.10) a = -Math.abs(a);
+      if (this.y < H * 0.10) a = Math.abs(a) * 0.6;
+      this.vx = Math.cos(a) * sp2;
+      this.vy = Math.sin(a) * sp2;
+    }
+    // walls
+    var pad = 40;
+    if (this.x < pad && this.vx < 0) this.vx = Math.abs(this.vx);
+    if (this.x > W - pad && this.vx > 0) this.vx = -Math.abs(this.vx);
+    if (this.y < H * 0.06 && this.vy < 0) this.vy = Math.abs(this.vy) * 0.7;
+    if (this.y > horizon - H * 0.05 && this.vy > 0) this.vy = -Math.abs(this.vy);
+  }
+
+  this.x += this.vx * dt;
+  this.y += this.vy * dt;
+
+  if (this.y < -80) { this.gone = true; this.alive = false; }
+};
+
+Duck.prototype.radius = function () {
+  return Math.max(28, Math.min(W, H) * 0.060) * this.size;
+};
+
+/* Draw a duck as a rim-lit silhouette. Wings are two quadratics whose control
+   points ride the flap phase, which reads as a real wingbeat at any size. */
+Duck.prototype.draw = function (g) {
+  var s = Math.max(18, Math.min(W, H) * 0.040) * this.size;
+  var dir = this.vx < 0 ? -1 : 1;
+  var wing = Math.sin(this.flap);
+
+  g.save();
+  g.translate(this.x, this.y);
+  if (this.falling) g.rotate(this.spin);
+  g.scale(dir, 1);
+
+  // glow
+  g.shadowColor = this.hue;
+  g.shadowBlur = s * 0.9;
+
+  // far wing
+  g.fillStyle = 'rgba(255,255,255,0.20)';
+  g.beginPath();
+  g.moveTo(-s * 0.10, -s * 0.05);
+  g.quadraticCurveTo(-s * 0.85, -s * 0.30 - wing * s * 0.75, -s * 1.25, wing * s * 0.35);
+  g.quadraticCurveTo(-s * 0.65, s * 0.12, -s * 0.10, s * 0.14);
+  g.closePath(); g.fill();
+
+  // body
+  g.fillStyle = '#0b0f1e';
+  g.strokeStyle = this.hue;
+  g.lineWidth = Math.max(1.6, s * 0.11);
+  g.beginPath();
+  g.ellipse(0, 0, s * 0.80, s * 0.50, 0, 0, 6.283);
+  g.fill(); g.stroke();
+
+  // head + bill
+  g.beginPath();
+  g.arc(s * 0.74, -s * 0.36, s * 0.30, 0, 6.283);
+  g.fill(); g.stroke();
+  g.fillStyle = this.hue;
+  g.beginPath();
+  g.moveTo(s * 1.00, -s * 0.40);
+  g.lineTo(s * 1.44, -s * 0.30);
+  g.lineTo(s * 1.00, -s * 0.20);
+  g.closePath(); g.fill();
+
+  // tail
+  g.strokeStyle = this.hue;
+  g.beginPath();
+  g.moveTo(-s * 0.78, -s * 0.06);
+  g.lineTo(-s * 1.16, -s * 0.26);
+  g.stroke();
+
+  // near wing
+  g.fillStyle = 'rgba(255,255,255,0.10)';
+  g.strokeStyle = this.hue;
+  g.lineWidth = Math.max(1.4, s * 0.09);
+  g.beginPath();
+  g.moveTo(-s * 0.05, -s * 0.16);
+  g.quadraticCurveTo(-s * 0.55, -s * 0.60 + wing * s * 1.15, -s * 0.20, -s * 0.35 + wing * s * 1.5);
+  g.quadraticCurveTo(s * 0.20, -s * 0.30 + wing * s * 0.5, s * 0.10, -s * 0.10);
+  g.closePath(); g.fill(); g.stroke();
+
+  // eye
+  g.shadowBlur = 0;
+  g.fillStyle = '#fff';
+  g.beginPath(); g.arc(s * 0.84, -s * 0.42, s * 0.075, 0, 6.283); g.fill();
+
+  g.restore();
+};
+
+/* --------------------------------------------------------------- effects */
+function feather(x, y, col) {
+  for (var i = 0; i < 14; i++)
+    feathers.push({ x: x, y: y, vx: rnd(-150, 150), vy: rnd(-160, 40),
+                    r: rnd(2, 5), life: rnd(0.6, 1.5), t: 0, col: col,
+                    sp: rnd(-4, 4), a: Math.random() * 6.283 });
+}
+function splash(x, y) {
+  for (var i = 0; i < 12; i++)
+    feathers.push({ x: x, y: y, vx: rnd(-120, 120), vy: rnd(-260, -70),
+                    r: rnd(1.5, 3.4), life: rnd(0.35, 0.8), t: 0, col: CYAN,
+                    sp: 0, a: 0 });
+}
+function popText(x, y, txt, col) {
+  pops.push({ x: x, y: y, txt: txt, col: col, t: 0, life: 1.1 });
+}
+
+/* ============================================================================
+   THE DOG
+   Drawn from primitives so it can be posed. Three acts: he trots the reed line
+   sniffing, he leaps in, and he surfaces either holding birds or laughing at
+   you. The laugh is the whole reason anybody remembers this game.
+   ========================================================================= */
+function Dog(mode, n) {
+  this.mode = mode;             // 'sniff' | 'jump' | 'hold' | 'laugh'
+  this.n = n || 0;
+  this.t = 0;
+  this.x = -W * 0.12;
+  this.y = horizon + (H - horizon) * 0.16;
+  this.rise = 0;
+  this.done = false;
+}
+
+Dog.prototype.update = function (dt) {
+  this.t += dt;
+  if (this.mode === 'sniff') {
+    this.x += dt * W * 0.30;
+    if (this.x > W * 0.46) { this.mode = 'jump'; this.t = 0; }
+  } else if (this.mode === 'jump') {
+    if (this.t > 0.75) this.done = true;
+  } else {
+    // rise out of the reeds, hold, sink
+    // Hold the pose. At 1.4s at full height the laugh was over before you had
+    // registered it — and the laugh is the entire reason anyone remembers this
+    // game, so it gets time to land.
+    if (this.t < 0.45) this.rise = this.t / 0.45;
+    else if (this.t < 2.60) this.rise = 1;
+    else this.rise = Math.max(0, 1 - (this.t - 2.60) / 0.45);
+    if (this.t > 3.10) this.done = true;
+  }
+};
+
+/* ----------------------------------------------------------------- the dog
+   Drawn with volume rather than outline: gradient coats so the chest and skull
+   read as round, scalloped fur along every silhouette edge, a moon-side rim
+   light picked up from the sky behind him, and a face with actual expression.
+   He is on screen after every single flush, so he gets the detail budget. */
+
+// a run of fur bumps from a to b, bulging by `out` — used on every free edge
+function furEdge(g, x0, y0, x1, y1, out, n) {
+  var dx = x1 - x0, dy = y1 - y0;
+  var len = Math.hypot(dx, dy) || 1;
+  var nx = -dy / len, ny = dx / len;
+  for (var i = 0; i < n; i++) {
+    var t0 = i / n, t1 = (i + 1) / n, tm = (t0 + t1) / 2;
+    var ax = x0 + dx * t1, ay = y0 + dy * t1;
+    var mx = x0 + dx * tm + nx * out, my = y0 + dy * tm + ny * out;
+    g.quadraticCurveTo(mx, my, ax, ay);
+  }
+}
+
+Dog.prototype.draw = function (g) {
+  var s = Math.max(34, Math.min(W, H) * 0.115);
+  var x = this.x, y = this.y;
+  var bob = 0;
+
+  if (this.mode === 'sniff') {
+    bob = Math.sin(this.t * 11) * s * 0.035;
+  } else if (this.mode === 'jump') {
+    var p = clamp(this.t / 0.75, 0, 1);
+    x = this.x + p * W * 0.05;
+    y = this.y - Math.sin(p * Math.PI) * s * 1.5;
+  } else {
+    x = W * 0.5;
+    y = horizon + (H - horizon) * 0.36 - this.rise * s * 1.10;
+  }
+
+  var COAT_HI = '#c08444', COAT = '#8f5c2f', COAT_LO = '#4e3018';
+  var EAR_HI  = '#6b421f', EAR_LO = '#33200f';
+  var CREAM   = '#f6ead2', CREAM_LO = '#cbb188';
+  var NOSE    = '#241812';
+  var rim = (this.mode === 'laugh') ? ROSE : GOLD;
+  var laughing = (this.mode === 'laugh');
+
+  g.save();
+  g.translate(x, y + bob);
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+
+  if (this.mode === 'hold' || this.mode === 'laugh') {
+
+    var breathe = Math.sin(this.t * (laughing ? 14 : 4)) * s * 0.018;
+    var tilt = laughing ? -0.30 - Math.sin(this.t * 14) * 0.05 : -0.05;
+
+    /* ---- ears, the far halves, behind the skull */
+    g.save();
+    g.translate(0, -s * 0.30); g.rotate(tilt);
+    var earSwing = laughing ? Math.sin(this.t * 14) * 0.10 : Math.sin(this.t * 3) * 0.04;
+    for (var e = 0; e < 2; e++) {
+      var sgn = e ? 1 : -1;
+      g.save();
+      g.scale(sgn, 1);
+      g.rotate(earSwing * sgn * -1);
+      var eg = g.createLinearGradient(s * 0.30, -s * 0.20, s * 0.60, s * 0.70);
+      eg.addColorStop(0, EAR_HI); eg.addColorStop(1, EAR_LO);
+      g.fillStyle = eg;
+      g.beginPath();
+      g.moveTo(s * 0.26, -s * 0.22);
+      g.bezierCurveTo(s * 0.78, -s * 0.16, s * 0.80, s * 0.42, s * 0.50, s * 0.72);
+      g.bezierCurveTo(s * 0.36, s * 0.82, s * 0.22, s * 0.66, s * 0.24, s * 0.44);
+      g.bezierCurveTo(s * 0.26, s * 0.22, s * 0.20, s * 0.02, s * 0.26, -s * 0.22);
+      g.closePath(); g.fill();
+      // inner ear
+      g.fillStyle = 'rgba(190,110,110,0.35)';
+      g.beginPath();
+      g.moveTo(s * 0.34, -s * 0.06);
+      g.bezierCurveTo(s * 0.62, s * 0.02, s * 0.60, s * 0.40, s * 0.46, s * 0.56);
+      g.bezierCurveTo(s * 0.36, s * 0.46, s * 0.34, s * 0.20, s * 0.34, -s * 0.06);
+      g.closePath(); g.fill();
+      g.restore();
+    }
+    g.restore();
+
+    /* ---- chest */
+    var cg = g.createLinearGradient(0, -s * 0.10, 0, s * 1.15);
+    cg.addColorStop(0, COAT_HI); cg.addColorStop(0.55, COAT); cg.addColorStop(1, COAT_LO);
+    g.fillStyle = cg;
+    g.beginPath();
+    g.moveTo(-s * 0.44, s * 0.04 + breathe);
+    g.bezierCurveTo(-s * 0.76, s * 0.34, -s * 0.72, s * 0.80, -s * 0.66, s * 1.10);
+    furEdge(g, -s * 0.66, s * 1.10, s * 0.66, s * 1.10, s * 0.05, 5);
+    g.bezierCurveTo(s * 0.72, s * 0.80, s * 0.76, s * 0.34, s * 0.44, s * 0.04 + breathe);
+    g.closePath(); g.fill();
+
+    // cream bib with a soft edge
+    var bibg = g.createLinearGradient(0, s * 0.10, 0, s * 1.05);
+    bibg.addColorStop(0, CREAM); bibg.addColorStop(1, CREAM_LO);
+    g.fillStyle = bibg;
+    g.beginPath();
+    g.moveTo(0, s * 0.10);
+    g.bezierCurveTo(-s * 0.26, s * 0.34, -s * 0.28, s * 0.80, -s * 0.20, s * 1.06);
+    furEdge(g, -s * 0.20, s * 1.06, s * 0.20, s * 1.06, s * 0.04, 3);
+    g.bezierCurveTo(s * 0.28, s * 0.80, s * 0.26, s * 0.34, 0, s * 0.10);
+    g.closePath(); g.fill();
+
+    /* ---- front paws hooked over the reeds */
+    for (var pw = 0; pw < 2; pw++) {
+      var px = (pw ? 1 : -1) * s * 0.40;
+      g.save();
+      g.translate(px, s * 1.00);
+      g.rotate((pw ? 1 : -1) * 0.16);
+      var pg = g.createLinearGradient(0, -s * 0.10, 0, s * 0.12);
+      pg.addColorStop(0, CREAM); pg.addColorStop(1, CREAM_LO);
+      g.fillStyle = pg;
+      g.beginPath(); g.ellipse(0, 0, s * 0.19, s * 0.115, 0, 0, 6.283); g.fill();
+      g.strokeStyle = 'rgba(80,55,30,0.45)';
+      g.lineWidth = Math.max(1, s * 0.016);
+      g.beginPath();
+      g.moveTo(-s * 0.05, -s * 0.03); g.lineTo(-s * 0.05, s * 0.08);
+      g.moveTo(s * 0.05, -s * 0.03);  g.lineTo(s * 0.05, s * 0.08);
+      g.stroke();
+      g.restore();
+    }
+
+    /* ---- head */
+    g.save();
+    g.translate(0, -s * 0.30); g.rotate(tilt);
+
+    var hg = g.createRadialGradient(-s * 0.14, -s * 0.20, s * 0.05, 0, 0, s * 0.62);
+    hg.addColorStop(0, COAT_HI); hg.addColorStop(0.6, COAT); hg.addColorStop(1, COAT_LO);
+    g.fillStyle = hg;
+    g.beginPath();
+    g.moveTo(-s * 0.02, -s * 0.46);
+    g.bezierCurveTo(-s * 0.36, -s * 0.46, -s * 0.50, -s * 0.18, -s * 0.46, s * 0.06);
+    g.bezierCurveTo(-s * 0.43, s * 0.28, -s * 0.28, s * 0.40, -s * 0.10, s * 0.42);
+    g.lineTo(s * 0.10, s * 0.42);
+    g.bezierCurveTo(s * 0.28, s * 0.40, s * 0.43, s * 0.28, s * 0.46, s * 0.06);
+    g.bezierCurveTo(s * 0.50, -s * 0.18, s * 0.36, -s * 0.46, -s * 0.02, -s * 0.46);
+    g.closePath(); g.fill();
+
+    // brow blaze straight down the middle
+    g.fillStyle = 'rgba(246,234,210,0.55)';
+    g.beginPath();
+    g.moveTo(0, -s * 0.44);
+    g.bezierCurveTo(-s * 0.09, -s * 0.24, -s * 0.08, -s * 0.04, -s * 0.05, s * 0.06);
+    g.lineTo(s * 0.05, s * 0.06);
+    g.bezierCurveTo(s * 0.08, -s * 0.04, s * 0.09, -s * 0.24, 0, -s * 0.44);
+    g.closePath(); g.fill();
+
+    // cheek fur tufts
+    g.fillStyle = COAT;
+    for (var ck = 0; ck < 2; ck++) {
+      var cs = ck ? 1 : -1;
+      g.beginPath();
+      g.moveTo(cs * s * 0.42, -s * 0.02);
+      furEdge(g, cs * s * 0.42, -s * 0.02, cs * s * 0.30, s * 0.34, cs * s * 0.06, 3);
+      g.lineTo(cs * s * 0.22, s * 0.10);
+      g.closePath(); g.fill();
+    }
+
+    // muzzle
+    var mg2 = g.createLinearGradient(0, s * 0.02, 0, s * 0.40);
+    mg2.addColorStop(0, CREAM); mg2.addColorStop(1, CREAM_LO);
+    g.fillStyle = mg2;
+    g.beginPath();
+    g.ellipse(0, s * 0.20, s * 0.30, s * 0.21, 0, 0, 6.283);
+    g.fill();
+
+    // nose — rounded wedge with a highlight
+    g.fillStyle = NOSE;
+    g.beginPath();
+    g.moveTo(-s * 0.105, s * 0.055);
+    g.quadraticCurveTo(0, -s * 0.005, s * 0.105, s * 0.055);
+    g.quadraticCurveTo(s * 0.105, s * 0.145, 0, s * 0.165);
+    g.quadraticCurveTo(-s * 0.105, s * 0.145, -s * 0.105, s * 0.055);
+    g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.30)';
+    g.beginPath(); g.ellipse(-s * 0.035, s * 0.065, s * 0.032, s * 0.020, -0.4, 0, 6.283); g.fill();
+    // philtrum
+    g.strokeStyle = 'rgba(120,95,60,0.55)';
+    g.lineWidth = Math.max(1, s * 0.016);
+    g.beginPath(); g.moveTo(0, s * 0.165); g.lineTo(0, s * 0.235); g.stroke();
+
+    if (laughing) {
+      // eyes squeezed shut, brows up, jaw wide, tongue out
+      g.strokeStyle = NOSE;
+      g.lineWidth = Math.max(1.8, s * 0.030);
+      g.beginPath(); g.arc(-s * 0.19, -s * 0.10, s * 0.10, Math.PI * 1.08, Math.PI * 1.92); g.stroke();
+      g.beginPath(); g.arc(s * 0.19, -s * 0.10, s * 0.10, Math.PI * 1.08, Math.PI * 1.92); g.stroke();
+      g.lineWidth = Math.max(1.2, s * 0.020);
+      g.strokeStyle = 'rgba(60,40,24,0.8)';
+      g.beginPath(); g.arc(-s * 0.19, -s * 0.22, s * 0.11, Math.PI * 1.15, Math.PI * 1.85); g.stroke();
+      g.beginPath(); g.arc(s * 0.19, -s * 0.22, s * 0.11, Math.PI * 1.15, Math.PI * 1.85); g.stroke();
+
+      var open = 0.30 + 0.70 * Math.max(0, Math.sin(this.t * 13));
+      var mh = s * (0.06 + open * 0.17);
+      g.fillStyle = '#3d1220';
+      g.beginPath();
+      g.ellipse(0, s * 0.30 + mh * 0.4, s * 0.19, mh, 0, 0, 6.283);
+      g.fill();
+      // teeth
+      g.fillStyle = '#fff';
+      g.beginPath();
+      g.moveTo(-s * 0.13, s * 0.30 + mh * 0.4 - mh);
+      g.lineTo(-s * 0.07, s * 0.30 + mh * 0.4 - mh + s * 0.055);
+      g.lineTo(-s * 0.01, s * 0.30 + mh * 0.4 - mh);
+      g.closePath(); g.fill();
+      // tongue
+      g.fillStyle = ROSE;
+      g.beginPath();
+      g.ellipse(0, s * 0.30 + mh * 0.4 + mh * 0.45, s * 0.115, mh * 0.55, 0, 0, 6.283);
+      g.fill();
+
+    } else {
+      // proud, eyes open, small smile
+      for (var ey = 0; ey < 2; ey++) {
+        var ex = (ey ? 1 : -1) * s * 0.19;
+        g.fillStyle = '#fff';
+        g.beginPath(); g.ellipse(ex, -s * 0.10, s * 0.095, s * 0.105, 0, 0, 6.283); g.fill();
+        g.fillStyle = '#6b3f18';
+        g.beginPath(); g.arc(ex + s * 0.012, -s * 0.085, s * 0.062, 0, 6.283); g.fill();
+        g.fillStyle = NOSE;
+        g.beginPath(); g.arc(ex + s * 0.012, -s * 0.085, s * 0.034, 0, 6.283); g.fill();
+        g.fillStyle = '#fff';
+        g.beginPath(); g.arc(ex - s * 0.016, -s * 0.115, s * 0.021, 0, 6.283); g.fill();
+      }
+      g.strokeStyle = 'rgba(60,40,24,0.8)';
+      g.lineWidth = Math.max(1.2, s * 0.020);
+      g.beginPath(); g.arc(-s * 0.19, -s * 0.24, s * 0.10, Math.PI * 1.22, Math.PI * 1.78); g.stroke();
+      g.beginPath(); g.arc(s * 0.19, -s * 0.24, s * 0.10, Math.PI * 1.22, Math.PI * 1.78); g.stroke();
+
+      g.strokeStyle = NOSE;
+      g.lineWidth = Math.max(1.3, s * 0.022);
+      g.beginPath();
+      g.moveTo(-s * 0.10, s * 0.255);
+      g.quadraticCurveTo(0, s * 0.315, s * 0.10, s * 0.255);
+      g.stroke();
+    }
+
+    // whiskers
+    g.strokeStyle = 'rgba(255,255,255,0.30)';
+    g.lineWidth = Math.max(0.8, s * 0.010);
+    for (var wk = 0; wk < 2; wk++) {
+      var ws = wk ? 1 : -1;
+      g.beginPath();
+      g.moveTo(ws * s * 0.20, s * 0.20); g.quadraticCurveTo(ws * s * 0.42, s * 0.14, ws * s * 0.52, s * 0.10);
+      g.moveTo(ws * s * 0.20, s * 0.24); g.quadraticCurveTo(ws * s * 0.44, s * 0.24, ws * s * 0.54, s * 0.24);
+      g.stroke();
+    }
+
+    // moon-side rim light along the skull
+    g.strokeStyle = rim;
+    g.globalAlpha = 0.55;
+    g.lineWidth = Math.max(1.4, s * 0.026);
+    g.shadowColor = rim; g.shadowBlur = s * 0.30;
+    g.beginPath();
+    g.moveTo(-s * 0.02, -s * 0.46);
+    g.bezierCurveTo(s * 0.36, -s * 0.46, s * 0.50, -s * 0.18, s * 0.46, s * 0.06);
+    g.stroke();
+    g.shadowBlur = 0; g.globalAlpha = 1;
+
+    g.restore();
+
+    // rim light down the chest, same side
+    g.strokeStyle = rim;
+    g.globalAlpha = 0.40;
+    g.lineWidth = Math.max(1.4, s * 0.024);
+    g.shadowColor = rim; g.shadowBlur = s * 0.30;
+    g.beginPath();
+    g.moveTo(s * 0.44, s * 0.06);
+    g.bezierCurveTo(s * 0.76, s * 0.34, s * 0.72, s * 0.80, s * 0.66, s * 1.08);
+    g.stroke();
+    g.shadowBlur = 0; g.globalAlpha = 1;
+
+    /* ---- the birds, held up in his jaws.
+       These draw last. Behind the head they were completely hidden by the
+       skull, which rather defeated the point of retrieving them. */
+    for (var i = 0; i < this.n; i++) {
+      var bx = (this.n === 1) ? s * 0.30 : (i - (this.n - 1) / 2) * s * 0.66;
+      g.save();
+      g.translate(bx, s * 0.36 + Math.sin(this.t * 3 + i) * s * 0.012);
+      g.rotate(0.32 + i * 0.16);
+      g.shadowColor = GOLD; g.shadowBlur = s * 0.34;
+      var bgd = g.createLinearGradient(0, -s * 0.16, 0, s * 0.16);
+      bgd.addColorStop(0, '#243056'); bgd.addColorStop(1, '#0a0e1c');
+      g.fillStyle = bgd; g.strokeStyle = GOLD;
+      g.lineWidth = Math.max(1, s * 0.020);
+      g.beginPath(); g.ellipse(0, 0, s * 0.27, s * 0.15, 0, 0, 6.283);
+      g.fill(); g.stroke();
+      // head lolling down, the way a carried bird hangs
+      g.beginPath(); g.arc(-s * 0.26, s * 0.13, s * 0.10, 0, 6.283);
+      g.fill(); g.stroke();
+      g.shadowBlur = 0;
+      g.fillStyle = GOLD;
+      g.beginPath();
+      g.moveTo(-s * 0.34, s * 0.17); g.lineTo(-s * 0.50, s * 0.22);
+      g.lineTo(-s * 0.33, s * 0.25); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(255,204,77,0.9)';
+      g.lineWidth = Math.max(1, s * 0.018);
+      g.beginPath();                                     // limp trailing wing
+      g.moveTo(s * 0.04, s * 0.08);
+      g.quadraticCurveTo(s * 0.24, s * 0.32, s * 0.06, s * 0.40);
+      g.stroke();
+      g.beginPath();                                     // tail
+      g.moveTo(s * 0.26, -s * 0.04); g.lineTo(s * 0.42, -s * 0.12);
+      g.stroke();
+      g.restore();
+    }
+
+  } else {
+    /* ------------------------------------------------ side view, working the line */
+    var gait = Math.sin(this.t * 12), gait2 = Math.sin(this.t * 12 + 2.1);
+
+    // tail, up and wagging hard
+    g.strokeStyle = COAT_LO;
+    g.lineWidth = Math.max(2.4, s * 0.075);
+    g.beginPath();
+    g.moveTo(-s * 0.42, -s * 0.04);
+    g.quadraticCurveTo(-s * 0.70, -s * 0.28 + Math.sin(this.t * 17) * s * 0.15,
+                       -s * 0.56, -s * 0.50);
+    g.stroke();
+    g.strokeStyle = CREAM;
+    g.lineWidth = Math.max(1.4, s * 0.032);
+    g.beginPath();
+    g.moveTo(-s * 0.60, -s * 0.42 + Math.sin(this.t * 17) * s * 0.06);
+    g.lineTo(-s * 0.56, -s * 0.50);
+    g.stroke();
+
+    // far legs
+    g.strokeStyle = COAT_LO;
+    g.lineWidth = Math.max(2.6, s * 0.080);
+    g.beginPath();
+    g.moveTo(-s * 0.20, s * 0.14); g.lineTo(-s * 0.20 + gait * s * 0.12, s * 0.44);
+    g.moveTo(s * 0.14, s * 0.14);  g.lineTo(s * 0.14 + gait2 * s * 0.12, s * 0.44);
+    g.stroke();
+
+    // body with fur along the back
+    var bg2 = g.createLinearGradient(0, -s * 0.28, 0, s * 0.26);
+    bg2.addColorStop(0, COAT_HI); bg2.addColorStop(0.6, COAT); bg2.addColorStop(1, COAT_LO);
+    g.fillStyle = bg2;
+    g.beginPath();
+    g.moveTo(-s * 0.46, -s * 0.02);
+    furEdge(g, -s * 0.46, -s * 0.02, s * 0.40, -s * 0.10, -s * 0.10, 4);
+    g.bezierCurveTo(s * 0.56, s * 0.02, s * 0.54, s * 0.20, s * 0.36, s * 0.24);
+    g.lineTo(-s * 0.34, s * 0.24);
+    g.bezierCurveTo(-s * 0.54, s * 0.20, -s * 0.56, s * 0.06, -s * 0.46, -s * 0.02);
+    g.closePath(); g.fill();
+    g.fillStyle = CREAM_LO;
+    g.beginPath(); g.ellipse(s * 0.02, s * 0.16, s * 0.30, s * 0.085, 0, 0, 6.283); g.fill();
+
+    // near legs
+    g.strokeStyle = COAT;
+    g.lineWidth = Math.max(2.6, s * 0.080);
+    g.beginPath();
+    g.moveTo(-s * 0.10, s * 0.16); g.lineTo(-s * 0.10 + gait2 * s * 0.12, s * 0.46);
+    g.moveTo(s * 0.28, s * 0.16);  g.lineTo(s * 0.28 + gait * s * 0.12, s * 0.46);
+    g.stroke();
+    g.fillStyle = CREAM;
+    g.beginPath(); g.ellipse(-s * 0.10 + gait2 * s * 0.12, s * 0.47, s * 0.075, s * 0.045, 0, 0, 6.283); g.fill();
+    g.beginPath(); g.ellipse(s * 0.28 + gait * s * 0.12, s * 0.47, s * 0.075, s * 0.045, 0, 0, 6.283); g.fill();
+
+    // head down in the reeds, nose working
+    g.save();
+    g.translate(s * 0.46, s * 0.02); g.rotate(0.38 + Math.sin(this.t * 9) * 0.05);
+    // ear
+    var eg2 = g.createLinearGradient(-s * 0.20, -s * 0.10, -s * 0.10, s * 0.40);
+    eg2.addColorStop(0, EAR_HI); eg2.addColorStop(1, EAR_LO);
+    g.fillStyle = eg2;
+    g.beginPath();
+    g.moveTo(-s * 0.14, -s * 0.14);
+    g.bezierCurveTo(-s * 0.44, s * 0.02, -s * 0.40, s * 0.34, -s * 0.20, s * 0.44);
+    g.bezierCurveTo(-s * 0.10, s * 0.30, -s * 0.08, s * 0.04, -s * 0.14, -s * 0.14);
+    g.closePath(); g.fill();
+    // skull
+    var hg2 = g.createRadialGradient(-s * 0.06, -s * 0.10, s * 0.03, 0, 0, s * 0.34);
+    hg2.addColorStop(0, COAT_HI); hg2.addColorStop(1, COAT_LO);
+    g.fillStyle = hg2;
+    g.beginPath(); g.ellipse(0, 0, s * 0.27, s * 0.22, 0, 0, 6.283); g.fill();
+    // muzzle
+    var mg3 = g.createLinearGradient(s * 0.12, 0, s * 0.44, s * 0.10);
+    mg3.addColorStop(0, CREAM); mg3.addColorStop(1, CREAM_LO);
+    g.fillStyle = mg3;
+    g.beginPath(); g.ellipse(s * 0.25, s * 0.07, s * 0.19, s * 0.115, 0, 0, 6.283); g.fill();
+    g.fillStyle = NOSE;
+    g.beginPath(); g.ellipse(s * 0.41, s * 0.05, s * 0.058, s * 0.046, 0, 0, 6.283); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.30)';
+    g.beginPath(); g.ellipse(s * 0.395, s * 0.035, s * 0.020, s * 0.013, -0.4, 0, 6.283); g.fill();
+    // eye
+    g.fillStyle = '#fff';
+    g.beginPath(); g.ellipse(s * 0.02, -s * 0.05, s * 0.058, s * 0.065, 0, 0, 6.283); g.fill();
+    g.fillStyle = NOSE;
+    g.beginPath(); g.arc(s * 0.04, -s * 0.04, s * 0.032, 0, 6.283); g.fill();
+    g.fillStyle = '#fff';
+    g.beginPath(); g.arc(s * 0.028, -s * 0.058, s * 0.014, 0, 6.283); g.fill();
+    // rim
+    g.strokeStyle = rim; g.globalAlpha = 0.5;
+    g.lineWidth = Math.max(1.2, s * 0.022);
+    g.shadowColor = rim; g.shadowBlur = s * 0.25;
+    g.beginPath(); g.ellipse(0, 0, s * 0.27, s * 0.22, 0, -1.9, 0.5); g.stroke();
+    g.shadowBlur = 0; g.globalAlpha = 1;
+    g.restore();
+
+    // scent puffs off the nose
+    for (var sp = 0; sp < 3; sp++) {
+      var ph = (this.t * 1.6 + sp * 0.33) % 1;
+      g.globalAlpha = (1 - ph) * 0.30;
+      g.fillStyle = CYAN;
+      g.beginPath();
+      g.arc(s * (0.86 + ph * 0.34), s * (0.18 - ph * 0.30), s * (0.02 + ph * 0.05), 0, 6.283);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+  }
+
+  g.restore();
+};
+
+/* ============================================================================
+   FLOW
+   ========================================================================= */
+function startGame() {
+  Audio_.init(); Audio_.resume();
+  score = 0; round = 1; totalDucks = 0;
+  newRecord = false;
+  beginRound();
+  hideOverlay();
+}
+
+function beginRound() {
+  hideOverlay();          // the round-clear card is dismissed by starting the round,
+                          // not by startGame — without this, NEXT ROUND left the card
+                          // on screen with the birds already flying behind it.
+  rule = roundRule(round);
+  ducksThisRound = 0; hitsThisRound = 0;
+  tally = [];
+  ducks.length = 0; feathers.length = 0; pops.length = 0;
+  dog = new Dog('sniff');
+  state = S_INTRO; stateT = 0;
+  syncHud();
+  banner('ROUND ' + round, 'BAG ' + rule.quota + ' OF ' + DUCKS_PER_ROUND);
+}
+
+function releaseFlush() {
+  var n = Math.min(rule.perFlush, DUCKS_PER_ROUND - ducksThisRound);
+  if (n <= 0) { endRound(); return; }
+  ducks.length = 0;
+  for (var i = 0; i < n; i++) {
+    var d = new Duck(rule);
+    d.x = W * (0.30 + 0.40 * (n === 1 ? 0.5 : i / (n - 1)));
+    ducks.push(d);
+  }
+  ducksThisRound += n;
+  shells = SHELLS;
+  state = S_FLY; stateT = 0;
+  Audio_.flush(); Audio_.quack();
+  syncHud();
+}
+
+function resolveFlush() {
+  // count what happened, then send the dog out
+  var downed = 0, escaped = 0, i;
+  for (i = 0; i < ducks.length; i++) {
+    if (ducks[i].falling || (!ducks[i].alive && !ducks[i].bolted)) downed++;
+  }
+  downed = 0;
+  for (i = 0; i < ducks.length; i++) if (ducks[i].hitOk) downed++;
+  escaped = ducks.length - downed;
+
+  for (i = 0; i < downed; i++) tally.push('hit');
+  for (i = 0; i < escaped; i++) tally.push('miss');
+  hitsThisRound += downed;
+
+  dog = new Dog(downed > 0 ? 'hold' : 'laugh', downed);
+  state = S_DOG; stateT = 0;
+  if (downed > 0) Audio_.retrieve(); else Audio_.laugh();
+  syncHud();
+}
+
+function afterDog() {
+  if (ducksThisRound >= DUCKS_PER_ROUND) { endRound(); return; }
+  releaseFlush();
+}
+
+function endRound() {
+  if (hitsThisRound >= rule.quota) {
+    var bonus = hitsThisRound * 100 + (hitsThisRound === DUCKS_PER_ROUND ? 1500 : 0);
+    score += bonus;
+    state = S_ROUND; stateT = 0;
+    Audio_.roundWin();
+    showOverlay(
+      '<div class="eyebrow">Round ' + round + ' cleared</div>' +
+      '<h2>' + (hitsThisRound === DUCKS_PER_ROUND ? 'PERFECT ROUND' : 'FLYWAY HELD') + '</h2>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Bagged</div><div class="v">' + hitsThisRound + '/' + DUCKS_PER_ROUND + '</div></div>' +
+        '<div class="stat"><div class="k">Bonus</div><div class="v">' + bonus + '</div></div>' +
+        '<div class="stat"><div class="k">Score</div><div class="v">' + score + '</div></div>' +
+      '</div>' +
+      '<p>Round ' + (round + 1) + ' needs <b style="color:#ffcc4d">' +
+        roundRule(round + 1).quota + '</b> birds, ' +
+        (roundRule(round + 1).perFlush > rule.perFlush
+          ? '<b style="color:#6fe3ff">' + roundRule(round + 1).perFlush + ' at a time</b>.'
+          : 'and they are faster.') + '</p>' +
+      '<button class="b" data-act="next">Next Round</button>'
+    );
+  } else {
+    gameOver();
+  }
+}
+
+function gameOver() {
+  state = S_OVER;
+  Audio_.over();
+  if (score > best.score) { best.score = score; newRecord = true; }
+  if (round > best.round) best.round = round;
+  best.ducks = Math.max(best.ducks, totalDucks);
+  writeSave(best);
+  showOverlay(
+    '<div class="eyebrow">Flight over</div>' +
+    '<h1 style="font-size:clamp(26px,8vw,44px);color:#ff5f6d;' +
+      'text-shadow:0 0 30px rgba(255,95,109,0.45)">THEY GOT AWAY</h1>' +
+    '<p>You needed <b style="color:#ffcc4d">' + rule.quota + '</b> on round ' + round +
+      ' and bagged <b>' + hitsThisRound + '</b>.</p>' +
+    (newRecord ? '<p style="color:#ffcc4d;font-weight:800">NEW BEST SCORE</p>' : '') +
+    '<div class="stats">' +
+      '<div class="stat"><div class="k">Score</div><div class="v">' + score + '</div></div>' +
+      '<div class="stat"><div class="k">Round</div><div class="v">' + round + '</div></div>' +
+      '<div class="stat"><div class="k">Birds</div><div class="v">' + totalDucks + '</div></div>' +
+    '</div>' +
+    '<button class="b" data-act="start">Hunt Again</button>' +
+    '<button class="b ghost" data-act="menu">Menu</button>'
+  );
+}
+
+/* ------------------------------------------------------------- the shot */
+function fire(x, y) {
+  if (state !== S_FLY) return;
+  if (shells <= 0) { Audio_.empty(); return; }
+  shells--;
+  Audio_.shot();
+  shake = 0.30; flash = 0.5; vignette = 1;
+  muzzle = { x: x, y: y, t: 0 };
+  lastShotAt = timer;
+
+  var hitAny = false;
+  for (var i = 0; i < ducks.length; i++) {
+    var d = ducks[i];
+    if (!d.alive || d.falling) continue;
+    var r = d.radius();
+    var dx = d.x - x, dy = d.y - y;
+    if (dx * dx + dy * dy <= r * r) {
+      d.alive = false; d.falling = true; d.hitOk = true;
+      d.vx *= 0.25; d.vy = -60;
+      var pts = 300 + (round - 1) * 50 + (d.bolting ? 400 : 0);
+      score += pts;
+      totalDucks++;
+      feather(d.x, d.y, d.hue);
+      popText(d.x, d.y - 30, '+' + pts, GOLD);
+      Audio_.fall();
+      hitAny = true;
+      break;                       // one shell, one bird
+    }
+  }
+  if (!hitAny) popText(x, y - 24, 'MISS', 'rgba(255,255,255,0.55)');
+  syncHud();
+}
+
+/* ============================================================================
+   INPUT
+   ========================================================================= */
+var isTouch = (matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window);
+var keys = {};
+
+function canvasPoint(e) {
+  var r = cvs.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+stage.addEventListener('pointermove', function (e) {
+  if (e.pointerType === 'touch') return;
+  var p = canvasPoint(e);
+  aim.x = p.x; aim.y = p.y; aim.has = true; padAim = false;
+});
+
+stage.addEventListener('pointerdown', function (e) {
+  Audio_.init(); Audio_.resume();
+  if (e.target.closest('#overlay') || e.target.closest('#tbar') ||
+      e.target.closest('#sndbtn')) return;
+  var p = canvasPoint(e);
+  aim.x = p.x; aim.y = p.y; aim.has = true; padAim = false;
+  if (state === S_TITLE) return;
+  fire(p.x, p.y);
+  e.preventDefault();
+}, { passive: false });
+
+window.addEventListener('keydown', function (e) {
+  var c = e.code;
+  keys[c] = true;
+  Audio_.init(); Audio_.resume();
+  if (['Space', 'Enter', 'KeyP', 'KeyM', 'KeyR', 'Escape',
+       'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].indexOf(c) >= 0) e.preventDefault();
+
+  if (c === 'KeyM') { Audio_.setMute(!Audio_.muted); syncSound(); }
+  if (c === 'KeyP' || c === 'Escape') togglePause();
+  if (c === 'KeyR' && state !== S_TITLE) startGame();
+
+  if (c === 'Space' || c === 'Enter') {
+    if (state === S_TITLE) { startGame(); return; }
+    if (state === S_ROUND) { round++; beginRound(); return; }
+    if (state === S_OVER)  { startGame(); return; }
+    if (state === S_FLY)   { fire(aim.x, aim.y); }
+  }
+});
+window.addEventListener('keyup', function (e) { keys[e.code] = false; });
+
+/* keyboard nudge of the reticle, for anyone playing without a mouse */
+function keyAim(dt) {
+  var sp = Math.min(W, H) * 0.75 * dt;
+  var mx = 0, my = 0;
+  if (keys['ArrowLeft']  || keys['KeyA']) mx -= 1;
+  if (keys['ArrowRight'] || keys['KeyD']) mx += 1;
+  if (keys['ArrowUp']    || keys['KeyW']) my -= 1;
+  if (keys['ArrowDown']  || keys['KeyS']) my += 1;
+  if (mx || my) {
+    aim.x = clamp(aim.x + mx * sp, 0, W);
+    aim.y = clamp(aim.y + my * sp, 0, H);
+    aim.has = true; padAim = false;
+  }
+}
+
+/* ------------------------------------------------------------- gamepad */
+var padLatch = false, padFireLatch = false;
+function readPad(dt) {
+  if (!navigator.getGamepads) return;
+  var pads = navigator.getGamepads();
+  var gp = null;
+  for (var i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { gp = pads[i]; break; }
+  if (!gp) return;
+
+  var ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
+  if (Math.abs(ax) < 0.16) ax = 0;
+  if (Math.abs(ay) < 0.16) ay = 0;
+  if (ax || ay) {
+    var sp = Math.min(W, H) * 0.95 * dt;
+    aim.x = clamp(aim.x + ax * sp, 0, W);
+    aim.y = clamp(aim.y + ay * sp, 0, H);
+    aim.has = true; padAim = true;
+  }
+
+  var b = gp.buttons;
+  var pressed = function (n) { return b[n] && (b[n].pressed || b[n].value > 0.4); };
+  var shoot = pressed(0) || pressed(7) || pressed(5);
+  var any = false;
+  for (var j = 0; j < b.length; j++) if (b[j] && b[j].pressed) { any = true; break; }
+
+  if (shoot && !padFireLatch) {
+    padFireLatch = true;
+    if (state === S_FLY) fire(aim.x, aim.y);
+  }
+  if (!shoot) padFireLatch = false;
+
+  if (any && !padLatch) {
+    padLatch = true;
+    if (state === S_TITLE) startGame();
+    else if (state === S_ROUND) { round++; beginRound(); }
+    else if (state === S_OVER) startGame();
+  }
+  if (!any) padLatch = false;
+}
+
+/* ============================================================================
+   HUD / OVERLAY
+   ========================================================================= */
+var elScore = document.getElementById('score');
+var elBest  = document.getElementById('best');
+var elRound = document.getElementById('round');
+var elShells = document.getElementById('shells');
+var elTally = document.getElementById('tally');
+var elQuota = document.getElementById('quota').firstElementChild;
+var elQtxt  = document.getElementById('qtxt');
+var overlay = document.getElementById('overlay');
+var bannerEl = document.getElementById('banner');
+var tbar = document.getElementById('tbar');
+
+function syncHud() {
+  elScore.textContent = score;
+  elBest.textContent = best.score;
+  elRound.textContent = round;
+
+  var h = '';
+  for (var i = 0; i < SHELLS; i++)
+    h += '<div class="shell' + (i < shells ? '' : ' spent') + '"></div>';
+  elShells.innerHTML = h;
+
+  var t = '';
+  for (var j = 0; j < DUCKS_PER_ROUND; j++) {
+    var cls = j < tally.length ? (tally[j] === 'hit' ? ' hit' : ' miss') : '';
+    t += '<div class="tk' + cls + '"></div>';
+  }
+  elTally.innerHTML = t;
+
+  elQtxt.textContent = hitsThisRound + ' / ' + rule.quota;
+  elQuota.style.width = Math.min(100, (hitsThisRound / rule.quota) * 100) + '%';
+}
+
+function showOverlay(html) {
+  overlay.innerHTML = '<div class="card">' + html + '</div>';
+  overlay.classList.add('on');
+}
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+
+overlay.addEventListener('click', function (e) {
+  var b = e.target.closest('[data-act]');
+  if (!b) return;
+  var a = b.getAttribute('data-act');
+  Audio_.init(); Audio_.resume();
+  if (a === 'start') startGame();
+  else if (a === 'next') { round++; beginRound(); }
+  else if (a === 'menu') showTitle();
+  else if (a === 'resume') togglePause();
+});
+
+var bannerT = 0;
+function banner(a, b) {
+  bannerEl.firstElementChild.textContent = a;
+  bannerEl.lastElementChild.textContent = b || '';
+  bannerEl.classList.add('on');
+  bannerT = 1.9;
+}
+
+function showTitle() {
+  state = S_TITLE;
+  ducks.length = 0; feathers.length = 0; pops.length = 0;
+  dog = null;
+  round = 1; score = 0; rule = roundRule(1); tally = []; hitsThisRound = 0;
+  syncHud();
+  showOverlay(
+    '<div class="eyebrow">Overclock Arcade</div>' +
+    '<h1>FLYWAY</h1>' +
+    '<p>Duck season, after dark. Five shells a flush &mdash; make them count, ' +
+    'because the dog is watching and he is not kind about it.</p>' +
+    '<div class="keys">' +
+      '<div><b>Mouse</b> aim</div><div><b>Click</b> fire</div>' +
+      '<div><b>Tap</b> aim &amp; fire</div><div><b>Space</b> fire</div>' +
+      '<div><b>W A S D</b> nudge aim</div><div><b>Stick</b> aim, <b>RT</b> fire</div>' +
+      '<div><b>P</b> pause</div><div><b>M</b> mute &middot; <b>R</b> restart</div>' +
+    '</div>' +
+    '<div class="stats">' +
+      '<div class="stat"><div class="k">Best</div><div class="v">' + best.score + '</div></div>' +
+      '<div class="stat"><div class="k">Round</div><div class="v">' + best.round + '</div></div>' +
+      '<div class="stat"><div class="k">Birds</div><div class="v">' + best.ducks + '</div></div>' +
+    '</div>' +
+    '<button class="b" data-act="start">Start Hunting</button>'
+  );
+}
+
+function togglePause() {
+  if (state === S_PAUSE) {
+    state = pausedFrom; hideOverlay();
+  } else if (state === S_FLY || state === S_INTRO || state === S_DOG) {
+    pausedFrom = state; state = S_PAUSE;
+    showOverlay('<div class="eyebrow">Paused</div><h2>HOLD FIRE</h2>' +
+      '<button class="b" data-act="resume">Resume</button>' +
+      '<button class="b ghost" data-act="menu">Quit to menu</button>');
+  }
+}
+var pausedFrom = S_FLY;
+
+/* sound toggle */
+var sndBtn = document.getElementById('sndbtn'), sndTxt = document.getElementById('sndtxt');
+function syncSound() { sndTxt.textContent = Audio_.muted ? 'SOUND OFF' : 'SOUND ON'; }
+sndBtn.addEventListener('click', function (e) {
+  e.stopPropagation();
+  Audio_.init(); Audio_.setMute(!Audio_.muted); syncSound();
+});
+syncSound();
+
+if (isTouch) {
+  document.body.classList.add('touch');
+  tbar.classList.add('on');
+  document.getElementById('tpause').addEventListener('click', function (e) {
+    e.stopPropagation(); togglePause();
+  });
+} else {
+  stage.classList.add('aiming');
+}
+
+/* ============================================================================
+   RENDER
+   ========================================================================= */
+function drawReeds(t) {
+  var base = H - horizon;
+  for (var i = 0; i < reeds.length; i++) {
+    var r = reeds[i];
+    var x = r.x * W;
+    var h = r.h * H;
+    var sway = Math.sin(t * 1.1 + r.ph) * h * 0.10 + r.lean * h * 0.35;
+    var y0 = horizon + base * 0.30 + (r.h * 0.5) * H * 0.10;
+
+    ctx.strokeStyle = 'rgba(9,13,28,0.95)';
+    ctx.lineWidth = r.w;
+    ctx.beginPath();
+    ctx.moveTo(x, y0);
+    ctx.quadraticCurveTo(x + sway * 0.5, y0 - h * 0.6, x + sway, y0 - h);
+    ctx.stroke();
+
+    if (r.cat) {
+      ctx.fillStyle = 'rgba(60,40,26,0.95)';
+      ctx.beginPath();
+      ctx.ellipse(x + sway, y0 - h, r.w * 1.5, h * 0.11, 0, 0, 6.283);
+      ctx.fill();
+    }
+  }
+}
+
+function drawReticle() {
+  if (!aim.has) return;
+  if (isTouch && !padAim) return;         // no floating reticle on touch
+  var s = Math.max(16, Math.min(W, H) * 0.030);
+  var x = aim.x, y = aim.y;
+  var kick = Math.max(0, 1 - (timer - lastShotAt) / 0.16);
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1 + kick * 0.35, 1 + kick * 0.35);
+  ctx.shadowColor = GOLD; ctx.shadowBlur = 14;
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.95;
+  ctx.beginPath(); ctx.arc(0, 0, s, 0, 6.283); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, s * 0.10, 0, 6.283); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-s * 1.55, 0); ctx.lineTo(-s * 0.42, 0);
+  ctx.moveTo(s * 0.42, 0);  ctx.lineTo(s * 1.55, 0);
+  ctx.moveTo(0, -s * 1.55); ctx.lineTo(0, -s * 0.42);
+  ctx.moveTo(0, s * 0.42);  ctx.lineTo(0, s * 1.55);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function render() {
+  var sx = 0, sy = 0;
+  if (shake > 0) { sx = rnd(-1, 1) * shake * 16; sy = rnd(-1, 1) * shake * 16; }
+
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  // scenery
+  ctx.drawImage(bg, 0, 0, W, H);
+
+  // ducks behind the reeds so they can rise out of cover
+  var i;
+  for (i = 0; i < ducks.length; i++) if (!ducks[i].gone) ducks[i].draw(ctx);
+
+  // Staging matters here. While he is working the line he is *in* the reeds,
+  // so he draws behind them. When he surfaces holding birds — or laughing —
+  // he is the whole point of the frame, so he draws in front of them.
+  var dogInFront = dog && (dog.mode === 'hold' || dog.mode === 'laugh');
+  if (dog && !dogInFront) dog.draw(ctx);
+
+  drawReeds(timer);
+
+  if (dogInFront) dog.draw(ctx);
+
+  // feathers
+  for (i = 0; i < feathers.length; i++) {
+    var f = feathers[i];
+    var a = 1 - f.t / f.life;
+    ctx.globalAlpha = clamp(a, 0, 1);
+    ctx.fillStyle = f.col;
+    ctx.save();
+    ctx.translate(f.x, f.y); ctx.rotate(f.a);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, f.r * 1.9, f.r * 0.62, 0, 0, 6.283);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
+  // muzzle flash
+  if (muzzle && muzzle.t < 0.11) {
+    var mt = 1 - muzzle.t / 0.11;
+    var mr = Math.min(W, H) * (0.10 + 0.30 * (1 - mt));
+    var mg = ctx.createRadialGradient(muzzle.x, muzzle.y, 0, muzzle.x, muzzle.y, mr);
+    mg.addColorStop(0, 'rgba(255,240,190,' + (0.75 * mt) + ')');
+    mg.addColorStop(0.4, 'rgba(255,204,77,' + (0.30 * mt) + ')');
+    mg.addColorStop(1, 'rgba(255,204,77,0)');
+    ctx.fillStyle = mg;
+    ctx.fillRect(muzzle.x - mr, muzzle.y - mr, mr * 2, mr * 2);
+  }
+
+  // floating score pops
+  for (i = 0; i < pops.length; i++) {
+    var p = pops[i];
+    var pa = 1 - p.t / p.life;
+    ctx.globalAlpha = clamp(pa, 0, 1);
+    ctx.fillStyle = p.col;
+    ctx.font = '800 ' + Math.max(14, Math.min(W, H) * 0.030) + 'px "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = p.col; ctx.shadowBlur = 12;
+    ctx.fillText(p.txt, p.x, p.y - (1 - pa) * 42);
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+
+  drawReticle();
+
+  ctx.restore();
+
+  // screen flash on firing
+  if (flash > 0) {
+    ctx.fillStyle = 'rgba(255,235,180,' + (flash * 0.16) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // vignette pulse
+  if (vignette > 0.01) {
+    var vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25,
+                                      W / 2, H / 2, Math.max(W, H) * 0.72);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,' + (0.30 * vignette) + ')');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+/* ============================================================================
+   LOOP
+   ========================================================================= */
+var lastT = 0;
+
+function update(dt) {
+  timer += dt;
+  stateT += dt;
+
+  shake = Math.max(0, shake - dt * 2.2);
+  flash = Math.max(0, flash - dt * 3.4);
+  vignette = Math.max(0, vignette - dt * 1.6);
+  if (muzzle) { muzzle.t += dt; if (muzzle.t > 0.2) muzzle = null; }
+
+  if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) bannerEl.classList.remove('on'); }
+
+  keyAim(dt);
+  readPad(dt);
+
+  var i;
+  for (i = feathers.length - 1; i >= 0; i--) {
+    var f = feathers[i];
+    f.t += dt;
+    f.vy += 240 * dt;
+    f.vx *= (1 - 0.9 * dt);
+    f.x += f.vx * dt; f.y += f.vy * dt;
+    f.a += f.sp * dt;
+    if (f.t >= f.life) feathers.splice(i, 1);
+  }
+  for (i = pops.length - 1; i >= 0; i--) {
+    pops[i].t += dt;
+    if (pops[i].t >= pops[i].life) pops.splice(i, 1);
+  }
+
+  if (state === S_INTRO) {
+    if (dog) {
+      dog.update(dt);
+      if (dog.done) { dog = null; releaseFlush(); }
+    }
+  } else if (state === S_FLY) {
+    var live = 0, resolved = true;
+    for (i = 0; i < ducks.length; i++) {
+      var d = ducks[i];
+      d.update(dt, rule);
+      if (d.alive && !d.gone) live++;
+      if (!d.gone && (d.alive || d.falling)) resolved = false;
+    }
+    // out of shells with birds still up: let them bolt rather than hang
+    if (shells === 0 && live > 0) {
+      for (i = 0; i < ducks.length; i++)
+        if (ducks[i].alive && !ducks[i].bolting) {
+          ducks[i].bolting = true;
+          var sp = Math.hypot(ducks[i].vx, ducks[i].vy) * 1.6;
+          ducks[i].vx *= 0.3; ducks[i].vy = -sp;
+        }
+    }
+    if (resolved) resolveFlush();
+
+  } else if (state === S_DOG) {
+    if (dog) {
+      dog.update(dt);
+      if (dog.done) { dog = null; afterDog(); }
+    } else afterDog();
+  }
+}
+
+function frame(ts) {
+  // The first resize() runs before the layout has settled, which left the
+  // scene drawn at stale dimensions and clipped to ~76% of the canvas on a
+  // phone. Checking here also covers orientation changes and the mobile
+  // browser chrome sliding in and out, which do not always fire 'resize'.
+  if (stage.clientWidth !== W || stage.clientHeight !== H) resize();
+
+  var dt = (ts - lastT) / 1000;
+  lastT = ts;
+  if (!isFinite(dt) || dt < 0) dt = 0;
+  if (dt > 0.10) dt = 0.10;        // tab was hidden — do not simulate the gap
+
+  if (state !== S_PAUSE && state !== S_OVER && state !== S_ROUND && state !== S_TITLE)
+    update(dt);
+  else {
+    timer += dt;
+    shake = Math.max(0, shake - dt * 2.2);
+    flash = Math.max(0, flash - dt * 3.4);
+    vignette = Math.max(0, vignette - dt * 1.6);
+    if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) bannerEl.classList.remove('on'); }
+    readPad(dt);
+  }
+
+  render();
+  requestAnimationFrame(frame);
+}
+
+/* ------------------------------------------------------------------ boot */
+resize();
+aim.x = W / 2; aim.y = H / 2;
+syncHud();
+showTitle();
+requestAnimationFrame(function (t) { lastT = t; requestAnimationFrame(frame); });
+
+/* play-test harness */
+window.__FLY = {
+  get s() { return state; },
+  get info() {
+    return { state: state, score: score, round: round, shells: shells,
+             ducks: ducks.length, live: ducks.filter(function (d) { return d.alive && !d.gone; }).length,
+             released: ducksThisRound, hits: hitsThisRound, quota: rule.quota,
+             tally: tally.length, dog: dog ? dog.mode : null };
+  },
+  duckPositions: function () {
+    return ducks.filter(function (d) { return d.alive && !d.falling && !d.gone; })
+                .map(function (d) { return { x: Math.round(d.x), y: Math.round(d.y), r: Math.round(d.radius()) }; });
+  },
+  start: startGame,
+  fire: fire,
+  next: function () { round++; beginRound(); },
+  S: { TITLE: S_TITLE, INTRO: S_INTRO, FLY: S_FLY, DOG: S_DOG, ROUND: S_ROUND, OVER: S_OVER, PAUSE: S_PAUSE }
+};
+
+})();
+</script>
+</body>
+</html>

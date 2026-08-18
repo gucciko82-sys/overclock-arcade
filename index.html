@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Overclock</title>
+
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Overclock">
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="Games built in-house. Running hotter than rated.">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    background: radial-gradient(ellipse at 50% 0%, #1d2450 0%, #0b0f1e 60%);
+    color: #fff; font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    padding: clamp(20px, 5vw, 56px) clamp(16px, 4vw, 40px);
+  }
+  header { max-width: 960px; margin: 0 auto clamp(18px, 4vw, 32px); }
+  h1 {
+    margin: 0 0 6px; font-size: clamp(28px, 7vw, 48px); font-weight: 800;
+    letter-spacing: 0.10em; color: #ffcc4d;
+  }
+  .sub { margin: 0; color: rgba(255,255,255,0.55); font-size: 12px;
+         letter-spacing: 0.26em; text-transform: uppercase; }
+  .stats { margin: 10px 0 0; font-size: 12px; color: rgba(255,255,255,0.45); letter-spacing: 0.06em; }
+  .stats b { color: #ffcc4d; font-weight: 700; }
+
+  .chips {
+    max-width: 960px; margin: 0 auto clamp(16px, 3vw, 24px);
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .chip {
+    font: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 8px 14px; border-radius: 999px; cursor: pointer;
+    background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.14);
+  }
+  .chip:hover { border-color: rgba(255,204,77,0.6); }
+  .chip.on { background: rgba(255,204,77,0.16); color: #ffcc4d; border-color: #ffcc4d; }
+
+  .grid {
+    max-width: 960px; margin: 0 auto;
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  }
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px; overflow: hidden;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .card:hover, .card:focus-visible {
+    transform: translateY(-3px);
+    border-color: #ffcc4d;
+    background: rgba(255,204,77,0.08);
+    outline: none;
+  }
+  .card.hidden { display: none; }
+  .cover { position: relative; aspect-ratio: 21 / 9; background: #0a0e1c; }
+  .cover canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .new {
+    position: absolute; top: 10px; right: 10px;
+    font-size: 9px; font-weight: 800; letter-spacing: 0.18em;
+    color: #0b0f1e; background: #ffcc4d;
+    padding: 4px 8px; border-radius: 999px;
+  }
+  .body { padding: 14px 16px 16px; }
+  .card h2 { margin: 0 0 5px; font-size: 18px; font-weight: 700; }
+  .card p  { margin: 0 0 12px; font-size: 12.5px; line-height: 1.5; color: rgba(255,255,255,0.66); }
+  .meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .tag {
+    display: inline-block; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,204,77,0.16); color: #ffcc4d; white-space: nowrap;
+  }
+  .best { font-size: 11.5px; color: rgba(255,255,255,0.55); text-align: right; }
+  .best b { color: #fff; font-weight: 700; }
+  .best.unplayed { color: rgba(255,255,255,0.32); }
+
+  footer {
+    max-width: 960px; margin: clamp(28px, 6vw, 52px) auto 0;
+    font-size: 12px; color: rgba(255,255,255,0.42); line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>OVERCLOCK</h1>
+    <p class="sub">Running hotter than rated</p>
+    <p class="stats" id="stats"></p>
+  </header>
+
+  <div class="chips" id="chips"></div>
+  <div class="grid" id="grid"></div>
+
+  <footer>
+    Keyboard, or a controller over Bluetooth or USB. Touch controls appear automatically on phones and tablets.
+    <br>
+    <strong style="color:#ffcc4d">On a phone:</strong> tap Share, then <strong>Add to Home Screen</strong> — it installs
+    with its own icon and plays full screen, no app store needed.
+  </footer>
+
+<script>
+"use strict";
+/* =========================================================================
+   OVERCLOCK library hub. Every cover is drawn procedurally into its card's
+   canvas at load — no image files, same rule as the games themselves.
+   Best-score readers are defensive: each game owns its save format, the hub
+   only peeks, and a missing or unreadable save just reads as "Unplayed".
+   ========================================================================= */
+
+var TAU = Math.PI * 2;
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+function fmtInt(n) { return Math.round(n).toLocaleString('en-US'); }
+function fmtLap(s) {
+  var m = Math.floor(s / 60), r = s - m * 60;
+  return m + ':' + (r < 10 ? '0' : '') + r.toFixed(2);
+}
+
+/* one entry per game: cover painter + best-score reader */
+var GAMES = [
+  {
+    id: 'voidrunner', name: 'Voidrunner', cat: 'action', tag: '3D Flight',
+    desc: 'True 3D. Thread a neon canyon that curves in every axis — skim the walls, fly the gold rings, outshoot the interceptors.',
+    best: function () { var v = parseFloat(lsGet('voidrunner.bestDistance')); return v > 0 ? ['Best', fmtInt(v) + ' m'] : null; },
+    cover: function (x, w, h) {
+      x.strokeStyle = 'rgba(125,226,255,0.55)'; x.lineWidth = 1;
+      var cx = w * 0.5, cy = h * 0.46;
+      for (var i = 0; i < 7; i++) {
+        var k = 1 - i / 7, rw = w * 0.9 * k, rh = h * 0.85 * k;
+        x.globalAlpha = 0.25 + k * 0.5;
+        x.strokeRect(cx - rw / 2 + Math.sin(i * 1.2) * w * 0.04, cy - rh / 2 + Math.cos(i * 0.9) * h * 0.05, rw, rh);
+      }
+      x.globalAlpha = 1;
+      x.strokeStyle = 'rgba(255,204,77,0.9)'; x.lineWidth = 2;
+      x.beginPath(); x.arc(cx + w * 0.1, cy, h * 0.16, 0, 7); x.stroke();
+      x.fillStyle = '#eaf6ff';
+      x.beginPath(); x.moveTo(cx, cy + h * 0.22); x.lineTo(cx - w * 0.035, cy + h * 0.34); x.lineTo(cx + w * 0.035, cy + h * 0.34); x.closePath(); x.fill();
+    }
+  },
+  {
+    id: 'apex_run', name: 'Apex Run', cat: 'racing', tag: 'Racing',
+    desc: 'Pseudo-3D arcade racer. Three circuits, seven rivals over three laps, and a championship across all of them.',
+    best: function () {
+      var best = null;
+      for (var i = 0; i < 6; i++) { var v = parseFloat(lsGet('apexRunBest_' + i)); if (v > 0 && (best === null || v < best)) best = v; }
+      return best ? ['Best lap', fmtLap(best)] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#3a2350'); g.addColorStop(0.55, '#b4513a'); g.addColorStop(0.62, '#1c2233'); g.addColorStop(1, '#242c42');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#ffd98a'; x.beginPath(); x.arc(w * 0.5, h * 0.55, h * 0.16, 0, 7); x.fill();
+      x.fillStyle = '#2b3450';
+      x.beginPath(); x.moveTo(0, h * 0.62); x.lineTo(w * 0.36, h * 0.62); x.lineTo(w * 0.5, h * 0.62); x.lineTo(w * 0.14, h * 0.62);
+      x.closePath(); x.fill();
+      x.fillStyle = '#39415e';
+      x.beginPath(); x.moveTo(w * 0.42, h); x.lineTo(w * 0.5, h * 0.6); x.lineTo(w * 0.58, h); x.closePath(); x.fill();
+      x.strokeStyle = 'rgba(255,255,255,0.8)'; x.lineWidth = 2; x.setLineDash([6, 7]);
+      x.beginPath(); x.moveTo(w * 0.5, h * 0.62); x.lineTo(w * 0.5, h); x.stroke(); x.setLineDash([]);
+      x.fillStyle = '#f0413f';
+      x.fillRect(w * 0.46, h * 0.74, w * 0.08, h * 0.16);
+      x.fillStyle = '#40507a'; x.fillRect(w * 0.475, h * 0.76, w * 0.05, h * 0.05);
+    }
+  },
+  {
+    id: 'starfall', name: 'Starfall', cat: 'shooter', tag: 'Shooter',
+    desc: 'Twin-stick vector shooter. Five enemy types, escalating waves, and a multi-phase Warden boss every fifth wave.',
+    best: function () { var v = parseFloat(lsGet('starfall_highscore_v1')); return v > 0 ? ['High score', fmtInt(v)] : null; },
+    cover: function (x, w, h) {
+      for (var i = 0; i < 26; i++) { x.fillStyle = 'rgba(255,255,255,' + (0.15 + Math.random() * 0.4) + ')'; x.fillRect(Math.random() * w, Math.random() * h, 1.4, 1.4); }
+      x.shadowBlur = 10;
+      x.shadowColor = '#7de2ff'; x.strokeStyle = '#7de2ff'; x.lineWidth = 2;
+      x.save(); x.translate(w * 0.34, h * 0.55); x.rotate(-0.5);
+      x.beginPath(); x.moveTo(12, 0); x.lineTo(-9, 8); x.lineTo(-4, 0); x.lineTo(-9, -8); x.closePath(); x.stroke(); x.restore();
+      x.shadowColor = '#ff5f9e'; x.strokeStyle = '#ff5f9e';
+      x.strokeRect(w * 0.66, h * 0.3, 14, 14);
+      x.shadowColor = '#8effc1'; x.strokeStyle = '#8effc1';
+      x.beginPath(); x.arc(w * 0.78, h * 0.66, 8, 0, 7); x.stroke();
+      x.shadowBlur = 0;
+      x.fillStyle = '#ffcc4d';
+      x.fillRect(w * 0.46, h * 0.49, 8, 2.6); x.fillRect(w * 0.55, h * 0.44, 8, 2.6);
+    }
+  },
+  {
+    id: 'neon_breaker', name: 'Neon Breaker', cat: 'action', tag: 'Arcade',
+    desc: 'Brick breaker with teeth. Fourteen levels, armoured and explosive bricks, and five power-ups including lasers.',
+    best: function () { var v = parseFloat(lsGet('neonBreaker_highScore_v1')); return v > 0 ? ['High score', fmtInt(v)] : null; },
+    cover: function (x, w, h) {
+      var cols = ['#4dd7ff', '#ff5fd0', '#8effc1', '#ffb04d'];
+      for (var r = 0; r < 4; r++) for (var c = 0; c < 9; c++) {
+        x.fillStyle = cols[r]; x.globalAlpha = 0.9;
+        x.beginPath(); x.roundRect(w * 0.08 + c * w * 0.094, h * 0.12 + r * h * 0.13, w * 0.08, h * 0.09, 3); x.fill();
+      }
+      x.globalAlpha = 1;
+      x.fillStyle = '#ffcc4d';
+      x.beginPath(); x.roundRect(w * 0.42, h * 0.84, w * 0.16, h * 0.06, 4); x.fill();
+      x.beginPath(); x.arc(w * 0.56, h * 0.72, 4, 0, 7); x.fill();
+      x.strokeStyle = 'rgba(255,204,77,0.35)'; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(w * 0.62, h * 0.5); x.lineTo(w * 0.56, h * 0.72); x.stroke();
+    }
+  },
+  {
+    id: 'gridlock', name: 'Gridlock', cat: 'puzzle', tag: 'Puzzle',
+    desc: 'Falling blocks, done properly. Hold piece, ghost piece, wall kicks and a seven-bag shuffle so it plays fair.',
+    best: function () { var s = lsJSON('overclock.gridlock.v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      var cell = h / 9, ox = w * 0.32;
+      function block(cx, cy, col) { x.fillStyle = col; x.beginPath(); x.roundRect(ox + cx * cell, h - (cy + 1) * cell, cell * 0.92, cell * 0.92, 2); x.fill(); }
+      var stack = [[0,0,'#4dd7ff'],[1,0,'#4dd7ff'],[2,0,'#ffb04d'],[3,0,'#8effc1'],[4,0,'#8effc1'],[5,0,'#ff5fd0'],[0,1,'#ffb04d'],[1,1,'#c9a2ff'],[3,1,'#ff5fd0'],[4,1,'#4dd7ff'],[0,2,'#8effc1'],[1,2,'#ffcc4d']];
+      for (var i = 0; i < stack.length; i++) block(stack[i][0], stack[i][1], stack[i][2]);
+      block(3, 6, '#ffcc4d'); block(4, 6, '#ffcc4d'); block(3, 7, '#ffcc4d'); block(2, 6, '#ffcc4d');
+      x.globalAlpha = 0.22;
+      block(3, 2, '#ffcc4d'); block(4, 2, '#ffcc4d'); block(3, 3, '#ffcc4d'); block(2, 2, '#ffcc4d');
+      x.globalAlpha = 1;
+      x.strokeStyle = 'rgba(255,255,255,0.14)'; x.lineWidth = 1;
+      x.strokeRect(ox - 2, 0, cell * 6 + 4, h);
+    }
+  },
+  {
+    id: 'deep_run', name: 'Deep Run', cat: 'action', tag: 'Survival',
+    desc: 'Thrust down a collapsing cave. Fly close to the rock for a bigger multiplier — fly too close and it is over.',
+    best: function () { var v = parseFloat(lsGet('deepRun_bestDistance_v1')); return v > 0 ? ['Best depth', fmtInt(v) + ' m'] : null; },
+    cover: function (x, w, h) {
+      x.fillStyle = '#141b30';
+      x.beginPath(); x.moveTo(0, 0); x.lineTo(w, 0); x.lineTo(w, h * 0.22); x.quadraticCurveTo(w * 0.6, h * 0.42, w * 0.3, h * 0.3); x.quadraticCurveTo(w * 0.1, h * 0.24, 0, h * 0.34); x.closePath(); x.fill();
+      x.beginPath(); x.moveTo(0, h); x.lineTo(w, h); x.lineTo(w, h * 0.72); x.quadraticCurveTo(w * 0.55, h * 0.6, w * 0.32, h * 0.76); x.quadraticCurveTo(w * 0.12, h * 0.86, 0, h * 0.72); x.closePath(); x.fill();
+      x.strokeStyle = 'rgba(255,204,77,0.5)'; x.lineWidth = 1.5;
+      x.beginPath(); x.moveTo(0, h * 0.34); x.quadraticCurveTo(w * 0.1, h * 0.24, w * 0.3, h * 0.3); x.stroke();
+      x.beginPath(); x.moveTo(0, h * 0.72); x.quadraticCurveTo(w * 0.12, h * 0.86, w * 0.32, h * 0.76); x.stroke();
+      x.save(); x.translate(w * 0.44, h * 0.5); x.rotate(0.12);
+      x.fillStyle = '#eaf6ff'; x.beginPath(); x.moveTo(14, 0); x.lineTo(-10, 7); x.lineTo(-10, -7); x.closePath(); x.fill();
+      x.fillStyle = 'rgba(125,226,255,0.8)'; x.beginPath(); x.moveTo(-10, 3); x.lineTo(-20, 0); x.lineTo(-10, -3); x.closePath(); x.fill();
+      x.restore();
+    }
+  },
+  {
+    id: 'gravity_grip', name: 'Gravity Grip', cat: 'action', tag: 'Physics',
+    desc: 'Two wheels and real suspension. Lean back off the kickers, drop the nose before you land, keep the tank off empty.',
+    best: function () { var s = lsJSON('gravityGrip_v1'); return s && s.dist > 0 ? ['Best', fmtInt(s.dist) + ' m'] : null; },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#101527'); g.addColorStop(1, '#1b2340');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#ffd98a'; x.globalAlpha = 0.7; x.beginPath(); x.arc(w * 0.82, h * 0.22, h * 0.1, 0, 7); x.fill(); x.globalAlpha = 1;
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 2.5;
+      x.beginPath(); x.moveTo(0, h * 0.82);
+      x.quadraticCurveTo(w * 0.25, h * 0.66, w * 0.45, h * 0.78);
+      x.quadraticCurveTo(w * 0.66, h * 0.9, w, h * 0.66); x.stroke();
+      x.save(); x.translate(w * 0.4, h * 0.6); x.rotate(-0.2);
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 2;
+      x.beginPath(); x.arc(-10, 8, 6, 0, 7); x.stroke();
+      x.beginPath(); x.arc(10, 8, 6, 0, 7); x.stroke();
+      x.beginPath(); x.moveTo(-10, 8); x.lineTo(-2, 0); x.lineTo(8, 2); x.lineTo(10, 8); x.stroke();
+      x.fillStyle = '#eaf6ff'; x.beginPath(); x.arc(0, -6, 3.4, 0, 7); x.fill();
+      x.restore();
+    }
+  },
+  {
+    id: 'firewall', name: 'Firewall', cat: 'strategy', tag: 'Strategy',
+    desc: 'Tower defence on a circuit board. Five towers, three tiers, a choice of specialisation each — and a shielded ROOTKIT every fifth wave.',
+    best: function () {
+      var s = lsJSON('firewall_best_v1'); if (!s) return null;
+      var top = 0;
+      for (var k in s) { var v = s[k]; var n = typeof v === 'number' ? v : (v && typeof v.wave === 'number' ? v.wave : 0); if (n > top) top = n; }
+      return top > 0 ? ['Best', 'Wave ' + top] : null;
+    },
+    cover: function (x, w, h) {
+      x.strokeStyle = 'rgba(125,226,255,0.14)'; x.lineWidth = 1;
+      for (var gx = 0; gx < w; gx += 18) { x.beginPath(); x.moveTo(gx, 0); x.lineTo(gx, h); x.stroke(); }
+      for (var gy = 0; gy < h; gy += 18) { x.beginPath(); x.moveTo(0, gy); x.lineTo(w, gy); x.stroke(); }
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 5; x.shadowColor = '#ffcc4d'; x.shadowBlur = 8;
+      x.beginPath(); x.moveTo(0, h * 0.3); x.lineTo(w * 0.3, h * 0.3); x.lineTo(w * 0.3, h * 0.72); x.lineTo(w * 0.66, h * 0.72); x.lineTo(w * 0.66, h * 0.4); x.lineTo(w, h * 0.4); x.stroke();
+      x.shadowBlur = 8;
+      x.shadowColor = '#7de2ff'; x.strokeStyle = '#7de2ff'; x.lineWidth = 2;
+      x.save(); x.translate(w * 0.45, h * 0.5); x.rotate(0.79); x.strokeRect(-6, -6, 12, 12); x.restore();
+      x.save(); x.translate(w * 0.2, h * 0.52); x.rotate(0.79); x.strokeRect(-6, -6, 12, 12); x.restore();
+      x.shadowBlur = 0;
+      x.fillStyle = '#ff7d7d';
+      x.beginPath(); x.arc(w * 0.12, h * 0.3, 4, 0, 7); x.fill();
+      x.beginPath(); x.arc(w * 0.3, h * 0.5, 4, 0, 7); x.fill();
+    }
+  },
+  {
+    id: 'flyway', name: 'Flyway', cat: 'shooter', tag: 'Light Gun',
+    desc: 'Duck season, after dark. Five shells a flush, ten birds a round — and a dog who surfaces holding your kill, or laughing at you.',
+    best: function () { var s = lsJSON('flyway_v1'); return s && s.score > 0 ? ['High score', fmtInt(s.score)] : null; },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#241a3f'); g.addColorStop(0.7, '#3d2a55'); g.addColorStop(1, '#141126');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#f5edc8'; x.beginPath(); x.arc(w * 0.78, h * 0.28, h * 0.14, 0, 7); x.fill();
+      x.fillStyle = '#191430';
+      x.beginPath(); x.moveTo(0, h); x.lineTo(0, h * 0.72); x.quadraticCurveTo(w * 0.3, h * 0.6, w * 0.55, h * 0.74); x.quadraticCurveTo(w * 0.8, h * 0.86, w, h * 0.7); x.lineTo(w, h); x.closePath(); x.fill();
+      x.strokeStyle = '#191430'; x.lineWidth = 2;
+      for (var i = 0; i < 8; i++) { var rx = w * (0.05 + i * 0.045); x.beginPath(); x.moveTo(rx, h); x.lineTo(rx, h * (0.66 + (i % 3) * 0.05)); x.stroke(); }
+      x.save(); x.translate(w * 0.42, h * 0.34); x.shadowColor = '#ff5f9e'; x.shadowBlur = 9; x.strokeStyle = '#ff5f9e'; x.lineWidth = 2;
+      x.beginPath(); x.ellipse(0, 0, 11, 6.5, -0.15, 0, 7); x.stroke();
+      x.beginPath(); x.moveTo(-3, -4); x.quadraticCurveTo(2, -14, 5, -5); x.stroke();
+      x.beginPath(); x.arc(9, -2.4, 3.2, 0, 7); x.stroke();
+      x.restore(); x.shadowBlur = 0;
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 1.6;
+      x.beginPath(); x.arc(w * 0.6, h * 0.56, 9, 0, 7); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.6 - 13, h * 0.56); x.lineTo(w * 0.6 + 13, h * 0.56); x.moveTo(w * 0.6, h * 0.56 - 13); x.lineTo(w * 0.6, h * 0.56 + 13); x.stroke();
+    }
+  },
+  {
+    id: 'downlink', name: 'Downlink', cat: 'shooter', tag: 'Missile Defence', isNew: true,
+    desc: 'Hostile packets dropping out of the sky-net. Three uplink batteries, six server nodes — lead your shots, the bloom does the killing.',
+    best: function () { var s = lsJSON('downlink_v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      var gy = h * 0.82;
+      /* incoming trails */
+      x.strokeStyle = 'rgba(255,95,95,0.6)'; x.lineWidth = 1.6;
+      var tr = [[0.2, 0, 0.34, 0.52], [0.52, 0, 0.42, 0.4], [0.86, 0, 0.66, 0.5]];
+      for (var i = 0; i < tr.length; i++) {
+        x.beginPath(); x.moveTo(w * tr[i][0], h * tr[i][1]); x.lineTo(w * tr[i][2], h * tr[i][3]); x.stroke();
+        x.fillStyle = '#ff5f5f'; x.shadowColor = '#ff5f5f'; x.shadowBlur = 7;
+        x.beginPath(); x.arc(w * tr[i][2], h * tr[i][3], 2.6, 0, TAU); x.fill();
+        x.shadowBlur = 0;
+      }
+      /* interceptor + bloom */
+      x.strokeStyle = 'rgba(125,226,255,0.6)'; x.lineWidth = 1.4;
+      x.beginPath(); x.moveTo(w * 0.5, gy); x.lineTo(w * 0.6, h * 0.34); x.stroke();
+      var g2 = x.createRadialGradient(w * 0.66, h * 0.3, 0, w * 0.66, h * 0.3, h * 0.2);
+      g2.addColorStop(0, 'rgba(255,236,170,0.95)'); g2.addColorStop(0.6, 'rgba(255,204,77,0.5)'); g2.addColorStop(1, 'rgba(255,204,77,0)');
+      x.fillStyle = g2;
+      x.beginPath(); x.arc(w * 0.66, h * 0.3, h * 0.2, 0, TAU); x.fill();
+      /* ground, racks, battery */
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 2; x.shadowColor = '#2d63b8'; x.shadowBlur = 5;
+      x.beginPath(); x.moveTo(0, gy); x.lineTo(w, gy); x.stroke(); x.shadowBlur = 0;
+      x.strokeStyle = '#7de2ff'; x.lineWidth = 1.4; x.fillStyle = '#12305e';
+      var nx = [0.16, 0.3, 0.72, 0.86];
+      for (var n = 0; n < nx.length; n++) {
+        x.fillRect(w * nx[n] - 8, gy - 11, 16, 11);
+        x.strokeRect(w * nx[n] - 8, gy - 11, 16, 11);
+      }
+      x.fillStyle = 'rgba(255,204,77,0.25)'; x.strokeStyle = '#ffcc4d';
+      x.beginPath(); x.moveTo(w * 0.5 - 12, gy); x.lineTo(w * 0.5 - 5, gy - 10); x.lineTo(w * 0.5 + 5, gy - 10); x.lineTo(w * 0.5 + 12, gy);
+      x.closePath(); x.fill(); x.stroke();
+    }
+  },
+  {
+    id: 'deadlock', name: 'Deadlock', cat: 'action', tag: 'Fighting', isNew: true,
+    desc: 'Two rival processes, one core. Best of three, blocking, meter specials — and if you take the match, FINISH THEM.',
+    best: function () {
+      var s = lsJSON('deadlock_v1');
+      return s && s.streak > 0 ? ['Best streak', fmtInt(s.streak)] : (s && s.wins > 0 ? ['CPU wins', fmtInt(s.wins)] : null);
+    },
+    cover: function (x, w, h) {
+      var gy = h * 0.86;
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 2; x.shadowColor = '#2d63b8'; x.shadowBlur = 5;
+      x.beginPath(); x.moveTo(0, gy); x.lineTo(w, gy); x.stroke(); x.shadowBlur = 0;
+      /* health bars */
+      x.fillStyle = '#7de2ff'; x.fillRect(w * 0.06, h * 0.1, w * 0.32, 5);
+      x.fillStyle = '#ffb04d'; x.fillRect(w * 0.62, h * 0.1, w * 0.24, 5);
+      x.strokeStyle = 'rgba(255,255,255,0.3)'; x.lineWidth = 1;
+      x.strokeRect(w * 0.06, h * 0.1, w * 0.32, 5); x.strokeRect(w * 0.54, h * 0.1, w * 0.32, 5);
+      /* two fighters squaring off */
+      function bod(cx, col, face, punch) {
+        x.shadowColor = col; x.shadowBlur = 10;
+        x.strokeStyle = col; x.lineCap = 'round';
+        x.lineWidth = 5;
+        x.beginPath(); x.moveTo(cx, gy - h * 0.34); x.lineTo(cx - face * 4, gy - h * 0.16); x.stroke();
+        x.lineWidth = 3.6;
+        x.beginPath(); x.moveTo(cx - face * 4, gy - h * 0.16); x.lineTo(cx + face * 8, gy); x.stroke();
+        x.beginPath(); x.moveTo(cx - face * 4, gy - h * 0.16); x.lineTo(cx - face * 10, gy); x.stroke();
+        x.beginPath(); x.moveTo(cx, gy - h * 0.31);
+        if (punch) x.lineTo(cx + face * 18, gy - h * 0.31);
+        else { x.lineTo(cx + face * 8, gy - h * 0.24); }
+        x.stroke();
+        x.fillStyle = col;
+        x.beginPath(); x.arc(cx + face * 2, gy - h * 0.42, 6, 0, TAU); x.fill();
+        x.shadowBlur = 0;
+        x.fillStyle = '#0b0f1e'; x.fillRect(cx + face * 2 - 3 + face * 2, gy - h * 0.44, 6, 3);
+      }
+      bod(w * 0.42, '#7de2ff', 1, true);
+      bod(w * 0.6, '#ffb04d', -1, false);
+      /* hit spark between them */
+      x.fillStyle = '#ffe9a8'; x.shadowColor = '#ffe9a8'; x.shadowBlur = 10;
+      for (var i = 0; i < 6; i++) {
+        var a = i / 6 * TAU;
+        x.fillRect(w * 0.53 + Math.cos(a) * 8 - 1.5, h * 0.55 + Math.sin(a) * 8 - 1.5, 3, 3);
+      }
+      x.shadowBlur = 0;
+      x.fillStyle = '#ff4d4d';
+      x.font = '800 10px "Segoe UI", sans-serif'; x.textAlign = 'center';
+      x.fillText('FINISH THEM', w * 0.5, h * 0.3);
+    }
+  },
+  {
+    id: 'overflow', name: 'Overflow', cat: 'puzzle', tag: 'Snake', isNew: true,
+    desc: 'You are a buffer. Every packet appends to you. Write past the fence — or into yourself — and it is exactly what it sounds like.',
+    best: function () { var s = lsJSON('overflow_v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 2.5; x.shadowColor = '#2d63b8'; x.shadowBlur = 6;
+      x.strokeRect(w * 0.07, h * 0.12, w * 0.86, h * 0.76);
+      x.shadowBlur = 0;
+      var seg = [[0.2, 0.66], [0.2, 0.5], [0.2, 0.34], [0.28, 0.34], [0.36, 0.34], [0.44, 0.34], [0.44, 0.5], [0.52, 0.5], [0.6, 0.5]];
+      for (var i = 0; i < seg.length; i++) {
+        var k = 1 - i / seg.length;
+        x.fillStyle = 'rgba(125,226,255,' + (0.35 + k * 0.6) + ')';
+        if (i === seg.length - 1) { x.shadowColor = '#7de2ff'; x.shadowBlur = 10; x.fillStyle = '#eaf6ff'; }
+        x.beginPath(); x.roundRect(w * seg[i][0] - 8, h * seg[i][1] - 8, 16, 16, 4); x.fill();
+      }
+      x.shadowBlur = 0;
+      x.fillStyle = '#0b0f1e';
+      x.beginPath(); x.arc(w * 0.6 + 3, h * 0.5 - 3, 1.8, 0, TAU); x.fill();
+      x.beginPath(); x.arc(w * 0.6 + 3, h * 0.5 + 3, 1.8, 0, TAU); x.fill();
+      x.shadowColor = '#ffcc4d'; x.shadowBlur = 9;
+      x.fillStyle = '#ffcc4d';
+      x.beginPath(); x.roundRect(w * 0.78 - 8, h * 0.5 - 8, 16, 16, 4); x.fill();
+      x.shadowBlur = 0;
+      x.fillStyle = '#0b0f1e';
+      x.font = '800 11px "Segoe UI", sans-serif'; x.textAlign = 'center';
+      x.fillText('1', w * 0.78, h * 0.5 + 4);
+    }
+  },
+  {
+    id: 'kilobyte', name: 'Kilobyte', cat: 'action', tag: 'Maze Chase', isNew: true,
+    desc: 'A hungry little process loose on a motherboard. Eat every bit, dodge four daemons with four different brains — root access turns the tables.',
+    best: function () { var s = lsJSON('kilobyte_v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 3; x.shadowColor = '#2d63b8'; x.shadowBlur = 6;
+      x.strokeRect(w * 0.06, h * 0.1, w * 0.88, h * 0.8);
+      x.beginPath(); x.moveTo(w * 0.3, h * 0.1); x.lineTo(w * 0.3, h * 0.45); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.52, h * 0.9); x.lineTo(w * 0.52, h * 0.55); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.72, h * 0.1); x.lineTo(w * 0.72, h * 0.4); x.stroke();
+      x.shadowBlur = 0;
+      x.fillStyle = '#ffcc4d';
+      for (var i = 0; i < 7; i++) x.fillRect(w * (0.14 + i * 0.075), h * 0.68, 3, 3);
+      for (var j = 0; j < 4; j++) x.fillRect(w * 0.62, h * (0.2 + j * 0.14), 3, 3);
+      x.shadowColor = '#7de2ff'; x.shadowBlur = 10;
+      x.fillStyle = '#7de2ff';
+      x.beginPath(); x.moveTo(w * 0.4, h * 0.69);
+      x.arc(w * 0.4, h * 0.69, h * 0.11, 0.5, TAU - 0.5); x.closePath(); x.fill();
+      x.shadowColor = '#ff5f5f'; x.fillStyle = '#ff5f5f';
+      var gx2 = w * 0.82, gy2 = h * 0.66, gr = h * 0.1;
+      x.beginPath(); x.arc(gx2, gy2 - gr * 0.1, gr, Math.PI, 0);
+      x.lineTo(gx2 + gr, gy2 + gr * 0.8);
+      for (var s6 = 2; s6 >= -2; s6--) x.lineTo(gx2 + (s6 / 2.5) * gr, gy2 + gr * (s6 % 2 ? 0.62 : 0.8));
+      x.closePath(); x.fill();
+      x.shadowBlur = 0;
+      x.fillStyle = '#fff';
+      x.beginPath(); x.arc(gx2 - gr * 0.35, gy2 - gr * 0.15, gr * 0.22, 0, TAU); x.fill();
+      x.beginPath(); x.arc(gx2 + gr * 0.35, gy2 - gr * 0.15, gr * 0.22, 0, TAU); x.fill();
+    }
+  },
+  {
+    id: 'ember', name: 'Ember', cat: 'action', tag: 'Platformer', isNew: true,
+    desc: 'A small flame against a big dark. Twenty-two levels of run, jump and dash — coyote time and all, so every death is your own.',
+    best: function () {
+      var s = lsJSON('overclock.ember.v1'); if (!s) return null;
+      var lvl = typeof s.max === 'number' ? s.max : 0;
+      return lvl > 0 ? ['Reached', 'Level ' + Math.min(lvl + 1, 22) + '/22'] : null;
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#151b33';
+      x.beginPath(); x.moveTo(0, h); x.lineTo(0, h * 0.55); x.lineTo(w * 0.2, h * 0.3); x.lineTo(w * 0.38, h * 0.62); x.lineTo(w * 0.56, h * 0.2); x.lineTo(w * 0.76, h * 0.6); x.lineTo(w, h * 0.42); x.lineTo(w, h); x.closePath(); x.fill();
+      x.fillStyle = '#1d2542'; x.beginPath(); x.roundRect(w * 0.36, h * 0.66, w * 0.2, h * 0.07, 3); x.fill();
+      for (var i = 0; i < 12; i++) { x.fillStyle = 'rgba(255,204,77,' + (0.2 + Math.random() * 0.4) + ')'; x.fillRect(Math.random() * w, Math.random() * h * 0.8, 1.6, 1.6); }
+      x.shadowColor = '#ffb04d'; x.shadowBlur = 12;
+      x.fillStyle = '#ffb04d'; x.beginPath(); x.roundRect(w * 0.44 - 5, h * 0.52, 10, 12, 3); x.fill();
+      x.fillStyle = '#ffe9a8';
+      x.beginPath(); x.moveTo(w * 0.44, h * 0.34); x.quadraticCurveTo(w * 0.44 + 7, h * 0.42, w * 0.44, h * 0.5); x.quadraticCurveTo(w * 0.44 - 7, h * 0.42, w * 0.44, h * 0.34); x.fill();
+      x.shadowBlur = 0;
+      x.fillStyle = '#0b0f1e'; x.fillRect(w * 0.44 - 3, h * 0.55, 2.4, 2.4); x.fillRect(w * 0.44 + 1, h * 0.55, 2.4, 2.4);
+    }
+  },
+  {
+    id: 'null_sector', name: 'Null Sector', cat: 'action', tag: 'Roguelike', isNew: true,
+    desc: 'Real-time roguelike inside a corrupted machine. Six floors, a boss on every one, and 28 stacking upgrades that actually stack.',
+    best: function () {
+      var v = parseInt(lsGet('null_sector_best_v1'), 10);
+      if (!(v > 0)) return null;
+      return v > 6 ? ['Best', 'CLEARED'] : ['Best', 'Floor ' + v + '/6'];
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = 'rgba(28,63,102,0.5)'; x.fillRect(w * 0.08, h * 0.1, w * 0.84, h * 0.8);
+      x.strokeStyle = '#2c5c8f'; x.lineWidth = 5; x.strokeRect(w * 0.08, h * 0.1, w * 0.84, h * 0.8);
+      x.strokeStyle = 'rgba(255,255,255,0.06)'; x.lineWidth = 1;
+      for (var i = 1; i < 6; i++) { x.beginPath(); x.moveTo(w * 0.08 + i * w * 0.14, h * 0.1); x.lineTo(w * 0.08 + i * w * 0.14, h * 0.9); x.stroke(); }
+      x.shadowBlur = 10;
+      x.shadowColor = '#ff7d7d'; x.fillStyle = '#ff7d7d';
+      x.save(); x.translate(w * 0.66, h * 0.46);
+      x.beginPath(); for (var s6 = 0; s6 < 8; s6++) { var a6 = s6 / 8 * 7 + 0.4, rr = s6 % 2 ? 11 : 15; x[s6 ? 'lineTo' : 'moveTo'](Math.cos(a6) * rr, Math.sin(a6) * rr); } x.closePath(); x.fill();
+      x.restore();
+      x.shadowColor = '#7de2ff'; x.fillStyle = '#eaf6ff';
+      x.save(); x.translate(w * 0.3, h * 0.56); x.rotate(0.5);
+      x.beginPath(); x.moveTo(11, 0); x.lineTo(-7, 7); x.lineTo(-3.5, 0); x.lineTo(-7, -7); x.closePath(); x.fill();
+      x.restore(); x.shadowBlur = 0;
+      x.fillStyle = '#ff5f9e';
+      for (var hh = 0; hh < 3; hh++) { x.beginPath(); x.arc(w * 0.14 + hh * 11, h * 0.18, 3.2, 0, 7); x.fill(); }
+    }
+  }
+];
+
+/* ------------------------------------------------------------ rendering -- */
+var CATS = [
+  ['all', 'All'],
+  ['action', 'Action'],
+  ['shooter', 'Shooters'],
+  ['puzzle', 'Puzzle'],
+  ['strategy', 'Strategy'],
+  ['racing', 'Racing']
+];
+
+var grid = document.getElementById('grid');
+var playedCount = 0;
+
+GAMES.forEach(function (g) {
+  var a = document.createElement('a');
+  a.className = 'card'; a.href = g.id + '/'; a.dataset.cat = g.cat;
+
+  var best = null;
+  try { best = g.best(); } catch (e) { best = null; }
+  if (best) playedCount++;
+
+  var bestHTML = best
+    ? '<div class="best">' + best[0] + '<br><b>' + best[1] + '</b></div>'
+    : '<div class="best unplayed">Unplayed</div>';
+
+  a.innerHTML =
+    '<div class="cover"><canvas></canvas>' + (g.isNew && !best ? '<span class="new">NEW</span>' : '') + '</div>' +
+    '<div class="body"><h2>' + g.name + '</h2><p>' + g.desc + '</p>' +
+    '<div class="meta"><span class="tag">' + g.tag + '</span>' + bestHTML + '</div></div>';
+  grid.appendChild(a);
+
+  /* paint the cover at the card's real size */
+  var cv = a.querySelector('canvas');
+  requestAnimationFrame(function () {
+    var r = cv.getBoundingClientRect();
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.max(60, Math.round(r.width * dpr));
+    cv.height = Math.max(30, Math.round(r.height * dpr));
+    var x = cv.getContext('2d');
+    x.scale(dpr, dpr);
+    var w = r.width, h = r.height;
+    x.fillStyle = '#0a0e1c'; x.fillRect(0, 0, w, h);
+    try { g.cover(x, w, h); } catch (e) { /* a broken cover must never break the hub */ }
+  });
+});
+
+document.getElementById('stats').innerHTML =
+  '<b>' + GAMES.length + '</b> games &middot; <b>' + playedCount + '</b> played on this device';
+
+/* filter chips */
+var chipsEl = document.getElementById('chips');
+CATS.forEach(function (c, i) {
+  var b = document.createElement('button');
+  b.className = 'chip' + (i === 0 ? ' on' : ''); b.textContent = c[1]; b.dataset.cat = c[0];
+  b.addEventListener('click', function () {
+    chipsEl.querySelectorAll('.chip').forEach(function (o) { o.classList.remove('on'); });
+    b.classList.add('on');
+    grid.querySelectorAll('.card').forEach(function (card) {
+      card.classList.toggle('hidden', c[0] !== 'all' && card.dataset.cat !== c[0]);
+    });
+  });
+  chipsEl.appendChild(b);
+});
+</script>
+</body>
+</html>

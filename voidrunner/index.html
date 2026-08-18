@@ -1,0 +1,2379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voidrunner</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="True 3D canyon flight. Raw WebGL2, no libraries.">
+<meta name="format-detection" content="telephone=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root {
+    --hud-fg: #ffffff;
+    --hud-dim: rgba(255,255,255,0.62);
+    --hud-panel: rgba(8,10,24,0.55);
+    --accent: #ffcc4d;
+    --cyan: #4de3ff;
+    --danger: #ff5d6c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #0b0f1e;
+    color: #fff;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#gl { display: block; width: 100%; height: 100%; background: #0b0f1e; }
+
+  /* ------------------------------------------------------------ HUD */
+  #hud {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+             max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    display: flex; flex-direction: column; justify-content: space-between;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+  }
+  #hud.hidden { display: none; }
+  .hud-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .panel {
+    background: var(--hud-panel);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 8px 12px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .label { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--hud-dim); }
+  .value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .value.big { font-size: clamp(24px, 5vw, 36px); }
+  .value.small { font-size: 14px; font-weight: 600; }
+  .value.accent { color: var(--accent); }
+  .value.cyan { color: var(--cyan); }
+  /* pushed clear of the mute / pause buttons that sit in the same corner */
+  #right-stack { text-align: right; display: flex; flex-direction: column; gap: 8px;
+                 align-items: flex-end; margin-top: 52px; }
+  #left-stack  { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+
+  .meter { width: 116px; height: 7px; border-radius: 4px; background: rgba(255,255,255,0.14); overflow: hidden; margin-top: 6px; }
+  .meter > i { display: block; height: 100%; width: 100%; border-radius: 4px; transition: width 0.08s linear; }
+  #shieldBar > i { background: linear-gradient(90deg, #4de3ff, #7affd8); }
+  #boostBar  > i { background: linear-gradient(90deg, #ffcc4d, #ff9d3d); }
+  #shieldBar.low > i { background: linear-gradient(90deg, #ff5d6c, #ff9d3d); }
+
+  #multi {
+    position: absolute; left: 50%; top: 14%; transform: translateX(-50%);
+    font-size: clamp(18px, 4.4vw, 30px); font-weight: 800; letter-spacing: 0.06em;
+    color: var(--accent); opacity: 0; transition: opacity 0.25s ease; text-align: center;
+  }
+  #multi.on { opacity: 1; }
+  #flash {
+    position: absolute; left: 0; right: 0; top: 26%; text-align: center;
+    font-size: clamp(17px, 4vw, 30px); font-weight: 800; letter-spacing: 0.05em;
+    color: var(--cyan); opacity: 0; transition: opacity 0.4s ease; padding: 0 16px;
+  }
+  #flash.show { opacity: 1; transition: none; }
+  #crosshair {
+    position: absolute; left: 50%; top: 50%; width: 26px; height: 26px;
+    margin: -13px 0 0 -13px; border: 1px solid rgba(255,204,77,0.55);
+    border-radius: 50%; opacity: 0.6;
+  }
+  #crosshair::after {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px;
+    margin: -1.5px 0 0 -1.5px; background: var(--accent); border-radius: 50%;
+  }
+  #damage {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    box-shadow: inset 0 0 90px 16px rgba(255,60,80,0.45);
+    transition: opacity 0.35s ease;
+  }
+  #damage.on { opacity: 1; transition: none; }
+
+  /* ------------------------------------------------------- top buttons */
+  #topbtns { position: absolute; top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right));
+             display: flex; gap: 8px; pointer-events: auto; z-index: 6; }
+  .iconbtn {
+    min-width: 44px; min-height: 44px; width: 44px; height: 44px;
+    border-radius: 12px; border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(8,10,24,0.6); color: #fff; font-size: 17px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; pointer-events: auto;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.28); border-color: var(--accent); }
+
+  /* ---------------------------------------------------- touch controls */
+  #touch { position: absolute; inset: 0; display: none; pointer-events: none; z-index: 5; }
+  body.touch #touch { display: block; }
+  body.touch #hud { padding-bottom: calc(max(18px, env(safe-area-inset-bottom)) + 96px); }
+  .tbtn {
+    position: absolute; bottom: max(18px, env(safe-area-inset-bottom));
+    min-width: 72px; min-height: 72px; width: 72px; height: 72px; border-radius: 50%;
+    background: rgba(255,255,255,0.10);
+    border: 2px solid rgba(255,255,255,0.30);
+    color: #fff; font-size: 12px; font-weight: 700; letter-spacing: 0.12em;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: auto; touch-action: none;
+  }
+  .tbtn:active, .tbtn.on { background: rgba(255,204,77,0.35); border-color: var(--accent); }
+  #t-fire  { right: max(16px, env(safe-area-inset-right)); }
+  #t-boost { right: calc(max(16px, env(safe-area-inset-right)) + 86px); }
+  #stickhint {
+    position: absolute; left: max(20px, env(safe-area-inset-left));
+    bottom: calc(max(18px, env(safe-area-inset-bottom)) + 6px);
+    width: 96px; height: 96px; border-radius: 50%;
+    border: 1px dashed rgba(255,255,255,0.22); color: var(--hud-dim);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; text-align: center;
+  }
+
+  /* ---------------------------------------------------------- overlay */
+  #overlay {
+    position: absolute; inset: 0; z-index: 8;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(10,14,32,0.80), rgba(4,6,16,0.96));
+    text-align: center; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    pointer-events: auto; overflow-y: auto;
+  }
+  #overlay.hidden { display: none; }
+  .card { max-width: 580px; width: 100%; margin: auto; }
+  .card h1 {
+    margin: 0 0 2px; font-size: clamp(34px, 9vw, 66px); font-weight: 800;
+    letter-spacing: 0.14em; color: var(--accent);
+    text-shadow: 0 0 26px rgba(255,204,77,0.45);
+  }
+  .card h2 { margin: 0 0 14px; font-size: clamp(19px, 4.6vw, 26px); font-weight: 700; letter-spacing: 0.05em; }
+  .card .sub { margin: 0 0 22px; color: var(--hud-dim); letter-spacing: 0.26em; font-size: 11px; text-transform: uppercase; }
+  .card p { color: rgba(255,255,255,0.72); font-size: 13.5px; line-height: 1.65; margin: 0 0 16px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 48px; min-width: 160px; padding: 12px 26px; margin: 6px;
+    border-radius: 12px; border: 1px solid var(--accent);
+    background: rgba(255,204,77,0.16); color: var(--accent);
+    font-family: inherit; font-size: 15px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,204,77,0.34); }
+  .btn.ghost { border-color: rgba(255,255,255,0.28); background: rgba(255,255,255,0.06); color: #fff; }
+  .keys {
+    display: grid; gap: 8px 18px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    margin: 0 auto 22px; max-width: 480px; text-align: left;
+    font-size: 12.5px; color: rgba(255,255,255,0.66); line-height: 1.5;
+  }
+  .keys b { color: #fff; font-weight: 600; }
+  .stats { display: flex; justify-content: center; gap: 26px; flex-wrap: wrap; margin: 4px 0 22px; }
+  .stat .label { margin-bottom: 3px; }
+  .stat .value { font-size: clamp(22px, 5.5vw, 34px); }
+  .newbest { color: var(--accent); font-weight: 700; letter-spacing: 0.16em;
+             font-size: 12px; text-transform: uppercase; margin: -14px 0 18px; }
+
+  /* ------------------------------------------------------------ error */
+  #fatal {
+    position: absolute; inset: 0; z-index: 20; display: none;
+    align-items: center; justify-content: center; padding: 24px;
+    background: #0b0f1e; overflow-y: auto;
+  }
+  #fatal.show { display: flex; }
+  #fatal .card { text-align: left; max-width: 640px; }
+  #fatal h2 { color: var(--danger); letter-spacing: 0.06em; }
+  #fatal pre {
+    white-space: pre-wrap; word-break: break-word;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,93,108,0.35);
+    border-radius: 10px; padding: 12px; font-size: 11.5px; line-height: 1.5;
+    color: rgba(255,255,255,0.8); max-height: 46vh; overflow: auto;
+  }
+  @media (max-width: 420px) { .meter { width: 92px; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="hud-row">
+      <div id="left-stack">
+        <div class="panel">
+          <div class="label">Distance</div>
+          <div class="value big accent" id="distVal">0<span style="font-size:14px"> m</span></div>
+        </div>
+        <div class="panel">
+          <div class="label">Score</div>
+          <div class="value small" id="scoreVal">0</div>
+        </div>
+      </div>
+      <div id="right-stack">
+        <div class="panel">
+          <div class="label">Shield</div>
+          <div class="value small cyan" id="shieldVal">100%</div>
+          <div class="meter" id="shieldBar"><i></i></div>
+        </div>
+        <div class="panel">
+          <div class="label">Boost</div>
+          <div class="value small accent" id="boostVal">READY</div>
+          <div class="meter" id="boostBar"><i></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="hud-row">
+      <div class="panel">
+        <div class="label">Velocity</div>
+        <div class="value" id="spdVal">0<span style="font-size:12px"> u/s</span></div>
+      </div>
+      <div class="panel" style="text-align:right">
+        <div class="label">Rings / Kills</div>
+        <div class="value small" id="ringVal">0 / 0</div>
+      </div>
+    </div>
+    <div id="multi">x1.0</div>
+    <div id="flash"></div>
+    <div id="crosshair"></div>
+  </div>
+
+  <div id="damage"></div>
+
+  <div id="topbtns-holder">
+    <div id="topbtns">
+      <button class="iconbtn" id="muteBtn" title="Mute" aria-label="Toggle sound">&#9835;</button>
+      <button class="iconbtn" id="pauseBtn" title="Pause" aria-label="Pause">&#10073;&#10073;</button>
+    </div>
+  </div>
+
+  <div id="touch">
+    <div id="stickhint">Drag<br>to steer</div>
+    <div class="tbtn" id="t-boost">BOOST</div>
+    <div class="tbtn" id="t-fire">FIRE</div>
+  </div>
+
+  <div id="overlay">
+    <div class="card" id="overlayCard"></div>
+  </div>
+
+  <div id="fatal">
+    <div class="card">
+      <h2 id="fatalTitle">Renderer unavailable</h2>
+      <p id="fatalMsg"></p>
+      <pre id="fatalLog"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ===========================================================================
+   VOIDRUNNER  —  third-person 3D canyon flight, raw WebGL2, zero libraries.
+
+   Everything below is hand written: the matrix maths, the quaternion
+   integrator, the procedural canyon geometry, the GLSL, and the bloom pass.
+   No model files, no textures, no CDN.
+
+   Layout of this file:
+     1.  Fatal-error plumbing        (WebGL fails silently; we refuse to)
+     2.  Small maths library         (vec3 / mat4 / quat)
+     3.  Procedural geometry         (canyon surface + instanced meshes)
+     4.  Shaders                     (GLSL ES 3.00 strings)
+     5.  Renderer                    (programs, VAOs, framebuffers, bloom)
+     6.  Audio                       (WebAudio oscillators only)
+     7.  Input                       (keyboard / touch / gamepad)
+     8.  Game                        (ship, canyon chunks, obstacles, enemies)
+     9.  Loop + UI
+   ======================================================================== */
+
+/* ---------------------------------------------------------------- 1. errors */
+const fatalEl = document.getElementById("fatal");
+let fatalShown = false;
+function fatal(title, message, log) {
+  if (fatalShown) return;
+  fatalShown = true;
+  document.getElementById("fatalTitle").textContent = title;
+  document.getElementById("fatalMsg").textContent   = message;
+  const pre = document.getElementById("fatalLog");
+  if (log) { pre.textContent = log; pre.style.display = "block"; }
+  else     { pre.style.display = "none"; }
+  fatalEl.classList.add("show");
+  console.error("[Voidrunner] " + title + " — " + message, log || "");
+}
+
+/* Saved data can throw outright in a private window. Every access goes
+   through here so a refusal is just "no saved data", never a blank screen. */
+const store = {
+  get(k)    { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); }    catch (e) { /* no storage */ } }
+};
+const K_BEST = "voidrunner.bestDistance";
+const K_MUTE = "voidrunner.muted";
+
+/* ----------------------------------------------------------- 2. maths */
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp  = (a, b, t) => a + (b - a) * t;
+/* frame-rate independent exponential approach */
+const approach = (a, b, rate, dt) => a + (b - a) * (1 - Math.exp(-rate * dt));
+
+/* --- vec3 (plain 3-element arrays) --- */
+function v3(x, y, z) { return [x || 0, y || 0, z || 0]; }
+function vAdd(a, b)  { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+function vSub(a, b)  { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+function vScale(a,s) { return [a[0]*s, a[1]*s, a[2]*s]; }
+function vDot(a, b)  { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function vCross(a,b) {
+  return [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]];
+}
+function vLen(a)  { return Math.sqrt(vDot(a, a)); }
+function vLen2(a) { return vDot(a, a); }
+function vNorm(a) { const l = vLen(a); return l > 1e-9 ? [a[0]/l, a[1]/l, a[2]/l] : [0,0,1]; }
+function vLerp(a, b, t) { return [lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t)]; }
+
+/* --- mat4, column-major, same memory order WebGL wants --- */
+function mIdent(o) {
+  o = o || new Float32Array(16);
+  o[0]=1;o[1]=0;o[2]=0;o[3]=0; o[4]=0;o[5]=1;o[6]=0;o[7]=0;
+  o[8]=0;o[9]=0;o[10]=1;o[11]=0; o[12]=0;o[13]=0;o[14]=0;o[15]=1;
+  return o;
+}
+function mMul(out, a, b) {           /* out = a * b */
+  const a00=a[0],a01=a[1],a02=a[2],a03=a[3], a10=a[4],a11=a[5],a12=a[6],a13=a[7],
+        a20=a[8],a21=a[9],a22=a[10],a23=a[11], a30=a[12],a31=a[13],a32=a[14],a33=a[15];
+  for (let i = 0; i < 4; i++) {
+    const b0=b[i*4], b1=b[i*4+1], b2=b[i*4+2], b3=b[i*4+3];
+    out[i*4  ] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+    out[i*4+1] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+    out[i*4+2] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+    out[i*4+3] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+  }
+  return out;
+}
+function mPerspective(out, fovY, aspect, near, far) {
+  const f = 1 / Math.tan(fovY / 2), nf = 1 / (near - far);
+  out[0]=f/aspect; out[1]=0; out[2]=0; out[3]=0;
+  out[4]=0; out[5]=f; out[6]=0; out[7]=0;
+  out[8]=0; out[9]=0; out[10]=(far+near)*nf; out[11]=-1;
+  out[12]=0; out[13]=0; out[14]=2*far*near*nf; out[15]=0;
+  return out;
+}
+function mLookAt(out, eye, target, up) {
+  const z = vNorm(vSub(eye, target));      /* camera looks down -Z */
+  let x = vCross(up, z);
+  if (vLen2(x) < 1e-8) x = vCross([0,0,1], z);
+  x = vNorm(x);
+  const y = vCross(z, x);
+  out[0]=x[0]; out[1]=y[0]; out[2]=z[0]; out[3]=0;
+  out[4]=x[1]; out[5]=y[1]; out[6]=z[1]; out[7]=0;
+  out[8]=x[2]; out[9]=y[2]; out[10]=z[2]; out[11]=0;
+  out[12]=-vDot(x,eye); out[13]=-vDot(y,eye); out[14]=-vDot(z,eye); out[15]=1;
+  return out;
+}
+/* Full 4x4 inverse (cofactor expansion). Used to turn the camera's world
+   matrix into a view matrix, which keeps roll/lag handling in one place. */
+function mInvert(out, m) {
+  const a00=m[0],a01=m[1],a02=m[2],a03=m[3], a10=m[4],a11=m[5],a12=m[6],a13=m[7],
+        a20=m[8],a21=m[9],a22=m[10],a23=m[11], a30=m[12],a31=m[13],a32=m[14],a33=m[15];
+  const b00=a00*a11-a01*a10, b01=a00*a12-a02*a10, b02=a00*a13-a03*a10,
+        b03=a01*a12-a02*a11, b04=a01*a13-a03*a11, b05=a02*a13-a03*a12,
+        b06=a20*a31-a21*a30, b07=a20*a32-a22*a30, b08=a20*a33-a23*a30,
+        b09=a21*a32-a22*a31, b10=a21*a33-a23*a31, b11=a22*a33-a23*a32;
+  let det = b00*b11 - b01*b10 + b02*b09 + b03*b08 - b04*b07 + b05*b06;
+  if (!det) return mIdent(out);
+  det = 1.0 / det;
+  out[0]=(a11*b11-a12*b10+a13*b09)*det; out[1]=(a02*b10-a01*b11-a03*b09)*det;
+  out[2]=(a31*b05-a32*b04+a33*b03)*det; out[3]=(a22*b04-a21*b05-a23*b03)*det;
+  out[4]=(a12*b08-a10*b11-a13*b07)*det; out[5]=(a00*b11-a02*b08+a03*b07)*det;
+  out[6]=(a32*b02-a30*b05-a33*b01)*det; out[7]=(a20*b05-a22*b02+a23*b01)*det;
+  out[8]=(a10*b10-a11*b08+a13*b06)*det; out[9]=(a01*b08-a00*b10-a03*b06)*det;
+  out[10]=(a30*b04-a31*b02+a33*b00)*det; out[11]=(a21*b02-a20*b04-a23*b00)*det;
+  out[12]=(a11*b07-a10*b09-a12*b06)*det; out[13]=(a00*b09-a01*b07+a02*b06)*det;
+  out[14]=(a31*b01-a30*b03-a32*b00)*det; out[15]=(a20*b03-a21*b01+a22*b00)*det;
+  return out;
+}
+/* Build a model matrix straight from three axis vectors + position.
+   Axes need not be unit length — length becomes the scale on that axis. */
+function mFromAxes(out, xa, ya, za, pos) {
+  out[0]=xa[0]; out[1]=xa[1]; out[2]=xa[2]; out[3]=0;
+  out[4]=ya[0]; out[5]=ya[1]; out[6]=ya[2]; out[7]=0;
+  out[8]=za[0]; out[9]=za[1]; out[10]=za[2]; out[11]=0;
+  out[12]=pos[0]; out[13]=pos[1]; out[14]=pos[2]; out[15]=1;
+  return out;
+}
+
+/* --- quaternions, stored [x, y, z, w] --- */
+function qIdent()  { return [0, 0, 0, 1]; }
+function qMul(a, b) {
+  const ax=a[0],ay=a[1],az=a[2],aw=a[3], bx=b[0],by=b[1],bz=b[2],bw=b[3];
+  return [
+    aw*bx + ax*bw + ay*bz - az*by,
+    aw*by - ax*bz + ay*bw + az*bx,
+    aw*bz + ax*by - ay*bx + az*bw,
+    aw*bw - ax*bx - ay*by - az*bz
+  ];
+}
+function qNorm(q) {
+  const l = Math.hypot(q[0], q[1], q[2], q[3]);
+  return l > 1e-9 ? [q[0]/l, q[1]/l, q[2]/l, q[3]/l] : qIdent();
+}
+function qFromAxisAngle(axis, ang) {
+  const a = vNorm(axis), s = Math.sin(ang / 2);
+  return [a[0]*s, a[1]*s, a[2]*s, Math.cos(ang / 2)];
+}
+function qRotate(q, v) {                     /* v' = q * v * q^-1 */
+  const x=q[0], y=q[1], z=q[2], w=q[3];
+  const tx = 2*(y*v[2] - z*v[1]);
+  const ty = 2*(z*v[0] - x*v[2]);
+  const tz = 2*(x*v[1] - y*v[0]);
+  return [
+    v[0] + w*tx + (y*tz - z*ty),
+    v[1] + w*ty + (z*tx - x*tz),
+    v[2] + w*tz + (x*ty - y*tx)
+  ];
+}
+function qSlerp(a, b, t) {
+  let cos = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
+  let bb = b;
+  if (cos < 0) { bb = [-b[0], -b[1], -b[2], -b[3]]; cos = -cos; }
+  if (cos > 0.9995) {
+    return qNorm([lerp(a[0],bb[0],t), lerp(a[1],bb[1],t), lerp(a[2],bb[2],t), lerp(a[3],bb[3],t)]);
+  }
+  const ang = Math.acos(clamp(cos, -1, 1)), s = Math.sin(ang);
+  const wa = Math.sin((1 - t) * ang) / s, wb = Math.sin(t * ang) / s;
+  return [a[0]*wa+bb[0]*wb, a[1]*wa+bb[1]*wb, a[2]*wa+bb[2]*wb, a[3]*wa+bb[3]*wb];
+}
+/* Integrate a body-local angular velocity for dt seconds. */
+function qIntegrate(q, wLocal, dt) {
+  const wq = [wLocal[0]*dt*0.5, wLocal[1]*dt*0.5, wLocal[2]*dt*0.5, 0];
+  const d  = qMul(q, wq);
+  return qNorm([q[0]+d[0], q[1]+d[1], q[2]+d[2], q[3]+d[3]]);
+}
+function qToMat4(out, q, pos, scale) {
+  const s = scale === undefined ? 1 : scale;
+  const x=q[0],y=q[1],z=q[2],w=q[3];
+  const x2=x+x, y2=y+y, z2=z+z;
+  const xx=x*x2, xy=x*y2, xz=x*z2, yy=y*y2, yz=y*z2, zz=z*z2;
+  const wx=w*x2, wy=w*y2, wz=w*z2;
+  out[0]=(1-(yy+zz))*s; out[1]=(xy+wz)*s;     out[2]=(xz-wy)*s;     out[3]=0;
+  out[4]=(xy-wz)*s;     out[5]=(1-(xx+zz))*s; out[6]=(yz+wx)*s;     out[7]=0;
+  out[8]=(xz+wy)*s;     out[9]=(yz-wx)*s;     out[10]=(1-(xx+yy))*s; out[11]=0;
+  out[12]=pos[0]; out[13]=pos[1]; out[14]=pos[2]; out[15]=1;
+  return out;
+}
+
+/* Deterministic hash noise — same value for the same input forever, which is
+   what lets canyon chunks be rebuilt independently with no visible seam. */
+function hash1(n) {
+  const s = Math.sin(n * 127.1) * 43758.5453123;
+  return s - Math.floor(s);
+}
+
+/* ------------------------------------------------- 3. procedural canyon */
+/* The path is a sum of sines: monotonic in Z (so it can never self-intersect)
+   but wandering freely in X and Y, which gives real 3D curvature — climbs and
+   dives, not just left/right.                                              */
+const SEG        = 6.0;      /* world units of Z per path node               */
+const CROSS      = 22;       /* vertices around the tube                      */
+const CHUNK      = 16;       /* path nodes per chunk                          */
+const CHUNK_LEN  = CHUNK * SEG;
+const AHEAD      = 9;        /* chunks kept in front of the ship              */
+const BEHIND     = 2;        /* chunks kept behind (camera trails the ship)   */
+const R_BASE     = 16.0;     /* mean corridor radius                          */
+const R_FLOOR    = 9.5;      /* hard floor — corridor NEVER narrows past this */
+const SHIP_R     = 1.15;     /* ship collision radius                         */
+
+/* Path position P(t). t is a continuous node index. */
+function pathPos(t) {
+  return [
+    26 * Math.sin(t * 0.0310 + 0.7) + 13 * Math.sin(t * 0.0817 + 2.1) + 6 * Math.sin(t * 0.1710 + 4.3),
+    15 * Math.sin(t * 0.0430 + 1.9) +  8 * Math.sin(t * 0.1130 + 5.2) + 3 * Math.sin(t * 0.2210 + 0.4),
+    t * SEG
+  ];
+}
+/* dP/dt, un-normalised. */
+function pathDeriv(t) {
+  return [
+    26*0.0310*Math.cos(t*0.0310+0.7) + 13*0.0817*Math.cos(t*0.0817+2.1) + 6*0.1710*Math.cos(t*0.1710+4.3),
+    15*0.0430*Math.cos(t*0.0430+1.9) +  8*0.1130*Math.cos(t*0.1130+5.2) + 3*0.2210*Math.cos(t*0.2210+0.4),
+    SEG
+  ];
+}
+function pathTangent(t) { return vNorm(pathDeriv(t)); }
+
+/* Orthonormal frame at t. Derived analytically (not parallel-transported) so
+   two chunks built minutes apart agree exactly on the frame at their shared
+   boundary. The tangent is always Z-dominant, so the cross product with world
+   up can never degenerate. */
+function pathFrame(t) {
+  const tan   = pathTangent(t);
+  const right = vNorm(vCross(tan, [0, 1, 0]));
+  const up    = vCross(right, tan);
+  return { tan, right, up, pos: pathPos(t) };
+}
+
+/* Clear-corridor radius. Clamped at R_FLOOR: this is the guarantee that the
+   tunnel is always flyable — see the startup audit in `auditCorridor`. */
+function corridorRadius(t) {
+  const r = R_BASE + 4.0 * Math.sin(t * 0.0370 + 3.3) + 2.5 * Math.sin(t * 0.0910 + 1.1);
+  return Math.max(R_FLOOR, r);
+}
+/* Rock bumps. Strictly >= 0 so they only ever push the wall AWAY from the
+   corridor — they can never eat into the survivable channel. */
+function wallBump(t, a) {
+  return 2.2 * (0.5 + 0.5 * Math.sin(a * 3.0 + t * 0.21 + 1.7))
+       + 1.7 * (0.5 + 0.5 * Math.sin(a * 5.0 - t * 0.13 + 4.9))
+       + 1.1 * (0.5 + 0.5 * Math.sin(a * 8.0 + t * 0.37 + 2.4));
+}
+function wallRadius(t, a) { return corridorRadius(t) + wallBump(t, a); }
+
+/* A point on the wall surface, for the given node index and angle index. */
+function surfPoint(t, a, fr) {
+  const f = fr || pathFrame(t);
+  const r = wallRadius(t, a);
+  const c = Math.cos(a), s = Math.sin(a);
+  return [
+    f.pos[0] + (f.right[0]*c + f.up[0]*s) * r,
+    f.pos[1] + (f.right[1]*c + f.up[1]*s) * r,
+    f.pos[2] + (f.right[2]*c + f.up[2]*s) * r
+  ];
+}
+
+/* Startup sanity audit. If this ever prints a number below the ship's
+   diameter the canyon would be unflyable, so we check rather than assume. */
+function auditCorridor() {
+  let min = Infinity, minT = 0;
+  for (let t = 0; t < 40000; t += 0.5) {
+    const r = corridorRadius(t);
+    if (r < min) { min = r; minT = t; }
+  }
+  const ok = min > SHIP_R * 3;
+  console.log("[Voidrunner] corridor audit: min clear radius " + min.toFixed(2) +
+              " at t=" + minT.toFixed(1) + " (ship radius " + SHIP_R + ") — " +
+              (ok ? "flyable" : "TOO TIGHT"));
+  return min;
+}
+
+/* Nearest path parameter to a world point. Z is monotonic along the path, so
+   t ~ z/SEG is a strong first guess; two Newton steps on
+   f(t) = (p - P(t)) . P'(t) polish it to well under a hundredth of a node. */
+function nearestT(p) {
+  let t = p[2] / SEG;
+  for (let i = 0; i < 3; i++) {
+    const P = pathPos(t), D = pathDeriv(t);
+    const d = vSub(p, P);
+    const f  = vDot(d, D);
+    const df = -vDot(D, D);     /* second-derivative term is negligible here */
+    t -= f / df;
+  }
+  return t;
+}
+
+/* ---- canyon chunk geometry into typed arrays ---- */
+function buildChunk(chunkIndex) {
+  const t0 = chunkIndex * CHUNK;
+  const rows = CHUNK + 1, cols = CROSS + 1;       /* +1 col duplicates the seam */
+  const verts = new Float32Array(rows * cols * 8); /* pos3 + nrm3 + uv2 */
+  const idx   = new Uint16Array(CHUNK * CROSS * 6);
+
+  const frames = [];
+  for (let i = 0; i < rows; i++) frames.push(pathFrame(t0 + i));
+
+  let vp = 0;
+  for (let i = 0; i < rows; i++) {
+    const t = t0 + i, fr = frames[i];
+    for (let j = 0; j < cols; j++) {
+      const a = (j / CROSS) * TAU;
+      const P = surfPoint(t, a, fr);
+      /* Normal from central differences on the analytic surface, flipped to
+         face the corridor (we fly on the inside of this tube). */
+      const dA = vSub(surfPoint(t, a + 0.02, fr), surfPoint(t, a - 0.02, fr));
+      const dT = vSub(surfPoint(t + 0.05, a), surfPoint(t - 0.05, a));
+      let n = vNorm(vCross(dT, dA));
+      const inward = vSub(fr.pos, P);
+      if (vDot(n, inward) < 0) n = vScale(n, -1);
+      verts[vp++]=P[0]; verts[vp++]=P[1]; verts[vp++]=P[2];
+      verts[vp++]=n[0]; verts[vp++]=n[1]; verts[vp++]=n[2];
+      verts[vp++]= j / CROSS * 11.0;      /* neon rib count around the tube  */
+      verts[vp++]= t * 0.5;               /* neon rib spacing along the tube */
+    }
+  }
+  let ip = 0;
+  for (let i = 0; i < CHUNK; i++) {
+    for (let j = 0; j < CROSS; j++) {
+      const a = i * cols + j, b = (i+1) * cols + j, c = (i+1) * cols + j + 1, d = i * cols + j + 1;
+      /* Wound so the inward-facing side is the front face (we cull BACK). */
+      idx[ip++]=a; idx[ip++]=d; idx[ip++]=b;
+      idx[ip++]=b; idx[ip++]=d; idx[ip++]=c;
+    }
+  }
+  return { verts, idx, count: idx.length };
+}
+
+/* ---- instanced meshes, all generated at runtime ---- */
+/* Each returns { pos: Float32Array (pos3+nrm3 interleaved), idx: Uint16Array } */
+
+function meshTorus(R, r, nu, nv) {
+  const v = [], ix = [];
+  for (let i = 0; i <= nu; i++) {
+    const u = i / nu * TAU, cu = Math.cos(u), su = Math.sin(u);
+    for (let j = 0; j <= nv; j++) {
+      const w = j / nv * TAU, cw = Math.cos(w), sw = Math.sin(w);
+      v.push((R + r*cw)*cu, (R + r*cw)*su, r*sw, cw*cu, cw*su, sw);
+    }
+  }
+  const cols = nv + 1;
+  for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+    const a = i*cols + j, b = (i+1)*cols + j, c = (i+1)*cols + j+1, d = i*cols + j+1;
+    ix.push(a, b, d, b, c, d);
+  }
+  return { pos: new Float32Array(v), idx: new Uint16Array(ix) };
+}
+
+function meshCylinder(r, h, seg, caps) {
+  const v = [], ix = [], hz = h / 2;
+  for (let i = 0; i <= seg; i++) {
+    const a = i / seg * TAU, c = Math.cos(a), s = Math.sin(a);
+    v.push(r*c, r*s, -hz, c, s, 0);
+    v.push(r*c, r*s,  hz, c, s, 0);
+  }
+  for (let i = 0; i < seg; i++) {
+    const a = i*2, b = i*2+1, c = i*2+2, d = i*2+3;
+    ix.push(a, c, b, b, c, d);
+  }
+  if (caps) {
+    let base = v.length / 6;
+    v.push(0, 0, hz, 0, 0, 1);
+    for (let i = 0; i <= seg; i++) {
+      const a = i/seg*TAU; v.push(r*Math.cos(a), r*Math.sin(a), hz, 0, 0, 1);
+    }
+    for (let i = 0; i < seg; i++) ix.push(base, base+1+i, base+2+i);
+    base = v.length / 6;
+    v.push(0, 0, -hz, 0, 0, -1);
+    for (let i = 0; i <= seg; i++) {
+      const a = i/seg*TAU; v.push(r*Math.cos(a), r*Math.sin(a), -hz, 0, 0, -1);
+    }
+    for (let i = 0; i < seg; i++) ix.push(base, base+2+i, base+1+i);
+  }
+  return { pos: new Float32Array(v), idx: new Uint16Array(ix) };
+}
+
+/* Flat-shaded hull builder: list triangles freely, winding is auto-corrected
+   outward against a supplied interior point. */
+function meshHull(tris, center) {
+  const v = [], ix = [];
+  const C = center || [0, 0, 0];
+  for (const t of tris) {
+    let [a, b, c] = t;
+    let n = vCross(vSub(b, a), vSub(c, a));
+    const mid = [(a[0]+b[0]+c[0])/3, (a[1]+b[1]+c[1])/3, (a[2]+b[2]+c[2])/3];
+    if (vDot(n, vSub(mid, C)) < 0) { const tmp = b; b = c; c = tmp; n = vScale(n, -1); }
+    n = vNorm(n);
+    const base = v.length / 6;
+    for (const p of [a, b, c]) v.push(p[0], p[1], p[2], n[0], n[1], n[2]);
+    ix.push(base, base+1, base+2);
+  }
+  return { pos: new Float32Array(v), idx: new Uint16Array(ix) };
+}
+
+function meshShip() {
+  const N  = [ 0.00,  0.00, -2.80];
+  const T  = [ 0.00,  0.52,  0.50];
+  const B  = [ 0.00, -0.42,  0.30];
+  const WL = [-2.10,  0.00,  1.40];
+  const WR = [ 2.10,  0.00,  1.40];
+  const TA = [ 0.00,  0.10,  1.95];
+  return meshHull([
+    [N, T, WR], [N, WL, T], [N, WR, B], [N, B, WL],
+    [T, WR, TA], [T, TA, WL], [B, TA, WR], [B, WL, TA]
+  ], [0, 0, 0.2]);
+}
+
+function meshInterceptor() {
+  const F = [0, 0, -1.9], BK = [0, 0, 1.5];
+  const L = [-1.5, 0, 0.5], R = [1.5, 0, 0.5];
+  const U = [0, 0.85, 0.3], D = [0, -0.7, 0.3];
+  return meshHull([
+    [F, U, R], [F, R, D], [F, D, L], [F, L, U],
+    [BK, R, U], [BK, D, R], [BK, L, D], [BK, U, L]
+  ], [0, 0, 0]);
+}
+
+function meshOcta(r) {
+  const P = [[r,0,0],[-r,0,0],[0,r,0],[0,-r,0],[0,0,r],[0,0,-r]];
+  const [X, mX, Y, mY, Z, mZ] = P;
+  return meshHull([
+    [X,Y,Z],[Y,mX,Z],[mX,mY,Z],[mY,X,Z],
+    [Y,X,mZ],[mX,Y,mZ],[mY,mX,mZ],[X,mY,mZ]
+  ], [0,0,0]);
+}
+
+/* ------------------------------------------------------------ 4. shaders */
+const VS_CANYON = `#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNormal;
+layout(location=2) in vec2 aUV;
+uniform mat4 uViewProj;
+out vec3 vWorld; out vec3 vNormal; out vec2 vUV;
+void main() {
+  vWorld  = aPos;
+  vNormal = aNormal;
+  vUV     = aUV;
+  gl_Position = uViewProj * vec4(aPos, 1.0);
+}`;
+
+const FS_CANYON = `#version 300 es
+precision highp float;
+in vec3 vWorld; in vec3 vNormal; in vec2 vUV;
+uniform vec3  uCamPos;
+uniform vec3  uLightDir;
+uniform vec3  uShipPos;
+uniform vec3  uFogColor;
+uniform vec3  uNeon;
+uniform float uFogDensity;
+uniform float uTime;
+layout(location=0) out vec4 oColor;
+layout(location=1) out vec4 oEmissive;
+
+/* crisp, resolution-independent neon rib */
+float rib(float c) {
+  float f = fract(c);
+  float d = min(f, 1.0 - f);
+  float w = fwidth(c) * 1.6 + 0.012;
+  return 1.0 - smoothstep(0.0, w, d);
+}
+
+void main() {
+  vec3 N = normalize(vNormal);
+  vec3 V = normalize(uCamPos - vWorld);
+
+  float diff = max(dot(N, uLightDir), 0.0);
+  vec3  rock = vec3(0.038, 0.050, 0.100);
+  vec3  col  = rock * (0.22 + 0.78 * diff);
+
+  /* ship's own light pool sliding over the walls — tight falloff so it reads
+     as a moving pool, not a global flood */
+  vec3  toShip = uShipPos - vWorld;
+  float dS     = length(toShip);
+  float head   = max(dot(N, toShip / max(dS, 0.001)), 0.0) / (1.0 + dS * dS * 0.013);
+  col += vec3(0.26, 0.40, 0.92) * head * 0.62;
+
+  /* fresnel rim picks out the silhouette of every ridge */
+  float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+  col += uNeon * fres * 0.10;
+
+  /* emissive neon ribs, pulsing down the canyon */
+  float pulse = 0.62 + 0.38 * sin(uTime * 2.2 - vWorld.z * 0.020);
+  float g     = clamp(rib(vUV.x) + rib(vUV.y), 0.0, 1.6);
+  vec3  neon  = uNeon * g * pulse;
+  col += neon * 0.62;
+
+  float dist = length(uCamPos - vWorld);
+  float f    = exp(-pow(dist * uFogDensity, 2.0));
+  col  = mix(uFogColor, col, f);
+
+  oColor    = vec4(col, 1.0);
+  oEmissive = vec4((neon * 0.85 + vec3(0.26,0.40,0.90) * head * 0.20) * f, 1.0);
+}`;
+
+const VS_INST = `#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNormal;
+layout(location=2) in vec4 aM0;
+layout(location=3) in vec4 aM1;
+layout(location=4) in vec4 aM2;
+layout(location=5) in vec4 aM3;
+layout(location=6) in vec4 aColor;
+layout(location=7) in vec4 aEmissive;   /* rgb + strength */
+uniform mat4 uViewProj;
+out vec3 vWorld; out vec3 vNormal; out vec4 vColor; out vec4 vEmissive;
+void main() {
+  mat4 M = mat4(aM0, aM1, aM2, aM3);
+  vec4 wp = M * vec4(aPos, 1.0);
+  vWorld    = wp.xyz;
+  vNormal   = mat3(M) * aNormal;
+  vColor    = aColor;
+  vEmissive = aEmissive;
+  gl_Position = uViewProj * wp;
+}`;
+
+const FS_INST = `#version 300 es
+precision highp float;
+in vec3 vWorld; in vec3 vNormal; in vec4 vColor; in vec4 vEmissive;
+uniform vec3  uCamPos;
+uniform vec3  uLightDir;
+uniform vec3  uFogColor;
+uniform float uFogDensity;
+layout(location=0) out vec4 oColor;
+layout(location=1) out vec4 oEmissive;
+void main() {
+  vec3 N = normalize(vNormal);
+  vec3 V = normalize(uCamPos - vWorld);
+  float diff = max(dot(N, uLightDir), 0.0);
+  float back = max(dot(N, -uLightDir), 0.0) * 0.22;
+  vec3  H    = normalize(uLightDir + V);
+  float spec = pow(max(dot(N, H), 0.0), 42.0) * 0.7;
+
+  vec3 col = vColor.rgb * (0.26 + 0.78 * diff + back) + vec3(spec);
+  float fres = pow(1.0 - max(dot(N, V), 0.0), 2.5);
+  vec3 glow = vEmissive.rgb * vEmissive.a * (0.55 + 0.85 * fres);
+  col += glow;
+
+  float dist = length(uCamPos - vWorld);
+  float f = exp(-pow(dist * uFogDensity, 2.0));
+  col = mix(uFogColor, col, f);
+
+  oColor    = vec4(col, 1.0);
+  oEmissive = vec4(glow * 1.15 * f, 1.0);
+}`;
+
+const VS_STARS = `#version 300 es
+layout(location=0) in vec3 aDir;
+layout(location=1) in float aSize;
+uniform mat4 uRotProj;
+out float vBright;
+void main() {
+  vec4 p = uRotProj * vec4(aDir, 1.0);
+  gl_Position = p.xyww;              /* pinned to the far plane */
+  gl_PointSize = aSize;
+  vBright = aSize;
+}`;
+
+const FS_STARS = `#version 300 es
+precision highp float;
+in float vBright;
+layout(location=0) out vec4 oColor;
+layout(location=1) out vec4 oEmissive;
+void main() {
+  vec2 d = gl_PointCoord - 0.5;
+  float r = length(d) * 2.0;
+  float a = 1.0 - smoothstep(0.25, 1.0, r);
+  if (a <= 0.003) discard;
+  vec3 c = mix(vec3(0.55,0.72,1.0), vec3(1.0,0.92,0.72), fract(vBright * 0.37));
+  oColor    = vec4(c * a * 0.85, 1.0);
+  oEmissive = vec4(c * a * 0.35, 1.0);
+}`;
+
+const VS_QUAD = `#version 300 es
+out vec2 vUV;
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  vUV = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+const FS_BLUR = `#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform vec2 uDir;          /* one texel step, horizontal or vertical */
+out vec4 oColor;
+void main() {
+  /* 9-tap gaussian, weights normalised */
+  float w[5];
+  w[0]=0.2270270; w[1]=0.1945946; w[2]=0.1216216; w[3]=0.0540540; w[4]=0.0162162;
+  vec3 sum = texture(uTex, vUV).rgb * w[0];
+  for (int i = 1; i < 5; i++) {
+    vec2 off = uDir * float(i);
+    sum += texture(uTex, vUV + off).rgb * w[i];
+    sum += texture(uTex, vUV - off).rgb * w[i];
+  }
+  oColor = vec4(sum, 1.0);
+}`;
+
+const FS_COMPOSITE = `#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uScene;
+uniform sampler2D uBloom;
+uniform float uBloomStrength;
+uniform float uFlash;
+uniform float uTime;
+out vec4 oColor;
+void main() {
+  vec3 s = texture(uScene, vUV).rgb;
+  vec3 b = texture(uBloom, vUV).rgb;
+  vec3 c = s + b * uBloomStrength;
+
+  /* filmic-ish rolloff so the bloom saturates instead of clipping hard */
+  c = vec3(1.0) - exp(-c * 1.35);
+
+  /* damage flash — a tint at the edges, never a full-screen wash */
+  float edge = smoothstep(0.20, 0.95, length(vUV - 0.5) * 1.42);
+  c += vec3(0.34, 0.04, 0.07) * uFlash * (0.18 + 0.82 * edge);
+
+  /* vignette */
+  float v = length(vUV - 0.5) * 1.42;
+  c *= mix(1.0, 0.42, smoothstep(0.45, 1.15, v));
+
+  /* faint scanline keeps the arcade feel without hurting readability */
+  c *= 1.0 - 0.035 * step(0.5, fract(gl_FragCoord.y * 0.5));
+
+  oColor = vec4(c, 1.0);
+}`;
+
+/* ----------------------------------------------------------- 5. renderer */
+const canvas = document.getElementById("gl");
+let gl = null;
+try {
+  gl = canvas.getContext("webgl2", {
+    alpha: false, antialias: false, depth: true, stencil: false,
+    powerPreference: "high-performance", preserveDrawingBuffer: false
+  });
+} catch (e) { gl = null; }
+
+if (!gl) {
+  fatal("WebGL2 is unavailable",
+        "Voidrunner is a true 3D game and needs a WebGL2 context. This browser " +
+        "returned null for canvas.getContext('webgl2'). Try an up-to-date Chrome, " +
+        "Edge, Firefox or Safari, and make sure hardware acceleration is enabled " +
+        "in the browser's settings. The rest of the arcade's games are 2D and will " +
+        "still run fine.");
+}
+
+canvas.addEventListener("webglcontextlost", (e) => {
+  e.preventDefault();
+  fatal("Graphics context lost",
+        "The browser dropped the WebGL context — usually a GPU driver reset or the " +
+        "tab being starved of video memory. Reload the page to start again.");
+});
+
+function compileShader(type, src, name) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(s) || "(no log)";
+    console.error("[Voidrunner] shader compile failed: " + name + "\n" + log);
+    fatal("Shader failed to compile",
+          "The GPU rejected the '" + name + "' shader. The driver's message is below.",
+          name + "\n\n" + log);
+    gl.deleteShader(s);
+    return null;
+  }
+  return s;
+}
+function makeProgram(vsSrc, fsSrc, name) {
+  const vs = compileShader(gl.VERTEX_SHADER, vsSrc, name + " (vertex)");
+  if (!vs) return null;
+  const fs = compileShader(gl.FRAGMENT_SHADER, fsSrc, name + " (fragment)");
+  if (!fs) { gl.deleteShader(vs); return null; }
+  const p = gl.createProgram();
+  gl.attachShader(p, vs); gl.attachShader(p, fs);
+  gl.linkProgram(p);
+  gl.deleteShader(vs); gl.deleteShader(fs);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    const log = gl.getProgramInfoLog(p) || "(no log)";
+    console.error("[Voidrunner] program link failed: " + name + "\n" + log);
+    fatal("Shader program failed to link",
+          "The '" + name + "' program did not link. The driver's message is below.",
+          name + "\n\n" + log);
+    return null;
+  }
+  /* Cache every active uniform location up front. */
+  const u = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) {
+    const info = gl.getActiveUniform(p, i);
+    u[info.name] = gl.getUniformLocation(p, info.name);
+  }
+  return { program: p, u, name };
+}
+
+let R = null;   /* the renderer object, built in initRenderer() */
+
+const INST_STRIDE_F = 24;                 /* mat4 (16) + color (4) + emissive (4) */
+const INST_STRIDE_B = INST_STRIDE_F * 4;
+const MAX_INST      = 384;
+
+function makeInstancedMesh(mesh, maxInst) {
+  const cap = maxInst || MAX_INST;
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+
+  const vbo = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, mesh.pos, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+  gl.enableVertexAttribArray(1);
+  gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+
+  const ibo = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.idx, gl.STATIC_DRAW);
+
+  const inst = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, inst);
+  gl.bufferData(gl.ARRAY_BUFFER, cap * INST_STRIDE_B, gl.DYNAMIC_DRAW);
+  for (let i = 0; i < 4; i++) {
+    const loc = 2 + i;
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, INST_STRIDE_B, i * 16);
+    gl.vertexAttribDivisor(loc, 1);
+  }
+  gl.enableVertexAttribArray(6);
+  gl.vertexAttribPointer(6, 4, gl.FLOAT, false, INST_STRIDE_B, 64);
+  gl.vertexAttribDivisor(6, 1);
+  gl.enableVertexAttribArray(7);
+  gl.vertexAttribPointer(7, 4, gl.FLOAT, false, INST_STRIDE_B, 80);
+  gl.vertexAttribDivisor(7, 1);
+
+  gl.bindVertexArray(null);
+  return {
+    vao, inst, count: mesh.idx.length, cap,
+    data: new Float32Array(cap * INST_STRIDE_F),
+    n: 0
+  };
+}
+
+const tmpM = new Float32Array(16);
+function pushInstance(m, mat, color, emis, emisStrength) {
+  if (m.n >= m.cap) return;
+  const o = m.n * INST_STRIDE_F;
+  m.data.set(mat, o);
+  m.data[o+16]=color[0]; m.data[o+17]=color[1]; m.data[o+18]=color[2]; m.data[o+19]=1;
+  m.data[o+20]=emis[0];  m.data[o+21]=emis[1];  m.data[o+22]=emis[2];  m.data[o+23]=emisStrength;
+  m.n++;
+}
+function flushMesh(m) {
+  if (m.n === 0) return;
+  gl.bindVertexArray(m.vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, m.inst);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, m.data, 0, m.n * INST_STRIDE_F);
+  gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_SHORT, 0, m.n);
+  m.n = 0;
+}
+
+function makeTargets(w, h) {
+  const halfW = Math.max(2, w >> 1), halfH = Math.max(2, h >> 1);
+  const fmt = R.hdr ? gl.RGBA16F : gl.RGBA8;
+  const type = R.hdr ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
+
+  function tex(tw, th) {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, fmt, tw, th, 0, gl.RGBA, type, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+
+  /* free the old set */
+  if (R.fbScene) {
+    gl.deleteFramebuffer(R.fbScene); gl.deleteFramebuffer(R.fbBlurA); gl.deleteFramebuffer(R.fbBlurB);
+    gl.deleteTexture(R.texScene); gl.deleteTexture(R.texEmis);
+    gl.deleteTexture(R.texBlurA); gl.deleteTexture(R.texBlurB);
+    gl.deleteRenderbuffer(R.rbDepth);
+  }
+
+  R.texScene = tex(w, h);
+  R.texEmis  = tex(w, h);
+  R.rbDepth  = gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER, R.rbDepth);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+
+  R.fbScene = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R.fbScene);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, R.texScene, 0);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, R.texEmis, 0);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, R.rbDepth);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+
+  const st = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+  if (st !== gl.FRAMEBUFFER_COMPLETE) {
+    if (R.hdr) {                      /* half-float refused — retry as RGBA8 */
+      console.warn("[Voidrunner] HDR targets incomplete (0x" + st.toString(16) + "), falling back to RGBA8");
+      R.hdr = false;
+      R.fbScene = null;               /* makeTargets frees nothing on the retry */
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      return makeTargets(w, h);
+    }
+    fatal("Framebuffer incomplete",
+          "The GPU could not create the off-screen render targets used for the glow pass.",
+          "checkFramebufferStatus = 0x" + st.toString(16));
+    return false;
+  }
+
+  R.texBlurA = tex(halfW, halfH);
+  R.texBlurB = tex(halfW, halfH);
+  R.fbBlurA = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R.fbBlurA);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, R.texBlurA, 0);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+  R.fbBlurB = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R.fbBlurB);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, R.texBlurB, 0);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  R.fbW = w; R.fbH = h; R.halfW = halfW; R.halfH = halfH;
+  return true;
+}
+
+function initRenderer() {
+  R = {
+    hdr: !!gl.getExtension("EXT_color_buffer_float"),
+    fbScene: null, dpr: 1, w: 1, h: 1,
+    proj: new Float32Array(16), view: new Float32Array(16),
+    viewProj: new Float32Array(16), camWorld: new Float32Array(16),
+    rotProj: new Float32Array(16), rotView: new Float32Array(16)
+  };
+
+  R.progCanyon = makeProgram(VS_CANYON, FS_CANYON, "canyon");
+  R.progInst   = makeProgram(VS_INST,   FS_INST,   "instanced");
+  R.progStars  = makeProgram(VS_STARS,  FS_STARS,  "stars");
+  R.progBlur   = makeProgram(VS_QUAD,   FS_BLUR,   "blur");
+  R.progComp   = makeProgram(VS_QUAD,   FS_COMPOSITE, "composite");
+  if (!R.progCanyon || !R.progInst || !R.progStars || !R.progBlur || !R.progComp) return false;
+
+  /* --- canyon chunk pool: one VAO per live chunk, reused forever --- */
+  R.chunkPool = [];
+  const poolSize = AHEAD + BEHIND + 2;
+  for (let i = 0; i < poolSize; i++) {
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, (CHUNK+1) * (CROSS+1) * 8 * 4, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 32, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 32, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 32, 24);
+    const ibo = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, CHUNK * CROSS * 6 * 2, gl.DYNAMIC_DRAW);
+    gl.bindVertexArray(null);
+    R.chunkPool.push({ vao, vbo, ibo, count: 0, index: null, free: true });
+  }
+
+  /* --- instanced meshes --- */
+  R.mRing   = makeInstancedMesh(meshTorus(1.0, 0.115, 32, 10), 48);
+  R.mTube   = makeInstancedMesh(meshCylinder(1.0, 1.0, 14, true), 256);
+  R.mShip   = makeInstancedMesh(meshShip(), 4);
+  R.mEnemy  = makeInstancedMesh(meshInterceptor(), 24);
+  R.mShard  = makeInstancedMesh(meshOcta(1.0), MAX_INST);
+
+  /* --- starfield: unit directions on a sphere, pinned to the far plane --- */
+  const STARS = 900;
+  const sd = new Float32Array(STARS * 4);
+  for (let i = 0; i < STARS; i++) {
+    const u = hash1(i * 1.7 + 3) * 2 - 1;
+    const th = hash1(i * 3.1 + 11) * TAU;
+    const s = Math.sqrt(Math.max(0, 1 - u*u));
+    sd[i*4]   = s * Math.cos(th);
+    sd[i*4+1] = u;
+    sd[i*4+2] = s * Math.sin(th);
+    sd[i*4+3] = 1.0 + hash1(i * 5.9 + 7) * 2.6;
+  }
+  R.starVAO = gl.createVertexArray();
+  gl.bindVertexArray(R.starVAO);
+  const sbuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, sbuf);
+  gl.bufferData(gl.ARRAY_BUFFER, sd, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 16, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 16, 12);
+  gl.bindVertexArray(null);
+  R.starCount = STARS;
+
+  R.quadVAO = gl.createVertexArray();   /* attribute-less fullscreen triangle */
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
+  gl.enable(gl.CULL_FACE);
+  gl.cullFace(gl.BACK);
+  gl.frontFace(gl.CCW);
+  gl.disable(gl.BLEND);
+  gl.clearColor(0.043, 0.059, 0.118, 1);
+
+  resize();
+  console.log("[Voidrunner] WebGL2 ready — " + gl.getParameter(gl.VERSION) +
+              " / " + gl.getParameter(gl.RENDERER) +
+              " / HDR targets: " + R.hdr);
+  return true;
+}
+
+function resize() {
+  if (!R) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cw = canvas.clientWidth  || window.innerWidth;
+  const ch = canvas.clientHeight || window.innerHeight;
+  const w = Math.max(2, Math.round(cw * dpr));
+  const h = Math.max(2, Math.round(ch * dpr));
+  if (w === R.w && h === R.h && dpr === R.dpr) return;
+  R.w = w; R.h = h; R.dpr = dpr;
+  canvas.width = w; canvas.height = h;
+  mPerspective(R.proj, 68 * Math.PI / 180, w / h, 0.6, 1400);
+  makeTargets(w, h);
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", () => setTimeout(resize, 220));
+
+/* -------------------------------------------------------------- 6. audio */
+const Sound = {
+  ctx: null, master: null, engine: null, engineGain: null, engineFilter: null,
+  muted: store.get(K_MUTE) === "1",
+  ready: false,
+
+  init() {
+    if (this.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try { this.ctx = new AC(); } catch (e) { return; }
+    this.master = this.ctx.createGain();
+    this.master.gain.value = this.muted ? 0 : 0.55;
+    this.master.connect(this.ctx.destination);
+
+    /* engine: two detuned saws through a lowpass — pitch tracks speed */
+    this.engineGain = this.ctx.createGain();
+    this.engineGain.gain.value = 0;
+    this.engineFilter = this.ctx.createBiquadFilter();
+    this.engineFilter.type = "lowpass";
+    this.engineFilter.frequency.value = 620;
+    this.engineFilter.Q.value = 3.2;
+    this.engineFilter.connect(this.engineGain);
+    this.engineGain.connect(this.master);
+
+    this.engine = [];
+    for (let i = 0; i < 2; i++) {
+      const o = this.ctx.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.value = 60 + i * 3.4;
+      o.connect(this.engineFilter);
+      o.start();
+      this.engine.push(o);
+    }
+    this.ready = true;
+  },
+  resume() {
+    this.init();
+    if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+  },
+  setMuted(m) {
+    this.muted = m;
+    store.set(K_MUTE, m ? "1" : "0");
+    if (this.master) this.master.gain.value = m ? 0 : 0.55;
+  },
+  engineLevel(speed01, on) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const f = 46 + speed01 * 132;
+    for (let i = 0; i < this.engine.length; i++) {
+      this.engine[i].frequency.setTargetAtTime(f + i * 3.6, t, 0.08);
+    }
+    this.engineFilter.frequency.setTargetAtTime(420 + speed01 * 1500, t, 0.10);
+    this.engineGain.gain.setTargetAtTime(on ? 0.16 : 0.0, t, 0.12);
+  },
+  blip(type, f0, f1, dur, vol, filterHz) {
+    if (!this.ready || this.muted) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    let node = o;
+    if (filterHz) {
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = "lowpass"; bp.frequency.value = filterHz;
+      o.connect(bp); node = bp;
+    }
+    node.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+  noise(dur, vol, hz) {
+    if (!this.ready || this.muted) return;
+    const t = this.ctx.currentTime;
+    const len = Math.max(1, Math.floor(this.ctx.sampleRate * dur));
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const bp = this.ctx.createBiquadFilter(); bp.type = "bandpass";
+    bp.frequency.value = hz; bp.Q.value = 0.8;
+    const g = this.ctx.createGain(); g.gain.value = vol;
+    src.connect(bp); bp.connect(g); g.connect(this.master);
+    src.start(t);
+  },
+  sFire()  { this.blip("square",  880, 180, 0.10, 0.10, 2400); },
+  sRing()  { this.blip("sine",    620, 1560, 0.20, 0.16); this.blip("triangle", 930, 2340, 0.18, 0.08); },
+  sHit()   { this.blip("sawtooth", 220, 42, 0.28, 0.18, 900); this.noise(0.22, 0.20, 420); },
+  sGraze() { this.blip("triangle", 1500, 900, 0.06, 0.045); },
+  sKill()  { this.blip("sawtooth", 420, 60, 0.34, 0.16, 1400); this.noise(0.34, 0.24, 700); },
+  sBoost() { this.blip("sine",     180, 640, 0.30, 0.12); },
+  sDead()  { this.blip("sawtooth", 300, 30, 0.95, 0.26, 700); this.noise(0.8, 0.28, 260); }
+};
+
+/* -------------------------------------------------------------- 7. input */
+const Input = {
+  keys: Object.create(null),
+  steerX: 0, steerY: 0, rollIn: 0,
+  fire: false, boost: false,
+  touchActive: false, touchId: null, tOX: 0, tOY: 0, tDX: 0, tDY: 0,
+  padIndex: null, padSeen: false
+};
+
+window.addEventListener("keydown", (e) => {
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"," "].includes(e.key) ||
+      e.code === "Space") e.preventDefault();
+  Input.keys[e.code] = true;
+  Sound.resume();
+  if (e.code === "KeyP" || e.code === "Escape") Game.togglePause();
+  if (e.code === "KeyM") toggleMute();
+  if ((e.code === "Enter" || e.code === "Space") && Game.state !== "run") Game.primaryAction();
+}, { passive: false });
+window.addEventListener("keyup", (e) => { Input.keys[e.code] = false; });
+window.addEventListener("blur", () => { Input.keys = Object.create(null); });
+
+/* touch: drag anywhere on the canvas to steer.
+   A coarse primary pointer is the real signal — a laptop with both a
+   touchscreen and a mouse should get the keyboard layout, not thumb buttons. */
+const mq = window.matchMedia ? window.matchMedia("(pointer: coarse)") : null;
+const isTouch = mq ? mq.matches : (("ontouchstart" in window) || navigator.maxTouchPoints > 0);
+if (isTouch) document.body.classList.add("touch");
+
+canvas.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "mouse") return;
+  if (Input.touchId !== null) return;
+  Input.touchId = e.pointerId;
+  Input.touchActive = true;
+  Input.tOX = e.clientX; Input.tOY = e.clientY;
+  Input.tDX = 0; Input.tDY = 0;
+  Sound.resume();
+  canvas.setPointerCapture(e.pointerId);
+}, { passive: true });
+canvas.addEventListener("pointermove", (e) => {
+  if (e.pointerId !== Input.touchId) return;
+  Input.tDX = clamp((e.clientX - Input.tOX) / 90, -1, 1);
+  Input.tDY = clamp((e.clientY - Input.tOY) / 90, -1, 1);
+}, { passive: true });
+function endTouch(e) {
+  if (e.pointerId !== Input.touchId) return;
+  Input.touchId = null; Input.touchActive = false; Input.tDX = 0; Input.tDY = 0;
+}
+canvas.addEventListener("pointerup", endTouch, { passive: true });
+canvas.addEventListener("pointercancel", endTouch, { passive: true });
+
+function bindHold(el, set) {
+  el.addEventListener("pointerdown", (e) => { e.preventDefault(); set(true);  el.classList.add("on"); Sound.resume(); });
+  const off = (e) => { set(false); el.classList.remove("on"); };
+  el.addEventListener("pointerup", off);
+  el.addEventListener("pointercancel", off);
+  el.addEventListener("pointerleave", off);
+}
+bindHold(document.getElementById("t-fire"),  (v) => Input.fire  = v);
+bindHold(document.getElementById("t-boost"), (v) => Input.boost = v);
+
+window.addEventListener("gamepadconnected", (e) => {
+  Input.padIndex = e.gamepad.index;
+  Input.padSeen = true;
+  console.log("[Voidrunner] gamepad connected: " + e.gamepad.id);
+});
+window.addEventListener("gamepaddisconnected", () => { Input.padIndex = null; });
+
+function dead(v, d) { return Math.abs(v) < d ? 0 : (v - Math.sign(v) * d) / (1 - d); }
+
+function pollInput() {
+  const K = Input.keys;
+  let sx = 0, sy = 0, roll = 0, fire = false, boost = false;
+
+  if (K.KeyA || K.ArrowLeft)  sx -= 1;
+  if (K.KeyD || K.ArrowRight) sx += 1;
+  if (K.KeyW || K.ArrowUp)    sy += 1;
+  if (K.KeyS || K.ArrowDown)  sy -= 1;
+  if (K.KeyQ) roll -= 1;
+  if (K.KeyE) roll += 1;
+  if (K.Space) fire = true;
+  if (K.ShiftLeft || K.ShiftRight) boost = true;
+
+  if (Input.touchActive) { sx += Input.tDX; sy -= Input.tDY; }
+  if (Input.fire)  fire  = true;
+  if (Input.boost) boost = true;
+
+  /* gamepad, polled fresh every frame — the snapshot is not live */
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  let pad = null;
+  if (pads) {
+    if (Input.padIndex !== null && pads[Input.padIndex]) pad = pads[Input.padIndex];
+    else for (const p of pads) if (p && p.connected) { pad = p; Input.padIndex = p.index; break; }
+  }
+  if (pad) {
+    sx += dead(pad.axes[0] || 0, 0.16);
+    sy -= dead(pad.axes[1] || 0, 0.16);
+    if (pad.axes.length > 2) roll += dead(pad.axes[2] || 0, 0.30) * 0.8;
+    const rt = pad.buttons[7], lt = pad.buttons[6];
+    if (rt && (rt.pressed || rt.value > 0.35)) fire = true;
+    if (lt && (lt.pressed || lt.value > 0.35)) boost = true;
+    if (pad.buttons[0] && pad.buttons[0].pressed) fire = true;
+    if (pad.buttons[9] && pad.buttons[9].pressed) {
+      if (!Input._startWas) Game.togglePause();
+      Input._startWas = true;
+    } else Input._startWas = false;
+  }
+
+  Input.steerX = clamp(sx, -1, 1);
+  Input.steerY = clamp(sy, -1, 1);
+  Input.rollIn = clamp(roll, -1, 1);
+  Input.fireHeld  = fire;
+  Input.boostHeld = boost;
+}
+
+/* --------------------------------------------------------------- 8. game */
+const NEON = [0.30, 0.86, 1.00];       /* canyon rib colour                 */
+const FOG  = [0.043, 0.059, 0.118];    /* == #0b0f1e, so the walls dissolve  */
+const LIGHT = vNorm([0.36, 0.82, -0.44]);
+
+const SPEED_BASE  = 62;
+const SPEED_MAX   = 96;
+const SPEED_BOOST = 46;
+const BOOST_MAX   = 2.2;
+const BOOST_REGEN = 0.30;
+
+const MAX_OBSTACLES = 72;
+const MAX_ENEMIES   = 7;
+const MAX_BULLETS   = 64;
+const MAX_PARTICLES = 260;
+
+const Game = {
+  state: "title",             /* title | run | paused | dead */
+  pos: [0,0,0], vel: [0,0,0], quat: qIdent(),
+  angVel: [0,0,0],            /* body-local pitch / yaw / roll rates */
+  camPos: [0,0,0], camQuat: qIdent(),
+  speed: SPEED_BASE, boostFuel: BOOST_MAX, boosting: false, boostLock: 0,
+  shield: 100, damageTimer: 0, hitFlash: 0, shake: 0,
+  distance: 0, score: 0, rings: 0, kills: 0,
+  mult: 1, grazeTime: 0, grazeCool: 0,
+  best: parseFloat(store.get(K_BEST) || "0") || 0,
+  time: 0, fireCool: 0,
+  chunks: new Map(),          /* chunkIndex -> pool slot */
+  obstacles: [], enemies: [], bullets: [], particles: [],
+  nextSpawnChunk: 0, newBest: false,
+
+  reset() {
+    const fr = pathFrame(2);
+    this.pos = fr.pos.slice();
+    /* identity quat faces world -Z; the canyon runs +Z, so start turned round */
+    this.quat = qNorm([0, 1, 0, 0]);
+    this.vel = vScale(fr.tan, SPEED_BASE);
+    this.angVel = [0,0,0];
+    this.camQuat = this.quat.slice();
+    this.camPos = vAdd(this.pos, qRotate(this.quat, [0, 1.7, 7.4]));
+    this.speed = SPEED_BASE; this.boostFuel = BOOST_MAX; this.boosting = false; this.boostLock = 0;
+    this.shield = 100; this.damageTimer = 0; this.hitFlash = 0; this.shake = 0;
+    this.distance = 0; this.score = 0; this.rings = 0; this.kills = 0;
+    this.mult = 1; this.grazeTime = 0; this.grazeCool = 0;
+    this.time = 0; this.fireCool = 0; this.newBest = false;
+    this.obstacles.length = 0; this.enemies.length = 0;
+    this.bullets.length = 0; this.particles.length = 0;
+    this.nextSpawnChunk = 0;
+    for (const slot of this.chunks.values()) { slot.free = true; slot.index = null; }
+    this.chunks.clear();
+  },
+
+  start() {
+    this.reset();
+    this.state = "run";
+    hideOverlay();
+    document.getElementById("hud").classList.remove("hidden");
+    Sound.resume();
+  },
+
+  togglePause() {
+    if (this.state === "run") {
+      this.state = "paused";
+      Sound.engineLevel(0, false);
+      showPause();
+    } else if (this.state === "paused") {
+      this.state = "run";
+      hideOverlay();
+      Sound.resume();
+    }
+  },
+
+  primaryAction() {
+    if (this.state === "title" || this.state === "dead") this.start();
+    else if (this.state === "paused") this.togglePause();
+  },
+
+  die() {
+    this.state = "dead";
+    Sound.engineLevel(0, false);
+    Sound.sDead();
+    const d = Math.floor(this.distance);
+    if (d > this.best) { this.best = d; this.newBest = true; store.set(K_BEST, String(d)); }
+    burst(this.pos, [1.0, 0.55, 0.25], 42, 34);
+    showGameOver();
+  },
+
+  damage(amount, color) {
+    if (this.state !== "run") return;
+    this.shield -= amount;
+    this.damageTimer = 2.6;
+    this.hitFlash = 1;
+    this.shake = Math.min(1.4, this.shake + amount * 0.020);
+    this.mult = 1; this.grazeTime = 0;
+    burst(this.pos, color || [1.0, 0.35, 0.42], 12, 18);
+    Sound.sHit();
+    if (this.shield <= 0) { this.shield = 0; this.die(); }
+  }
+};
+
+/* ---- obstacle + entity factories (all counts hard-bounded) ---- */
+function spawnObstaclesForChunk(ci) {
+  if (ci < 3) return;                              /* clear run-up */
+  const t0 = ci * CHUNK;
+  const difficulty = clamp(ci / 90, 0, 1);
+  /* density ramps with distance — the opening stretch stays readable */
+  const n = 1 + Math.floor(hash1(ci * 2.7) * (1.3 + difficulty * 1.7));
+
+  for (let k = 0; k < n; k++) {
+    if (Game.obstacles.length >= MAX_OBSTACLES) return;
+    const h = (x) => hash1(ci * 13.37 + k * 4.71 + x);
+    const t = t0 + (k + 0.35 + h(1) * 0.4) * (CHUNK / n);
+    const roll = h(2);
+    const fr = pathFrame(t);
+    const rad = corridorRadius(t);
+
+    if (roll < 0.52) {
+      /* ---- ring: fly through the middle for a bonus ---- */
+      const off = h(3) * (rad * 0.34);
+      const ang = h(4) * TAU;
+      const c = vAdd(fr.pos, vAdd(vScale(fr.right, Math.cos(ang)*off), vScale(fr.up, Math.sin(ang)*off)));
+      Game.obstacles.push({
+        kind: "ring", t, center: c, fr, R: Math.max(3.4, rad * 0.32),
+        spin: (h(5) - 0.5) * 1.4, phase: h(6) * TAU, prevSide: 0, hit: false, pop: 0
+      });
+    } else if (roll < 0.84) {
+      /* ---- pylon: a bar across the corridor ---- */
+      const ang = h(3) * TAU;
+      const axis = vNorm(vAdd(vScale(fr.right, Math.cos(ang)), vScale(fr.up, Math.sin(ang))));
+      const shift = (h(4) - 0.5) * rad * 0.55;
+      const perp = vNorm(vCross(axis, fr.tan));
+      const c = vAdd(fr.pos, vScale(perp, shift));
+      Game.obstacles.push({
+        kind: "pylon", t, center: c, fr, axis,
+        len: rad * 2.1, r: 0.85 + difficulty * 0.5, phase: h(6) * TAU
+      });
+    } else {
+      /* ---- rotating gate: two crossing bars turning about the tangent ---- */
+      Game.obstacles.push({
+        kind: "gate", t, center: fr.pos.slice(), fr,
+        len: rad * 1.94, r: 0.72, ang: h(3) * TAU,
+        spin: (h(4) < 0.5 ? -1 : 1) * (0.45 + difficulty * 0.85), bars: h(5) < 0.45 ? 3 : 2
+      });
+    }
+  }
+
+  /* interceptors thin in after the opening stretch */
+  if (ci > 7 && Game.enemies.length < MAX_ENEMIES && hash1(ci * 8.13) < 0.28 + difficulty * 0.36) {
+    spawnEnemy(t0 + CHUNK * 0.5);
+  }
+}
+
+function spawnEnemy(t) {
+  if (Game.enemies.length >= MAX_ENEMIES) return;
+  const fr = pathFrame(t);
+  const a = Math.random() * TAU, r = corridorRadius(t) * (0.25 + Math.random() * 0.4);
+  const p = vAdd(fr.pos, vAdd(vScale(fr.right, Math.cos(a)*r), vScale(fr.up, Math.sin(a)*r)));
+  Game.enemies.push({
+    pos: p, vel: vScale(fr.tan, SPEED_BASE * 0.9), quat: qNorm([0,1,0,0]),
+    hp: 2, cool: 0.6 + Math.random() * 0.9, life: 0, radius: 1.6, roll: Math.random() * TAU
+  });
+}
+
+function fireBullet(from, dir, speed, owner, extraVel) {
+  if (Game.bullets.length >= MAX_BULLETS) Game.bullets.shift();
+  const base = extraVel || [0,0,0];
+  Game.bullets.push({
+    pos: from.slice(), vel: vAdd(vScale(dir, speed), base),
+    life: owner === "p" ? 1.5 : 2.6, owner, dir: dir.slice()
+  });
+}
+
+function burst(p, color, n, spread) {
+  for (let i = 0; i < n; i++) {
+    if (Game.particles.length >= MAX_PARTICLES) Game.particles.shift();
+    const d = vNorm([Math.random()*2-1, Math.random()*2-1, Math.random()*2-1]);
+    Game.particles.push({
+      pos: p.slice(), vel: vScale(d, spread * (0.35 + Math.random())),
+      life: 0.45 + Math.random() * 0.6, max: 1.05,
+      size: 0.22 + Math.random() * 0.45, color
+    });
+  }
+}
+function ringPop(center, fr, radius) {
+  const n = 20;
+  for (let i = 0; i < n; i++) {
+    if (Game.particles.length >= MAX_PARTICLES) Game.particles.shift();
+    const a = i / n * TAU;
+    const dir = vAdd(vScale(fr.right, Math.cos(a)), vScale(fr.up, Math.sin(a)));
+    Game.particles.push({
+      pos: vAdd(center, vScale(dir, radius)),
+      vel: vAdd(vScale(dir, 11), vScale(fr.tan, 24)),
+      life: 0.55, max: 0.55, size: 0.34, color: [1.0, 0.80, 0.30]
+    });
+  }
+}
+
+/* ---- canyon chunk streaming ---- */
+function acquireSlot() {
+  for (const s of R.chunkPool) if (s.free) return s;
+  return null;
+}
+function updateChunks() {
+  const shipChunk = Math.floor(Game.pos[2] / CHUNK_LEN);
+  const lo = shipChunk - BEHIND, hi = shipChunk + AHEAD;
+
+  for (const [ci, slot] of Game.chunks) {
+    if (ci < lo || ci > hi) { slot.free = true; slot.index = null; Game.chunks.delete(ci); }
+  }
+  for (let ci = lo; ci <= hi; ci++) {
+    if (ci < 0 || Game.chunks.has(ci)) continue;
+    const slot = acquireSlot();
+    if (!slot) continue;
+    const g = buildChunk(ci);
+    gl.bindVertexArray(slot.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, slot.vbo);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, g.verts);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, slot.ibo);
+    gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER, 0, g.idx);
+    gl.bindVertexArray(null);
+    slot.count = g.count; slot.index = ci; slot.free = false;
+    Game.chunks.set(ci, slot);
+    if (ci >= Game.nextSpawnChunk) { spawnObstaclesForChunk(ci); Game.nextSpawnChunk = ci + 1; }
+  }
+}
+
+/* ---- collision helpers ---- */
+function sphereHitShip(c, r) {
+  const d = vSub(Game.pos, c);
+  const rr = r + SHIP_R;
+  return vLen2(d) < rr * rr;
+}
+/* capsule as a short chain of spheres — cheap and accurate enough in 3D */
+function capsuleHit(center, axis, halfLen, r, point, pr) {
+  const d = vSub(point, center);
+  let s = clamp(vDot(d, axis), -halfLen, halfLen);
+  const closest = vAdd(center, vScale(axis, s));
+  const dd = vSub(point, closest);
+  const rr = r + pr;
+  return vLen2(dd) < rr * rr;
+}
+
+/* ---- per-frame simulation ---- */
+function updateGame(dt) {
+  const G = Game;
+  G.time += dt;
+
+  /* ---------------- steering: torque toward target rates, with momentum ---- */
+  const boostWanted = Input.boostHeld && G.boostFuel > 0.05 && G.boostLock <= 0;
+  if (boostWanted) {
+    if (!G.boosting) Sound.sBoost();
+    G.boosting = true;
+    G.boostFuel -= dt;
+    if (G.boostFuel <= 0) { G.boostFuel = 0; G.boosting = false; G.boostLock = 2.4; }
+  } else {
+    G.boosting = false;
+    if (G.boostLock > 0) G.boostLock -= dt;
+    else G.boostFuel = Math.min(BOOST_MAX, G.boostFuel + BOOST_REGEN * dt);
+  }
+
+  const ramp = clamp(G.distance / 9000, 0, 1);
+  const target = (SPEED_BASE + ramp * (SPEED_MAX - SPEED_BASE)) + (G.boosting ? SPEED_BOOST : 0);
+  G.speed = approach(G.speed, target, G.boosting ? 4.0 : 2.0, dt);
+
+  /* Target angular rates. Pitch = local X, yaw = local Y, roll = local Z.
+     Yaw input also commands roll, which is what makes a turn read as a bank. */
+  const agility = 1.0 - 0.22 * clamp((G.speed - SPEED_BASE) / SPEED_BOOST, 0, 1);
+  const tPitch =  Input.steerY *  1.55 * agility;
+  const tYaw   = -Input.steerX *  1.15 * agility;
+  const tRoll  = -Input.steerX *  2.35 - Input.rollIn * 2.2;
+
+  /* momentum: rates chase their targets, they do not snap to them */
+  G.angVel[0] = approach(G.angVel[0], tPitch, 6.5, dt);
+  G.angVel[1] = approach(G.angVel[1], tYaw,   5.2, dt);
+  G.angVel[2] = approach(G.angVel[2], tRoll,  4.0, dt);
+
+  G.quat = qIntegrate(G.quat, G.angVel, dt);
+
+  const fwd   = qRotate(G.quat, [0, 0, -1]);
+  const upV   = qRotate(G.quat, [0, 1, 0]);
+  const right = qRotate(G.quat, [1, 0, 0]);
+
+  /* velocity carries a little inertia off the nose direction — slight drift */
+  const wanted = vScale(fwd, G.speed);
+  G.vel = [
+    approach(G.vel[0], wanted[0], 7.0, dt),
+    approach(G.vel[1], wanted[1], 7.0, dt),
+    approach(G.vel[2], wanted[2], 7.0, dt)
+  ];
+  G.pos = vAdd(G.pos, vScale(G.vel, dt));
+
+  /* ---------------- canyon containment + near-miss grazing ---------------- */
+  const t  = nearestT(G.pos);
+  const fr = pathFrame(t);
+  const radial = vSub(G.pos, fr.pos);
+  const along  = vDot(radial, fr.tan);
+  const offVec = vSub(radial, vScale(fr.tan, along));
+  const offLen = vLen(offVec);
+  const clear  = corridorRadius(t);
+  const gap    = clear - offLen;
+
+  if (gap < SHIP_R) {
+    /* pushed back inside, bled speed, and hurt */
+    const n = offLen > 1e-4 ? vScale(offVec, 1 / offLen) : [1,0,0];
+    G.pos = vAdd(fr.pos, vAdd(vScale(fr.tan, along), vScale(n, clear - SHIP_R - 0.05)));
+    const vn = vDot(G.vel, n);
+    if (vn > 0) G.vel = vSub(G.vel, vScale(n, vn * 1.5));
+    /* A scrape costs shield and speed ONCE, then degrades into a steady drag
+       while you stay in contact. Applying the impact cost every frame would
+       make the penalty depend on the frame rate — and would stall the ship. */
+    if (G.damageTimer < 1.4) {
+      G.damage(6 + Math.min(10, vn * 0.16), [0.45, 0.85, 1.0]);
+      G.speed *= 0.84;
+    } else {
+      G.speed = approach(G.speed, SPEED_BASE * 0.62, 2.4, dt);
+    }
+  } else if (gap < 4.2) {
+    G.grazeTime += dt;
+    G.grazeCool = 0.5;
+    if (Math.random() < dt * 7) Sound.sGraze();
+  } else {
+    G.grazeCool -= dt;
+    if (G.grazeCool <= 0) G.grazeTime = approach(G.grazeTime, 0, 1.6, dt);
+  }
+  G.mult = 1 + Math.min(3.0, G.grazeTime * 0.65);
+
+  /* ---------------- distance + score ---------------- */
+  const gained = Math.max(0, vDot(vScale(G.vel, dt), fr.tan));
+  G.distance += gained;
+  G.score += gained * G.mult * 1.15;
+
+  /* shield trickles back when nothing has hit you for a while */
+  if (G.damageTimer > 0) G.damageTimer -= dt;
+  else G.shield = Math.min(100, G.shield + 2.4 * dt);
+  G.hitFlash = Math.max(0, G.hitFlash - dt * 4.5);
+  G.shake = Math.max(0, G.shake - dt * 2.2);
+
+  /* ---------------- firing ---------------- */
+  G.fireCool -= dt;
+  if (Input.fireHeld && G.fireCool <= 0) {
+    G.fireCool = 0.11;
+    const nose = vAdd(G.pos, vScale(fwd, 2.6));
+    fireBullet(vAdd(nose, vScale(right,  0.9)), fwd, 210, "p", vScale(fwd, G.speed * 0.35));
+    fireBullet(vAdd(nose, vScale(right, -0.9)), fwd, 210, "p", vScale(fwd, G.speed * 0.35));
+    Sound.sFire();
+  }
+
+  /* ---------------- obstacles ---------------- */
+  for (let i = G.obstacles.length - 1; i >= 0; i--) {
+    const o = G.obstacles[i];
+    if (o.t < t - 12) { G.obstacles.splice(i, 1); continue; }
+    if (o.t > t + 200) continue;                 /* not near enough to matter */
+
+    if (o.kind === "ring") {
+      o.phase += o.spin * dt;
+      if (o.pop > 0) o.pop -= dt;
+      const d = vSub(G.pos, o.center);
+      const side = vDot(d, o.fr.tan);
+      if (o.prevSide < 0 && side >= 0 && !o.hit) {
+        const rad = vLen(vSub(d, vScale(o.fr.tan, side)));
+        if (rad < o.R - 0.5) {
+          o.hit = true; o.pop = 0.45;
+          G.rings++; G.score += 260 * G.mult;
+          ringPop(o.center, o.fr, o.R);
+          Sound.sRing();
+          flash("RING +" + Math.round(260 * G.mult));
+        } else if (rad < o.R + 0.9) {
+          o.hit = true;
+          G.damage(9, [1.0, 0.8, 0.3]);
+        }
+      }
+      o.prevSide = side;
+
+    } else if (o.kind === "pylon") {
+      if (capsuleHit(o.center, o.axis, o.len * 0.5, o.r, G.pos, SHIP_R)) {
+        if (G.damageTimer < 2.2) {
+          G.damage(34, [1.0, 0.45, 0.2]);
+          const push = vNorm(vSub(G.pos, o.center));
+          G.pos = vAdd(G.pos, vScale(push, 1.6));
+        }
+      }
+
+    } else if (o.kind === "gate") {
+      o.ang += o.spin * dt;
+      for (let b = 0; b < o.bars; b++) {
+        const a = o.ang + b * Math.PI / o.bars;
+        const axis = vNorm(vAdd(vScale(o.fr.right, Math.cos(a)), vScale(o.fr.up, Math.sin(a))));
+        if (capsuleHit(o.center, axis, o.len * 0.5, o.r, G.pos, SHIP_R)) {
+          if (G.damageTimer < 2.2) {
+            G.damage(30, [0.9, 0.35, 1.0]);
+            const push = vNorm(vSub(G.pos, o.center));
+            G.pos = vAdd(G.pos, vScale(push, 1.6));
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  /* ---------------- enemies ---------------- */
+  for (let i = G.enemies.length - 1; i >= 0; i--) {
+    const e = G.enemies[i];
+    e.life += dt;
+    const toShip = vSub(G.pos, e.pos);
+    const dist = vLen(toShip);
+    if (dist > 460 || e.pos[2] < G.pos[2] - 130) { G.enemies.splice(i, 1); continue; }
+
+    const et = nearestT(e.pos);
+    const efr = pathFrame(et);
+
+    /* pursuit curve: aim at a lead point, but always keep tracking down-tunnel
+       so they never stall out in a corner */
+    let goal;
+    if (dist > 70) {
+      goal = vAdd(G.pos, vScale(fwd, 26));
+    } else {
+      const lead = vAdd(G.pos, vScale(G.vel, 0.35));
+      goal = vAdd(lead, vScale(efr.tan, 34));
+    }
+    const desired = vScale(vNorm(vSub(goal, e.pos)), SPEED_BASE * 1.06 + 12);
+    e.vel = [
+      approach(e.vel[0], desired[0], 1.7, dt),
+      approach(e.vel[1], desired[1], 1.7, dt),
+      approach(e.vel[2], desired[2], 1.7, dt)
+    ];
+    e.pos = vAdd(e.pos, vScale(e.vel, dt));
+
+    /* keep them off the walls */
+    const er = vSub(e.pos, efr.pos);
+    const ea = vDot(er, efr.tan);
+    const eo = vSub(er, vScale(efr.tan, ea));
+    const eol = vLen(eo);
+    const elim = corridorRadius(et) - 2.6;
+    if (eol > elim && eol > 1e-4) {
+      const n = vScale(eo, 1 / eol);
+      e.pos = vAdd(efr.pos, vAdd(vScale(efr.tan, ea), vScale(n, elim)));
+      const vn = vDot(e.vel, n);
+      if (vn > 0) e.vel = vSub(e.vel, vScale(n, vn * 1.4));
+    }
+
+    /* orient the hull along its own velocity */
+    const ef = vNorm(e.vel);
+    const eright = vNorm(vCross([0,1,0], ef));
+    const eup = vCross(ef, eright);
+    e.axes = { f: ef, r: eright, u: eup };
+    e.roll += dt * 1.1;
+
+    /* shoot when close and roughly aimed */
+    e.cool -= dt;
+    if (e.cool <= 0 && dist < 190 && dist > 16) {
+      e.cool = 1.0 + Math.random() * 1.1;
+      const aim = vNorm(vSub(vAdd(G.pos, vScale(G.vel, dist / 150)), e.pos));
+      fireBullet(vAdd(e.pos, vScale(aim, 2.2)), aim, 128, "e");
+      Sound.blip("square", 340, 120, 0.10, 0.06, 1600);
+    }
+
+    if (dist < e.radius + SHIP_R + 0.6) {
+      G.damage(38, [1.0, 0.3, 0.4]);
+      burst(e.pos, [1.0, 0.4, 0.3], 18, 26);
+      G.enemies.splice(i, 1);
+    }
+  }
+
+  /* ---------------- bullets ---------------- */
+  for (let i = G.bullets.length - 1; i >= 0; i--) {
+    const b = G.bullets[i];
+    b.life -= dt;
+    b.pos = vAdd(b.pos, vScale(b.vel, dt));
+    if (b.life <= 0) { G.bullets.splice(i, 1); continue; }
+
+    if (b.owner === "p") {
+      for (let j = G.enemies.length - 1; j >= 0; j--) {
+        const e = G.enemies[j];
+        const d = vSub(b.pos, e.pos);
+        if (vLen2(d) < (e.radius + 0.9) * (e.radius + 0.9)) {
+          e.hp--;
+          burst(b.pos, [1.0, 0.85, 0.4], 6, 14);
+          G.bullets.splice(i, 1);
+          if (e.hp <= 0) {
+            burst(e.pos, [1.0, 0.45, 0.25], 22, 30);
+            G.enemies.splice(j, 1);
+            G.kills++; G.score += 420 * G.mult;
+            Sound.sKill();
+            flash("INTERCEPTOR DOWN");
+          }
+          break;
+        }
+      }
+    } else {
+      if (sphereHitShip(b.pos, 0.7)) {
+        G.damage(13, [1.0, 0.3, 0.35]);
+        G.bullets.splice(i, 1);
+        continue;
+      }
+    }
+    /* bullets die on the canyon wall too */
+    const bt = nearestT(b.pos);
+    const bfr = pathFrame(bt);
+    const brv = vSub(b.pos, bfr.pos);
+    const ba = vDot(brv, bfr.tan);
+    if (vLen(vSub(brv, vScale(bfr.tan, ba))) > corridorRadius(bt) + 2.0) {
+      burst(b.pos, [0.5, 0.85, 1.0], 4, 10);
+      G.bullets.splice(i, 1);
+    }
+  }
+
+  /* ---------------- particles ---------------- */
+  for (let i = G.particles.length - 1; i >= 0; i--) {
+    const p = G.particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { G.particles.splice(i, 1); continue; }
+    p.pos = vAdd(p.pos, vScale(p.vel, dt));
+    p.vel = vScale(p.vel, 1 - 1.4 * dt);
+  }
+
+  /* ---------------- camera: trails, lags, and swings on the roll ---------- */
+  const camLag = 1 - Math.exp(-7.5 * dt);
+  const back = 9.4 + (G.boosting ? 2.2 : 0) + clamp((G.speed - SPEED_BASE) * 0.035, 0, 2.4);
+  const wantPos = vAdd(G.pos, qRotate(G.quat, [0, 2.05, back]));
+  G.camPos = vLerp(G.camPos, wantPos, camLag);
+  /* orientation lags harder than position — that difference IS the 3D feel */
+  G.camQuat = qSlerp(G.camQuat, G.quat, 1 - Math.exp(-5.4 * dt));
+
+  if (G.shake > 0.001) {
+    const s = G.shake * 0.55;
+    G.camPos = vAdd(G.camPos, [
+      (Math.random()*2-1) * s, (Math.random()*2-1) * s, (Math.random()*2-1) * s
+    ]);
+  }
+
+  Sound.engineLevel(clamp((G.speed - 40) / 90, 0, 1), true);
+}
+
+/* --------------------------------------------------------------- render */
+function drawScene() {
+  const G = Game;
+
+  /* view = inverse(camera world matrix). Building the camera in world space
+     first is what lets the roll and the positional lag be independent. */
+  qToMat4(R.camWorld, G.camQuat, G.camPos, 1);
+  mInvert(R.view, R.camWorld);
+  mMul(R.viewProj, R.proj, R.view);
+
+  /* rotation-only view for the starfield */
+  R.rotView.set(R.view);
+  R.rotView[12] = 0; R.rotView[13] = 0; R.rotView[14] = 0;
+  mMul(R.rotProj, R.proj, R.rotView);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R.fbScene);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+  gl.viewport(0, 0, R.fbW, R.fbH);
+  gl.clearBufferfv(gl.COLOR, 0, [FOG[0], FOG[1], FOG[2], 1]);
+  gl.clearBufferfv(gl.COLOR, 1, [0, 0, 0, 1]);
+  gl.clear(gl.DEPTH_BUFFER_BIT);
+
+  /* ---- stars, pinned at the far plane, no depth write ---- */
+  gl.depthMask(false);
+  gl.disable(gl.DEPTH_TEST);
+  gl.useProgram(R.progStars.program);
+  gl.uniformMatrix4fv(R.progStars.u.uRotProj, false, R.rotProj);
+  gl.bindVertexArray(R.starVAO);
+  gl.drawArrays(gl.POINTS, 0, R.starCount);
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthMask(true);
+
+  /* ---- canyon ---- */
+  const P = R.progCanyon;
+  gl.useProgram(P.program);
+  gl.uniformMatrix4fv(P.u.uViewProj, false, R.viewProj);
+  gl.uniform3fv(P.u.uCamPos, G.camPos);
+  gl.uniform3fv(P.u.uLightDir, LIGHT);
+  gl.uniform3fv(P.u.uShipPos, G.pos);
+  gl.uniform3fv(P.u.uFogColor, FOG);
+  gl.uniform3fv(P.u.uNeon, NEON);
+  gl.uniform1f(P.u.uFogDensity, 0.00335);
+  gl.uniform1f(P.u.uTime, G.time);
+  for (const slot of Game.chunks.values()) {
+    if (slot.free || !slot.count) continue;
+    gl.bindVertexArray(slot.vao);
+    gl.drawElements(gl.TRIANGLES, slot.count, gl.UNSIGNED_SHORT, 0);
+  }
+
+  /* ---- everything instanced ---- */
+  const I = R.progInst;
+  gl.useProgram(I.program);
+  gl.uniformMatrix4fv(I.u.uViewProj, false, R.viewProj);
+  gl.uniform3fv(I.u.uCamPos, G.camPos);
+  gl.uniform3fv(I.u.uLightDir, LIGHT);
+  gl.uniform3fv(I.u.uFogColor, FOG);
+  gl.uniform1f(I.u.uFogDensity, 0.00335);
+
+  const camT = nearestT(G.camPos);
+
+  /* rings + gates + pylons */
+  for (const o of Game.obstacles) {
+    if (o.t < camT - 6 || o.t > camT + 112) continue;
+
+    if (o.kind === "ring") {
+      const s = o.R * (o.pop > 0 ? 1 + (0.45 - o.pop) * 0.9 : 1);
+      const c = Math.cos(o.phase), sn = Math.sin(o.phase);
+      const xa = vScale(vAdd(vScale(o.fr.right, c), vScale(o.fr.up, sn)), s);
+      const ya = vScale(vAdd(vScale(o.fr.right, -sn), vScale(o.fr.up, c)), s);
+      const za = vScale(o.fr.tan, s);
+      mFromAxes(tmpM, xa, ya, za, o.center);
+      const glowE = o.hit ? 0.28 : 1.55 + 0.5 * Math.sin(Game.time * 3.4 + o.phase);
+      const col = o.hit ? [0.32,0.36,0.44] : [1.0, 0.80, 0.30];
+      const em  = o.hit ? [0.30,0.40,0.55] : [1.0, 0.78, 0.26];
+      pushInstance(R.mRing, tmpM, col, em, glowE);
+
+    } else if (o.kind === "pylon") {
+      const za = vScale(o.axis, o.len);
+      const xa = vScale(vNorm(vCross(o.axis, o.fr.tan)), o.r);
+      const ya = vScale(vNorm(vCross(o.axis, xa)), o.r);
+      mFromAxes(tmpM, xa, ya, za, o.center);
+      pushInstance(R.mTube, tmpM, [0.30, 0.21, 0.38],
+                   [1.0, 0.28, 0.40], 0.52 + 0.16 * Math.sin(Game.time * 2.0 + o.phase));
+
+    } else if (o.kind === "gate") {
+      for (let b = 0; b < o.bars; b++) {
+        const a = o.ang + b * Math.PI / o.bars;
+        const axis = vNorm(vAdd(vScale(o.fr.right, Math.cos(a)), vScale(o.fr.up, Math.sin(a))));
+        const za = vScale(axis, o.len);
+        const xa = vScale(vNorm(vCross(axis, o.fr.tan)), o.r);
+        const ya = vScale(vNorm(vCross(axis, xa)), o.r);
+        mFromAxes(tmpM, xa, ya, za, o.center);
+        pushInstance(R.mTube, tmpM, [0.26, 0.18, 0.40], [0.82, 0.30, 1.0], 0.72);
+      }
+    }
+  }
+
+  /* bullets: stretched glowing rods along their own velocity */
+  for (const b of Game.bullets) {
+    const d = vNorm(b.vel);
+    const xr = vNorm(vCross(Math.abs(d[1]) > 0.9 ? [1,0,0] : [0,1,0], d));
+    const yr = vCross(d, xr);
+    const len = b.owner === "p" ? 3.4 : 2.4;
+    const rad = b.owner === "p" ? 0.16 : 0.24;
+    mFromAxes(tmpM, vScale(xr, rad), vScale(yr, rad), vScale(d, len), b.pos);
+    if (b.owner === "p") pushInstance(R.mTube, tmpM, [1.0, 0.92, 0.55], [1.0, 0.84, 0.32], 2.6);
+    else                 pushInstance(R.mTube, tmpM, [1.0, 0.45, 0.50], [1.0, 0.26, 0.34], 2.4);
+  }
+
+  /* interceptors */
+  for (const e of Game.enemies) {
+    if (!e.axes) continue;
+    const c = Math.cos(e.roll), s = Math.sin(e.roll);
+    const xa = vAdd(vScale(e.axes.r, c), vScale(e.axes.u, s));
+    const ya = vAdd(vScale(e.axes.r, -s), vScale(e.axes.u, c));
+    mFromAxes(tmpM, xa, ya, vScale(e.axes.f, -1), e.pos);   /* hull nose is -Z */
+    pushInstance(R.mEnemy, tmpM, [0.36, 0.10, 0.16], [1.0, 0.22, 0.30], 1.25);
+  }
+
+  /* particles */
+  for (const p of Game.particles) {
+    const k = clamp(p.life / p.max, 0, 1);
+    const s = p.size * (0.25 + k * 0.8);
+    mFromAxes(tmpM, [s,0,0], [0,s,0], [0,0,s], p.pos);
+    pushInstance(R.mShard, tmpM, p.color, p.color, 1.0 * k + 0.25);
+  }
+
+  /* the ship itself, plus two emissive engine cans */
+  if (Game.state !== "title") {
+    qToMat4(tmpM, Game.quat, Game.pos, 1);
+    pushInstance(R.mShip, tmpM, [0.62, 0.66, 0.78], [0.20, 0.55, 0.95], 0.55);
+
+    const f = qRotate(Game.quat, [0,0,-1]);
+    const r = qRotate(Game.quat, [1,0,0]);
+    const u = qRotate(Game.quat, [0,1,0]);
+    const thrust = Game.boosting ? 1.0 : 0.45 + 0.12 * Math.sin(Game.time * 22);
+    for (const side of [-1, 1]) {
+      const base = vAdd(Game.pos, vAdd(vScale(r, side * 0.78), vAdd(vScale(f, -1.5), vScale(u, 0.05))));
+      const L = 0.9 + thrust * 3.0;
+      const c = vAdd(base, vScale(f, -L * 0.5));
+      mFromAxes(tmpM, vScale(r, 0.22), vScale(u, 0.22), vScale(f, -L), c);
+      const col = Game.boosting ? [1.0, 0.75, 0.35] : [0.40, 0.80, 1.0];
+      pushInstance(R.mTube, tmpM, col, col, 1.1 + thrust * 1.5);
+    }
+  }
+
+  flushMesh(R.mRing);
+  flushMesh(R.mTube);
+  flushMesh(R.mEnemy);
+  flushMesh(R.mShard);
+  flushMesh(R.mShip);
+
+  /* ---------------- bloom: downsample-blur the emissive buffer ---------- */
+  gl.disable(gl.DEPTH_TEST);
+  gl.disable(gl.CULL_FACE);
+  gl.bindVertexArray(R.quadVAO);
+
+  const B = R.progBlur;
+  gl.useProgram(B.program);
+  gl.uniform1i(B.u.uTex, 0);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.viewport(0, 0, R.halfW, R.halfH);
+
+  /* pass 1: emissive -> blurA, horizontal */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R.fbBlurA);
+  gl.bindTexture(gl.TEXTURE_2D, R.texEmis);
+  gl.uniform2f(B.u.uDir, 1.35 / R.halfW, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  /* pass 2: blurA -> blurB, vertical */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R.fbBlurB);
+  gl.bindTexture(gl.TEXTURE_2D, R.texBlurA);
+  gl.uniform2f(B.u.uDir, 0, 1.35 / R.halfH);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  /* pass 3 + 4: widen it */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R.fbBlurA);
+  gl.bindTexture(gl.TEXTURE_2D, R.texBlurB);
+  gl.uniform2f(B.u.uDir, 3.1 / R.halfW, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R.fbBlurB);
+  gl.bindTexture(gl.TEXTURE_2D, R.texBlurA);
+  gl.uniform2f(B.u.uDir, 0, 3.1 / R.halfH);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  /* ---------------- composite to the screen ---------------- */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.drawBuffers([gl.BACK]);
+  gl.viewport(0, 0, R.w, R.h);
+  const C = R.progComp;
+  gl.useProgram(C.program);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, R.texScene);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, R.texBlurB);
+  gl.uniform1i(C.u.uScene, 0);
+  gl.uniform1i(C.u.uBloom, 1);
+  gl.uniform1f(C.u.uBloomStrength, 0.85);
+  gl.uniform1f(C.u.uFlash, Game.hitFlash);
+  gl.uniform1f(C.u.uTime, Game.time);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+  gl.bindVertexArray(null);
+}
+
+/* ------------------------------------------------------------- 9. UI */
+const el = {
+  hud: document.getElementById("hud"),
+  dist: document.getElementById("distVal"),
+  score: document.getElementById("scoreVal"),
+  shield: document.getElementById("shieldVal"),
+  shieldBar: document.getElementById("shieldBar"),
+  shieldFill: document.querySelector("#shieldBar > i"),
+  boost: document.getElementById("boostVal"),
+  boostFill: document.querySelector("#boostBar > i"),
+  spd: document.getElementById("spdVal"),
+  ring: document.getElementById("ringVal"),
+  multi: document.getElementById("multi"),
+  flash: document.getElementById("flash"),
+  damage: document.getElementById("damage"),
+  overlay: document.getElementById("overlay"),
+  card: document.getElementById("overlayCard"),
+  mute: document.getElementById("muteBtn")
+};
+
+let flashTimer = 0;
+function flash(text) {
+  el.flash.textContent = text;
+  el.flash.classList.add("show");
+  flashTimer = 1.1;
+}
+
+let hudAcc = 0;
+function updateHUD(dt) {
+  const G = Game;
+  hudAcc += dt;
+  if (flashTimer > 0) {
+    flashTimer -= dt;
+    if (flashTimer <= 0) el.flash.classList.remove("show");
+  }
+  el.damage.classList.toggle("on", G.hitFlash > 0.25);
+  if (hudAcc < 0.066) return;
+  hudAcc = 0;
+
+  el.dist.innerHTML = Math.floor(G.distance).toLocaleString() + '<span style="font-size:14px"> m</span>';
+  el.score.textContent = Math.floor(G.score).toLocaleString();
+  const sh = Math.round(G.shield);
+  el.shield.textContent = sh + "%";
+  el.shieldFill.style.width = sh + "%";
+  el.shieldBar.classList.toggle("low", sh < 34);
+  el.boostFill.style.width = (G.boostFuel / BOOST_MAX * 100) + "%";
+  el.boost.textContent = G.boostLock > 0 ? "CHARGING" : (G.boosting ? "ACTIVE" : "READY");
+  el.spd.innerHTML = Math.round(G.speed) + '<span style="font-size:12px"> u/s</span>';
+  el.ring.textContent = G.rings + " / " + G.kills;
+  const m = G.mult;
+  el.multi.textContent = "GRAZE x" + m.toFixed(1);
+  el.multi.classList.toggle("on", m > 1.08);
+}
+
+function hideOverlay() { el.overlay.classList.add("hidden"); }
+function showOverlay(html) {
+  el.card.innerHTML = html;
+  el.overlay.classList.remove("hidden");
+}
+
+const CONTROL_HELP = `
+  <div class="keys">
+    <div><b>WASD / Arrows</b> — pitch &amp; bank</div>
+    <div><b>Q / E</b> — roll</div>
+    <div><b>Space</b> — fire</div>
+    <div><b>Shift</b> — boost</div>
+    <div><b>P / Esc</b> — pause</div>
+    <div><b>M</b> — mute</div>
+    <div><b>Gamepad</b> — left stick steer, RT fire, LT boost</div>
+    <div><b>Touch</b> — drag to steer, buttons to fire &amp; boost</div>
+  </div>`;
+
+function showTitle() {
+  Game.state = "title";
+  el.hud.classList.add("hidden");
+  showOverlay(`
+    <h1>VOIDRUNNER</h1>
+    <p class="sub">Overclock &middot; True 3D</p>
+    <p>Thread a procedurally generated neon canyon that curves in every axis.
+       Skim the walls for a graze multiplier, fly clean through the gold rings,
+       and shoot the interceptors before they shoot you.</p>
+    ${CONTROL_HELP}
+    <div class="stats">
+      <div class="stat"><div class="label">Best distance</div>
+        <div class="value accent">${Math.floor(Game.best).toLocaleString()} m</div></div>
+    </div>
+    <button class="btn" id="btnStart">Launch</button>
+  `);
+  document.getElementById("btnStart").onclick = () => Game.start();
+}
+
+function showPause() {
+  showOverlay(`
+    <h2>Paused</h2>
+    <p class="sub">Systems holding</p>
+    ${CONTROL_HELP}
+    <button class="btn" id="btnResume">Resume</button>
+    <button class="btn ghost" id="btnQuit">Abort run</button>
+  `);
+  document.getElementById("btnResume").onclick = () => Game.togglePause();
+  document.getElementById("btnQuit").onclick = () => { hideOverlay(); showTitle(); };
+}
+
+function showGameOver() {
+  el.hud.classList.add("hidden");
+  showOverlay(`
+    <h2>Hull breached</h2>
+    <p class="sub">Run terminated</p>
+    ${Game.newBest ? '<div class="newbest">New best distance</div>' : ""}
+    <div class="stats">
+      <div class="stat"><div class="label">Distance</div>
+        <div class="value accent">${Math.floor(Game.distance).toLocaleString()} m</div></div>
+      <div class="stat"><div class="label">Score</div>
+        <div class="value">${Math.floor(Game.score).toLocaleString()}</div></div>
+      <div class="stat"><div class="label">Rings</div>
+        <div class="value">${Game.rings}</div></div>
+      <div class="stat"><div class="label">Kills</div>
+        <div class="value">${Game.kills}</div></div>
+    </div>
+    <p style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.5)">
+      Best ${Math.floor(Game.best).toLocaleString()} m</p>
+    <button class="btn" id="btnAgain">Fly again</button>
+    <button class="btn ghost" id="btnMenu">Menu</button>
+  `);
+  document.getElementById("btnAgain").onclick = () => Game.start();
+  document.getElementById("btnMenu").onclick = () => showTitle();
+}
+
+function toggleMute() {
+  Sound.init();
+  Sound.setMuted(!Sound.muted);
+  el.mute.innerHTML = Sound.muted ? "&#128263;" : "&#9835;";
+}
+el.mute.onclick = toggleMute;
+el.mute.innerHTML = Sound.muted ? "&#128263;" : "&#9835;";
+document.getElementById("pauseBtn").onclick = () => {
+  if (Game.state === "run" || Game.state === "paused") Game.togglePause();
+};
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && Game.state === "run") Game.togglePause();
+});
+
+/* --------------------------------------------------------------- loop */
+let last = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (fatalShown) return;
+  if (!last) last = now;
+  let dt = (now - last) / 1000;
+  last = now;
+  /* clamp so a tab switch or a stall can never teleport the ship into a wall */
+  dt = clamp(dt, 0.0005, 0.05);
+
+  pollInput();
+
+  if (Game.state === "run") {
+    updateGame(dt);
+    updateChunks();
+    updateHUD(dt);
+  } else if (Game.state === "title") {
+    /* slow fly-by behind the ship so the menu is not a black screen */
+    Game.time += dt;
+    const t = 4 + Game.time * 2.2;
+    const fr = pathFrame(t);
+    Game.pos = fr.pos.slice();
+    Game.camPos = vAdd(fr.pos, vAdd(vScale(fr.tan, -14),
+                       vAdd(vScale(fr.up, 2.4), vScale(fr.right, Math.sin(Game.time * 0.4) * 5))));
+    const look = vNorm(vSub(vAdd(fr.pos, vScale(fr.tan, 40)), Game.camPos));
+    /* derive a quaternion from a look direction via a lookAt matrix inverse */
+    mLookAt(R.view, Game.camPos, vAdd(Game.camPos, look), [0,1,0]);
+    mInvert(R.camWorld, R.view);
+    Game.camQuat = quatFromMatrix(R.camWorld);
+    updateChunks();
+  }
+
+  /* always draw — a paused or finished run keeps its frozen scene behind the
+     overlay, which is far better than a black rectangle */
+  drawScene();
+}
+
+/* Extract a rotation quaternion from the upper 3x3 of a world matrix. */
+function quatFromMatrix(m) {
+  const m00=m[0], m01=m[4], m02=m[8];
+  const m10=m[1], m11=m[5], m12=m[9];
+  const m20=m[2], m21=m[6], m22=m[10];
+  const tr = m00 + m11 + m22;
+  let x, y, z, w;
+  if (tr > 0) {
+    const s = Math.sqrt(tr + 1.0) * 2;
+    w = 0.25 * s; x = (m21 - m12) / s; y = (m02 - m20) / s; z = (m10 - m01) / s;
+  } else if (m00 > m11 && m00 > m22) {
+    const s = Math.sqrt(1.0 + m00 - m11 - m22) * 2;
+    w = (m21 - m12) / s; x = 0.25 * s; y = (m01 + m10) / s; z = (m02 + m20) / s;
+  } else if (m11 > m22) {
+    const s = Math.sqrt(1.0 + m11 - m00 - m22) * 2;
+    w = (m02 - m20) / s; x = (m01 + m10) / s; y = 0.25 * s; z = (m12 + m21) / s;
+  } else {
+    const s = Math.sqrt(1.0 + m22 - m00 - m11) * 2;
+    w = (m10 - m01) / s; x = (m02 + m20) / s; y = (m12 + m21) / s; z = 0.25 * s;
+  }
+  return qNorm([x, y, z, w]);
+}
+
+/* ------------------------------------------------------------- boot */
+if (gl) {
+  auditCorridor();
+  if (initRenderer()) {
+    Game.reset();
+    Game.state = "title";
+    showTitle();
+    requestAnimationFrame(frame);
+  }
+}
+</script>
+</body>
+</html>
