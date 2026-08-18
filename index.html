@@ -395,6 +395,71 @@ var GAMES = [
     }
   },
   {
+    id: 'defrag', name: 'Defrag', cat: 'puzzle', tag: 'Match 3', isNew: true,
+    desc: 'The disk is fragmented. Line up three sectors to clear them, chain cascades, forge scanline bolts and colour purges.',
+    best: function () { var s = lsJSON('defrag_v1'); return s && s.best > 0 ? ['Best', fmtInt(s.best)] : null; },
+    cover: function (x, w, h) {
+      var cols = ['#7de2ff', '#ff5f9e', '#ffcc4d', '#8effc1', '#c9a2ff', '#ff9d4d'];
+      var cs = h * 0.16;
+      for (var r = 0; r < 4; r++) {
+        for (var c = 0; c < 8; c++) {
+          var t = (r * 3 + c * 5 + (r > 1 && c === 3 ? 1 : 0)) % 6;
+          if (r === 2 && c >= 2 && c <= 4) t = 1;   // a made match
+          var cx2 = w * 0.14 + c * cs * 1.15, cy2 = h * 0.2 + r * cs * 1.15;
+          x.fillStyle = cols[t];
+          x.shadowColor = cols[t]; x.shadowBlur = (r === 2 && c >= 2 && c <= 4) ? 12 : 4;
+          x.beginPath();
+          if (t % 3 === 0) x.arc(cx2, cy2, cs * 0.42, 0, TAU);
+          else if (t % 3 === 1) x.roundRect(cx2 - cs * 0.4, cy2 - cs * 0.4, cs * 0.8, cs * 0.8, 3);
+          else { x.moveTo(cx2, cy2 - cs * 0.45); x.lineTo(cx2 + cs * 0.45, cy2 + cs * 0.35); x.lineTo(cx2 - cs * 0.45, cy2 + cs * 0.35); x.closePath(); }
+          x.fill();
+        }
+      }
+      x.shadowBlur = 0;
+    }
+  },
+  {
+    id: 'airtime', name: 'Airtime', cat: 'racing', tag: 'Motocross', isNew: true,
+    desc: 'Dirtbike tricks where the jumps are the point. Throw backflips off the doubles, land square, keep the combo alive.',
+    best: function () {
+      var s = lsJSON('airtime_v1'); if (!s || !s.bests) return null;
+      var top = 0; for (var k in s.bests) if (s.bests[k] > top) top = s.bests[k];
+      return top > 0 ? ['Best run', fmtInt(top)] : null;
+    },
+    cover: function (x, w, h) {
+      var g2 = x.createLinearGradient(0, 0, 0, h); g2.addColorStop(0, '#131a38'); g2.addColorStop(1, '#3d2a55');
+      x.fillStyle = g2; x.fillRect(0, 0, w, h);
+      /* terrain with a double */
+      x.strokeStyle = '#7de2ff'; x.lineWidth = 2.5; x.shadowColor = '#7de2ff'; x.shadowBlur = 6;
+      x.fillStyle = '#241a14';
+      x.beginPath();
+      x.moveTo(0, h * 0.78);
+      x.lineTo(w * 0.2, h * 0.78); x.lineTo(w * 0.34, h * 0.5); x.lineTo(w * 0.36, h * 0.82);
+      x.lineTo(w * 0.62, h * 0.82); x.lineTo(w * 0.74, h * 0.56); x.lineTo(w * 0.86, h * 0.8); x.lineTo(w, h * 0.8);
+      x.lineTo(w, h); x.lineTo(0, h); x.closePath();
+      x.fill(); x.stroke();
+      x.shadowBlur = 0;
+      /* bike mid-backflip */
+      x.save();
+      x.translate(w * 0.5, h * 0.3); x.rotate(-2.4);
+      x.strokeStyle = '#dfe9ff'; x.lineWidth = 2;
+      x.beginPath(); x.arc(-10, 5, 6, 0, TAU); x.stroke();
+      x.beginPath(); x.arc(10, 5, 6, 0, TAU); x.stroke();
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 2.5; x.lineCap = 'round';
+      x.shadowColor = '#ffcc4d'; x.shadowBlur = 8;
+      x.beginPath(); x.moveTo(-10, 5); x.lineTo(-2, -1); x.lineTo(5, -1); x.lineTo(10, 5); x.stroke();
+      x.shadowBlur = 0;
+      x.strokeStyle = '#eaf2ff'; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(-4, -4); x.lineTo(0, -10); x.lineTo(7, -5); x.stroke();
+      x.fillStyle = '#ff5f9e';
+      x.beginPath(); x.arc(0, -13, 3.4, 0, TAU); x.fill();
+      x.restore();
+      x.fillStyle = '#ff5f9e';
+      x.font = '800 9px "Segoe UI", sans-serif'; x.textAlign = 'center';
+      x.fillText('BACKFLIP +700', w * 0.5, h * 0.12);
+    }
+  },
+  {
     id: 'tilt', name: 'Tilt', cat: 'action', tag: 'Pinball', isNew: true,
     desc: 'Three neon tables — BOOT SECTOR, HEATSINK, MOTHERLODE. Multiball on every one, and a nudge that will lock your flippers if you lean on it.',
     best: function () {

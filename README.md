@@ -35,6 +35,8 @@ from the Vercel dashboard whenever.
 | `overflow/` | **Overflow** | Snake. 23x15 board that rotates to stay big on portrait phones, speed tiers every 8 packets, timed bonus glitch, buffered turns (up to 3 queued, reverses rejected), swipe steering. |
 | `deadlock/` | **Deadlock** | One-on-one fighter, and the arcade's first 2-player game (shared keyboard). SYN vs ACK, best of three, hold-away blocking with chip damage, meter specials (PING projectile / SLAM dash uppercut), knockdowns, CPU with a per-round difficulty ramp — and a FINISH THEM sequence where landing the last hit throws a FATAL EXCEPTION and derezzes the loser. |
 | `airlock/` | **Airlock** | Air hockey, first to seven. True multitouch 2-player — each player drags their own mallet on one phone/tablet — or WASD vs arrows, mouse or gamepad vs the CPU. Table stands upright on portrait screens and lies sideways on desktops; substepped physics so the puck never tunnels; CPU that intercepts, strikes around pinned pucks, and ramps with your streak. |
+| `defrag/` | **Defrag** | Match-3. 8x8 board, six sector shapes (shape + colour, so colourblind players can play), cascade multipliers, match-4 scanline bolts, match-5 colour purges, quota-per-level with move budget, idle hints, auto-reshuffle when no moves exist. |
+| `airtime/` | **Airtime** | Trick motocross — the jumps game (Gravity Grip stays the survival ride). Three built courses of kickers, tabletops, doubles and step-ups; real rotation physics with flip counting, landing-angle judgement (clean / sloppy / WRECKED), combo multiplier, checkpoints, time bonus, pulse-wave two-stroke engine. |
 | `tilt/` | **Tilt** | Pinball, three tables: BOOT SECTOR (bumper triangle, left target bank), HEATSINK (bumper diamond, V-baffle fins, right bank), MOTHERLODE (crown bumper, centre island vault, horizontal bank). Segment physics at five substeps, flippers that impart real rotational velocity, slingshots, ball saver, drop-target multiball per table, TILT/HEAT/RAM rollover letters for bonus multipliers, and a three-nudge tilt that kills the flippers. Per-table high scores. |
 | `solitaire/` | **Solitaire** | Klondike on neon felt, procedurally drawn cards. Draw-1 or draw-3, tap-to-auto-move or full drag-and-drop (multi-card stacks), unlimited undo via state snapshots, flip scoring, an AUTO button that plays the endgame once everything is face up, and a bouncing-card win cascade. |
 | `overdrive/` | **Overdrive** | Crazy Taxi-style open city, built for Amber. Procedural 8x8-block neon city with 2.5D parallax rooftops and lit windows, drift handbrake physics with skid marks, traffic, riders who wave from the curb, timed fares with CRAZY/GREAT/OK ratings and tips, clock extensions per delivery, oscillator engine that pitches with speed. |
@@ -547,6 +549,31 @@ selectors are substring matches, so `text=VS CPU` was clicking the help
 row reading "Mouse (vs CPU)" instead of the button and the playtest
 reported a false start. Selectors are exact-match quoted now; verified
 with a trusted-input trace that real clicks land on the real button.
+
+### Built 2026-08-19 — Defrag and Airtime
+
+**Defrag** — the match-3 that completes the original wish-list. Eight by
+eight, six sector types drawn as distinct shapes AND colours so
+colourblind players are not guessing, no-match-at-deal board generation,
+cascade chains with mounting multipliers, match-4 forging a scanline bolt
+(clears its row or column when consumed), match-5 forging a colour purge,
+quota-per-level against a shrinking move budget, a hint that sparkles
+after four idle seconds, and an automatic reshuffle whenever the board
+has no legal move.
+
+**Airtime** — built to the request "a dirtbike game that has jumps."
+Gravity Grip already owns the survival ride, so this one is the trick
+game: three authored courses (SANDBOX SX, RIDGE RALLY, BIG AIR CANYON)
+assembled from kickers, tabletops, doubles, step-ups and whoops on a
+sampled heightfield. Grounded physics run along the surface; leave a lip
+and you are a projectile with rotation control — full rotations count as
+flips (+700 x combo), landings are judged by angle against the slope:
+square within ~12 degrees is CLEAN (+250, combo up), within tolerance
+keeps the points, past it is WRECKED — tumble, combo gone, back to the
+last checkpoint. The scripted test bot held the flip key all flight,
+over-rotated and got wrecked, which is exactly the correct outcome.
+Engine audio is a pulse wave that climbs with speed and jumps a fifth
+when you leave the ground.
 
 ### Built 2026-08-18 (small hours) — Tilt and Solitaire
 
