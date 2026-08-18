@@ -395,6 +395,52 @@ var GAMES = [
     }
   },
   {
+    id: 'airlock', name: 'Airlock', cat: 'action', tag: '2P Air Hockey', isNew: true,
+    desc: 'One puck, two mallets, first to seven. Play the CPU — or grab a friend: two fingers, one screen, true multitouch.',
+    best: function () { var s = lsJSON('airlock_v1'); return s && s.wins > 0 ? ['CPU wins', fmtInt(s.wins)] : null; },
+    cover: function (x, w, h) {
+      /* table on its side */
+      x.fillStyle = '#0d1428';
+      x.beginPath(); x.roundRect(w * 0.07, h * 0.1, w * 0.86, h * 0.8, 10); x.fill();
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 3; x.shadowColor = '#2d63b8'; x.shadowBlur = 6;
+      x.beginPath(); x.roundRect(w * 0.07, h * 0.1, w * 0.86, h * 0.8, 10); x.stroke();
+      x.shadowBlur = 0;
+      x.strokeStyle = 'rgba(255,204,77,0.4)'; x.lineWidth = 1.5; x.setLineDash([5, 5]);
+      x.beginPath(); x.moveTo(w * 0.5, h * 0.1); x.lineTo(w * 0.5, h * 0.9); x.stroke();
+      x.setLineDash([]);
+      x.beginPath(); x.arc(w * 0.5, h * 0.5, h * 0.14, 0, TAU); x.stroke();
+      /* goals */
+      x.strokeStyle = '#7de2ff'; x.lineWidth = 4; x.shadowColor = '#7de2ff'; x.shadowBlur = 8;
+      x.beginPath(); x.moveTo(w * 0.07, h * 0.34); x.lineTo(w * 0.07, h * 0.66); x.stroke();
+      x.strokeStyle = '#ffb04d'; x.shadowColor = '#ffb04d';
+      x.beginPath(); x.moveTo(w * 0.93, h * 0.34); x.lineTo(w * 0.93, h * 0.66); x.stroke();
+      x.shadowBlur = 0;
+      /* mallets + puck with trail */
+      function mallet(mx, my, col) {
+        x.shadowColor = col; x.shadowBlur = 10;
+        x.fillStyle = col;
+        x.beginPath(); x.arc(mx, my, h * 0.1, 0, TAU); x.fill();
+        x.shadowBlur = 0;
+        x.fillStyle = 'rgba(11,15,30,0.55)';
+        x.beginPath(); x.arc(mx, my, h * 0.06, 0, TAU); x.fill();
+        x.fillStyle = col;
+        x.beginPath(); x.arc(mx, my, h * 0.026, 0, TAU); x.fill();
+      }
+      mallet(w * 0.2, h * 0.42, '#7de2ff');
+      mallet(w * 0.8, h * 0.6, '#ffb04d');
+      for (var i = 0; i < 5; i++) {
+        x.globalAlpha = i / 5 * 0.4;
+        x.fillStyle = '#ffcc4d';
+        x.beginPath(); x.arc(w * (0.38 + i * 0.05), h * (0.62 - i * 0.045), h * 0.05 * (i / 5), 0, TAU); x.fill();
+      }
+      x.globalAlpha = 1;
+      x.shadowColor = '#ffcc4d'; x.shadowBlur = 12;
+      x.fillStyle = '#ffcc4d';
+      x.beginPath(); x.arc(w * 0.62, h * 0.4, h * 0.055, 0, TAU); x.fill();
+      x.shadowBlur = 0;
+    }
+  },
+  {
     id: 'overflow', name: 'Overflow', cat: 'puzzle', tag: 'Snake', isNew: true,
     desc: 'You are a buffer. Every packet appends to you. Write past the fence — or into yourself — and it is exactly what it sounds like.',
     best: function () { var s = lsJSON('overflow_v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },

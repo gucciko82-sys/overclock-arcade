@@ -34,6 +34,7 @@ from the Vercel dashboard whenever.
 | `downlink/` | **Downlink** | Missile defence. Three uplink batteries (centre shoots faster), six server nodes, MIRV splits, bloom-dodging smart bombs from wave 6, a warhead-dropping drone from wave 3, wave tally for unused interceptors and surviving nodes, a banked spare node every 10,000. |
 | `overflow/` | **Overflow** | Snake. 23x15 board that rotates to stay big on portrait phones, speed tiers every 8 packets, timed bonus glitch, buffered turns (up to 3 queued, reverses rejected), swipe steering. |
 | `deadlock/` | **Deadlock** | One-on-one fighter, and the arcade's first 2-player game (shared keyboard). SYN vs ACK, best of three, hold-away blocking with chip damage, meter specials (PING projectile / SLAM dash uppercut), knockdowns, CPU with a per-round difficulty ramp — and a FINISH THEM sequence where landing the last hit throws a FATAL EXCEPTION and derezzes the loser. |
+| `airlock/` | **Airlock** | Air hockey, first to seven. True multitouch 2-player — each player drags their own mallet on one phone/tablet — or WASD vs arrows, mouse or gamepad vs the CPU. Table stands upright on portrait screens and lies sideways on desktops; substepped physics so the puck never tunnels; CPU that intercepts, strikes around pinned pucks, and ramps with your streak. |
 
 ### Built and play-tested 2026-08-17 — Flyway
 
@@ -519,3 +520,27 @@ punch = 1 chip, PING = 50 meter for 14 damage and a knockdown, round win
 and the mercy timeout ends the round without re-triggering the finish
 sequence (the first cut looped it — caught by reading, fixed before it
 shipped). Zero console errors, all three device profiles, no overflow.
+
+### Built 2026-08-18 (late night) — Airlock
+
+Air hockey, built because the arcade needed a game two people can play on
+one phone. On touch it is true multitouch: each player drags their own
+mallet with their own finger, each finger locked to its own half. On a
+desktop it is WASD against arrows, or mouse against the CPU. The table
+stands upright on portrait screens and lies on its side on landscape ones
+— the simulation always runs in upright table space and only the renderer
+(and the pointer math) rotates, so the physics cannot tell the difference.
+
+Physics: circle-circle mallet/puck collision with mallet velocity
+transfer, four fixed substeps per frame so a slammed puck cannot tunnel
+through a mallet or wall, air-table friction, a speed cap, goal mouths cut
+into the end rails. First to seven, GAME POINT warning, serve alternates
+to whoever conceded. The CPU intercepts the puck's projected path (wall
+bounces folded in), comes around behind pucks pinned on its goal line
+rather than pushing them in, and ramps with your win streak.
+
+Also fixed in the harness while shipping this: unquoted Playwright text
+selectors are substring matches, so `text=VS CPU` was clicking the help
+row reading "Mouse (vs CPU)" instead of the button and the playtest
+reported a false start. Selectors are exact-match quoted now; verified
+with a trusted-input trace that real clicks land on the real button.
