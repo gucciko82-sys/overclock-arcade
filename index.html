@@ -395,6 +395,81 @@ var GAMES = [
     }
   },
   {
+    id: 'tilt', name: 'Tilt', cat: 'action', tag: 'Pinball', isNew: true,
+    desc: 'Three neon tables — BOOT SECTOR, HEATSINK, MOTHERLODE. Multiball on every one, and a nudge that will lock your flippers if you lean on it.',
+    best: function () {
+      var s = lsJSON('tilt_v1'); if (!s || !s.highs) return null;
+      var top = 0; for (var k in s.highs) if (s.highs[k] > top) top = s.highs[k];
+      return top > 0 ? ['High score', fmtInt(top)] : null;
+    },
+    cover: function (x, w, h) {
+      /* mini table */
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 2.5; x.shadowColor = '#2d63b8'; x.shadowBlur = 6;
+      x.beginPath();
+      x.moveTo(w * 0.3, h * 0.95); x.lineTo(w * 0.3, h * 0.42);
+      x.arc(w * 0.5, h * 0.42, w * 0.2, Math.PI, 0);
+      x.lineTo(w * 0.7, h * 0.95);
+      x.stroke(); x.shadowBlur = 0;
+      /* bumpers */
+      var bs = [[0.44, 0.3], [0.56, 0.3], [0.5, 0.45]];
+      for (var i = 0; i < 3; i++) {
+        x.strokeStyle = '#7de2ff'; x.lineWidth = 2; x.shadowColor = '#7de2ff'; x.shadowBlur = 8;
+        x.beginPath(); x.arc(w * bs[i][0], h * bs[i][1], h * 0.06, 0, TAU); x.stroke();
+        x.shadowBlur = 0;
+      }
+      /* flippers */
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 6; x.lineCap = 'round';
+      x.shadowColor = '#ffcc4d'; x.shadowBlur = 8;
+      x.beginPath(); x.moveTo(w * 0.42, h * 0.82); x.lineTo(w * 0.475, h * 0.88); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.58, h * 0.82); x.lineTo(w * 0.525, h * 0.88); x.stroke();
+      x.shadowBlur = 0;
+      /* ball mid-flight + trail */
+      x.fillStyle = '#eaf6ff'; x.shadowColor = '#eaf6ff'; x.shadowBlur = 10;
+      x.beginPath(); x.arc(w * 0.55, h * 0.62, 5, 0, TAU); x.fill();
+      x.shadowBlur = 0;
+      x.fillStyle = '#ff4d4d';
+      x.font = '800 11px "Segoe UI", sans-serif'; x.textAlign = 'center';
+      x.fillText('T I L T', w * 0.5, h * 0.14);
+      /* side flair: the other two table colors */
+      x.fillStyle = '#ff9d4d'; x.fillRect(w * 0.12, h * 0.3, 4, h * 0.4);
+      x.fillStyle = '#8effc1'; x.fillRect(w * 0.86, h * 0.3, 4, h * 0.4);
+    }
+  },
+  {
+    id: 'solitaire', name: 'Solitaire', cat: 'puzzle', tag: 'Cards', isNew: true,
+    desc: 'Klondike on neon felt. Tap a card and it goes somewhere sensible, drag it if you disagree — unlimited undo and an auto-finish.',
+    best: function () { var s = lsJSON('solitaire_v1'); return s && s.wins > 0 ? ['Wins', fmtInt(s.wins)] : null; },
+    cover: function (x, w, h) {
+      function card(cx, cy, rot, face, red, txt) {
+        x.save(); x.translate(cx, cy); x.rotate(rot);
+        x.beginPath(); x.roundRect(-16, -22, 32, 44, 4);
+        if (face) {
+          x.fillStyle = '#eef3ff'; x.fill();
+          x.strokeStyle = 'rgba(20,30,60,0.5)'; x.lineWidth = 1; x.stroke();
+          x.fillStyle = red ? '#d8384f' : '#1b2340';
+          x.font = '800 12px "Segoe UI", sans-serif'; x.textAlign = 'left';
+          x.fillText(txt, -12, -8);
+          x.font = '600 16px "Segoe UI", sans-serif'; x.textAlign = 'center';
+          x.fillText(red ? '♥' : '♠', 0, 14);
+        } else {
+          x.fillStyle = '#182a55'; x.fill();
+          x.strokeStyle = 'rgba(125,226,255,0.5)'; x.lineWidth = 1.2; x.stroke();
+          x.strokeStyle = 'rgba(125,226,255,0.25)';
+          x.beginPath(); x.roundRect(-12, -18, 24, 36, 3); x.stroke();
+        }
+        x.restore();
+      }
+      card(w * 0.18, h * 0.5, -0.14, false);
+      card(w * 0.34, h * 0.52, -0.05, true, true, 'Q');
+      card(w * 0.5, h * 0.5, 0.03, true, false, 'K');
+      card(w * 0.66, h * 0.52, 0.1, true, true, 'A');
+      card(w * 0.82, h * 0.5, 0.18, false);
+      x.fillStyle = 'rgba(255,204,77,0.8)';
+      x.font = '800 9px "Segoe UI", sans-serif'; x.textAlign = 'center';
+      x.fillText('K L O N D I K E', w * 0.5, h * 0.13);
+    }
+  },
+  {
     id: 'overdrive', name: 'Overdrive', cat: 'racing', tag: 'Taxi', isNew: true,
     desc: 'A gold cab in a neon city. Riders wave you down, every delivery buys back clock, and CRAZY dropoffs pay tips. Built for Amber.',
     best: function () { var s = lsJSON('overdrive_v1'); return s && s.best > 0 ? ['Best shift', '$' + fmtInt(s.best)] : null; },

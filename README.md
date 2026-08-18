@@ -35,6 +35,8 @@ from the Vercel dashboard whenever.
 | `overflow/` | **Overflow** | Snake. 23x15 board that rotates to stay big on portrait phones, speed tiers every 8 packets, timed bonus glitch, buffered turns (up to 3 queued, reverses rejected), swipe steering. |
 | `deadlock/` | **Deadlock** | One-on-one fighter, and the arcade's first 2-player game (shared keyboard). SYN vs ACK, best of three, hold-away blocking with chip damage, meter specials (PING projectile / SLAM dash uppercut), knockdowns, CPU with a per-round difficulty ramp — and a FINISH THEM sequence where landing the last hit throws a FATAL EXCEPTION and derezzes the loser. |
 | `airlock/` | **Airlock** | Air hockey, first to seven. True multitouch 2-player — each player drags their own mallet on one phone/tablet — or WASD vs arrows, mouse or gamepad vs the CPU. Table stands upright on portrait screens and lies sideways on desktops; substepped physics so the puck never tunnels; CPU that intercepts, strikes around pinned pucks, and ramps with your streak. |
+| `tilt/` | **Tilt** | Pinball, three tables: BOOT SECTOR (bumper triangle, left target bank), HEATSINK (bumper diamond, V-baffle fins, right bank), MOTHERLODE (crown bumper, centre island vault, horizontal bank). Segment physics at five substeps, flippers that impart real rotational velocity, slingshots, ball saver, drop-target multiball per table, TILT/HEAT/RAM rollover letters for bonus multipliers, and a three-nudge tilt that kills the flippers. Per-table high scores. |
+| `solitaire/` | **Solitaire** | Klondike on neon felt, procedurally drawn cards. Draw-1 or draw-3, tap-to-auto-move or full drag-and-drop (multi-card stacks), unlimited undo via state snapshots, flip scoring, an AUTO button that plays the endgame once everything is face up, and a bouncing-card win cascade. |
 | `overdrive/` | **Overdrive** | Crazy Taxi-style open city, built for Amber. Procedural 8x8-block neon city with 2.5D parallax rooftops and lit windows, drift handbrake physics with skid marks, traffic, riders who wave from the curb, timed fares with CRAZY/GREAT/OK ratings and tips, clock extensions per delivery, oscillator engine that pitches with speed. |
 
 ### Built and play-tested 2026-08-17 — Flyway
@@ -545,6 +547,34 @@ selectors are substring matches, so `text=VS CPU` was clicking the help
 row reading "Mouse (vs CPU)" instead of the button and the playtest
 reported a false start. Selectors are exact-match quoted now; verified
 with a trusted-input trace that real clicks land on the real button.
+
+### Built 2026-08-18 (small hours) — Tilt and Solitaire
+
+**Tilt** — pinball, and on request it grew from one table to three before it
+ever shipped. Segment-based collision (walls and slingshots as line
+segments, bumpers as circles, targets as boxes with per-table kick
+directions), five fixed substeps per frame so the ball never tunnels, and
+flippers modelled as rotating capsules whose surface velocity at the
+contact point is what launches the ball — flip timing genuinely matters.
+Three tables on one physics engine: BOOT SECTOR (cyan, bumper triangle,
+left bank), HEATSINK (orange, four-bumper diamond, V-baffle fins, right
+bank), MOTHERLODE (green, crown bumper over a walled island vault,
+horizontal target bank that kicks upward). Every table has its own
+multiball name, rollover letters, and saved high score. Ball saver,
+slingshot kicks, and a nudge system: three nudges in one ball and the
+machine TILTs — flippers dead until you drain, as is right and proper.
+
+**Solitaire** — Klondike for the family crowd. Procedurally drawn cards
+(no images), draw-1 or draw-3 chosen at deal, tap a card to send it
+somewhere sensible or drag it (whole stacks move together), unlimited
+undo implemented as full-state snapshots, and once the stock is empty and
+every card is face up an AUTO button appears and plays the endgame with a
+satisfying tick-tick-tick. Wins and best time persist. The win screen is
+preceded by the obligatory bouncing-card cascade.
+
+Also taught the playtest harness that a card game's canvas is
+legitimately still between moves — a `staticOk` flag skips the
+animation check that every action game must still pass.
 
 ### Built 2026-08-18 (later that night) — Overdrive, for Amber
 
