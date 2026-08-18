@@ -35,6 +35,7 @@ from the Vercel dashboard whenever.
 | `overflow/` | **Overflow** | Snake. 23x15 board that rotates to stay big on portrait phones, speed tiers every 8 packets, timed bonus glitch, buffered turns (up to 3 queued, reverses rejected), swipe steering. |
 | `deadlock/` | **Deadlock** | One-on-one fighter, and the arcade's first 2-player game (shared keyboard). SYN vs ACK, best of three, hold-away blocking with chip damage, meter specials (PING projectile / SLAM dash uppercut), knockdowns, CPU with a per-round difficulty ramp — and a FINISH THEM sequence where landing the last hit throws a FATAL EXCEPTION and derezzes the loser. |
 | `airlock/` | **Airlock** | Air hockey, first to seven. True multitouch 2-player — each player drags their own mallet on one phone/tablet — or WASD vs arrows, mouse or gamepad vs the CPU. Table stands upright on portrait screens and lies sideways on desktops; substepped physics so the puck never tunnels; CPU that intercepts, strikes around pinned pucks, and ramps with your streak. |
+| `overdrive/` | **Overdrive** | Crazy Taxi-style open city, built for Amber. Procedural 8x8-block neon city with 2.5D parallax rooftops and lit windows, drift handbrake physics with skid marks, traffic, riders who wave from the curb, timed fares with CRAZY/GREAT/OK ratings and tips, clock extensions per delivery, oscillator engine that pitches with speed. |
 
 ### Built and play-tested 2026-08-17 — Flyway
 
@@ -544,3 +545,35 @@ selectors are substring matches, so `text=VS CPU` was clicking the help
 row reading "Mouse (vs CPU)" instead of the button and the playtest
 reported a false start. Selectors are exact-match quoted now; verified
 with a trusted-input trace that real clicks land on the real button.
+
+### Built 2026-08-18 (later that night) — Overdrive, for Amber
+
+The Crazy Taxi slot, requested by name for Amber. A gold checker cab loose
+in a procedurally generated 8x8-block neon city: roads on a grid, blocks
+subdivided deterministically into one-to-four buildings (same city every
+run — landmarks stay learnable), parks with tree clusters, named districts
+(CACHE HEIGHTS, HEAP SIDE, PIPELINE ROW...) that fares actually quote.
+
+The Crazy Taxi loop: riders glow green on the curb and wave; stop beside
+one and they board with a destination, a fare, and a timer. A gold arrow
+orbits the cab pointing at the beacon with live distance. Deliver with
+more than half the timer left and it rates CRAZY (+60% tip), over a fifth
+GREAT (+25%), else OK — and every delivery buys clock back, so a good
+run snowballs. Dawdle and the fare bails, no pay. Global clock hits zero,
+shift over, best earnings saved.
+
+Feel: arcade drift physics — grip kills sideways velocity unless the
+handbrake loosens it, skid marks accumulate and fade, walls are slid
+along rather than face-planted (axis-separated collision), traffic
+shunts you and honks, and the engine is a live sawtooth through a lowpass
+whose pitch and gain follow your actual speed. Buildings render 2.5D:
+roofs lean away from the camera by their height, walls fill the gap,
+lit windows scatter deterministically.
+
+Two bugs out of the build, one by reading and one by screenshot: a junk
+line doubled the sideways-grip correction on one axis (read), and the
+roof-parallax offset was scaled twice, flinging rooftops hundreds of
+pixels off their buildings so half the city read as black voids
+(screenshot). Verified by scripted play: driving, wall sliding, pickup,
+delivery with clock bonus, fare bail, and time-up ending — zero console
+errors, all three device profiles.
