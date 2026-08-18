@@ -634,3 +634,32 @@ pixels off their buildings so half the city read as black voids
 (screenshot). Verified by scripted play: driving, wall sliding, pickup,
 delivery with clock bonus, fare bail, and time-up ending — zero console
 errors, all three device profiles.
+
+### iPhone placement audit 2026-08-19 — all 22 games, both orientations
+
+New tool: `.tools/game-playtest/ui-audit.js` — loads every game in WebKit
+iPhone portrait AND landscape, geometry-checks every visible control
+(on-screen, ≥40px, no pairwise overlap) at menu and in play, and
+screenshots both states for eyeballing the canvas-drawn HUD.
+
+All twelve 2026-08-18/19 games passed untouched. Five fixes in the older
+files, all found by the audit:
+
+- **Voidrunner:** touch buttons (BOOST/FIRE) showed under the title menu,
+  overlapping LAUNCH — touch UI now gated behind a `playing` class like
+  every later game. Menu keys list hidden on short screens; overlay made
+  scrollable as backstop.
+- **Deep Run:** landscape menu buried LAUNCH below the fold (usable
+  landscape height on an iPhone is ~342px, not 390). Keys/legend hidden
+  and paddings tightened under `max-height: 620px`; LAUNCH now sits 58px
+  clear.
+- **Starfall:** 38px icon buttons → 44px.
+- **Firewall:** 36px-wide speed/pause/mute → 44px, stepping down to 40px
+  under 420px width so the row never clips the edge.
+- **Deadlock:** the P2 health bar and name ran under the mute/pause
+  buttons; bars now clear both the button zone and the centre clock at
+  every width.
+
+Also new: `GAME-RULES.md` — the build law distilled from all 22 games
+(skeleton, loop, layout zones, audio, saves, feel, verification pipeline,
+and the do-not-relearn trap list). Read it before starting game 23.

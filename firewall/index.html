@@ -64,7 +64,8 @@
     min-width:44px;height:44px;
     display:inline-flex;align-items:center;justify-content:center;
   }
-  .tbtn.small{min-width:36px;height:44px;font-size:12px;}
+  .tbtn.small{min-width:44px;height:44px;font-size:12px;}
+  @media (max-width: 420px){ .tbtn.small{min-width:40px;} }
   .tbtn.on{background:rgba(255,204,77,0.22);box-shadow:0 0 10px rgba(255,204,77,0.3) inset;}
   .tbtn.off{color:rgba(255,255,255,0.32);border-color:rgba(255,255,255,0.16);}
   .tbtn:active{background:rgba(255,204,77,0.3);}

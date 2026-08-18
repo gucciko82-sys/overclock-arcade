@@ -168,6 +168,15 @@
   }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .legend .sw { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  /* landscape phones: the card must fit without burying the LAUNCH button */
+  @media (max-height: 620px) {
+    .keys, .legend { display: none; }
+    .card h1 { font-size: 30px; }
+    .card h2 { margin-bottom: 6px; }
+    .card .sub { margin-bottom: 8px; }
+    .card p { margin: 4px 0 8px; }
+    .stat, .beststat { padding: 6px 8px; }
+  }
   .note { margin-top: 14px; font-size: 12px; color: var(--hud-dim); min-height: 16px; line-height: 1.5; }
   .newbest { color: var(--accent); font-weight: 800; letter-spacing: 0.2em; font-size: 12px; margin-bottom: 10px; }
 </style>

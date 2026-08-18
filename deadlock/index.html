@@ -1099,10 +1099,12 @@ function drawStage(t) {
 }
 
 function drawHUD(t) {
-  var w = view.w, pad2 = 12, barW = w * 0.36, barH = 14, topY = 16;
-  /* health bars: P1 left, P2 right, converging centre */
+  var w = view.w, pad2 = 12, barH = 14, topY = 16;
+  /* health bars: P1 left, P2 right converging centre. The right bar ends
+     before the top-right icon buttons (that 100x52 zone is reserved). */
+  var barW = Math.min(w * 0.36, w / 2 - 160);
   function bar(f, left) {
-    var x0 = left ? pad2 : w - pad2 - barW;
+    var x0 = left ? pad2 : w - 108 - barW;
     ctx.fillStyle = 'rgba(255,255,255,0.1)';
     ctx.fillRect(x0, topY, barW, barH);
     var k = clamp(f.hp / f.maxhp, 0, 1);
