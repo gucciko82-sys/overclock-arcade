@@ -45,6 +45,8 @@ from the Vercel dashboard whenever.
 | `scope/` | **Scope** | The hunting game, and the arcade's first fully naturalistic one — no neon, just first light. Deer (does and 4-to-10-point bucks) and turkey (hens and strutting toms) drift into a misty dawn meadow; five tags, a 2.5-hour morning compressed into 150 seconds, a magnified scope lens rendered by drawing the whole scene twice, and breath you hold to steady the sway. Calm animals score double — wait for the feed. Miss and the whole field bolts. Saves best morning and best buck. |
 | `cast/` | **Cast** | The fishing game — you cast a line, code casts a type. One evening on a golden-hour pond, naturalistic like Scope: bluegill, crappie, largemouth bass and channel cats, each holding its own depth band, each with real weight ranges and its own fight. One button does everything — hold to charge the cast, tap to set the hook when the bobber dips, hold to reel and let go before the tension bar snaps the line. Bass jump, cats bulldog, the pond occasionally hands you a boot. Saves best evening (total pounds) and best fish. |
 | `smash/` | **Smash** | Monster truck freestyle ("smashing the stack" is a real term; so is smashing a minivan). Seventy-five seconds under the floodlights: two-wheel-plus-chassis physics with real suspension, eleven junk cars and a bus that crush flat in three stages each, three dirt ramps, backflip/frontflip detection off cumulative air rotation, airtime points, a combo multiplier up to x5, and a crowd that bobs harder the hotter your chain gets. Three rollovers and the show is over. |
+| `chip/` | **Chip** | Mini golf (a silicon chip; a chip shot). Nine holes, par 28: doglegs, bunkers, twin ponds with a causeway, stone bumpers, offset gates, an island green, and TAPEOUT which combines the lot. Hold to charge a ping-pong meter, release to strike; adaptive-substepped physics so the ball never tunnels a rail, sand at 4.2x friction, and a cup that lips out if you arrive too hot. Scorecard with birdies and bogeys; best round saves. Board rotates 90 degrees in landscape so the whole hole fills a phone held either way. |
+| `patch/` | **Patch** | A garden patch; a software patch. Twelve plots of warm dirt and five crops — carrot, tomato, sunflower, corn, pumpkin — each drawn distinctly through five growth stages. One tap does whatever the plot needs next: till, plant, water, harvest. Baskets sell for coins, coins buy seeds, earnings unlock the pricier ones. A sun arcs through the day, rain showers water the whole patch for free, and bees and butterflies shelter when it rains. No timer, no enemies, nothing dies — thirsty plants simply wait. The garden is saved and still there when you come back. |
 | `botnet/` | **Botnet** | Fixed shooter, Galaga school. Squads swoop in on bezier entry paths, settle into a formation that breathes and sways as one organism, then peel off in dive runs that fire aimed shots — divers are worth double. Four bot types (drone/worm/brute/harvester), kill-chain bonus, SPAM envelope bonus ship, accuracy bonus per wave, slow-mo on harvester kills, extra life every 15,000 bits. Drag-to-fly with autofire on phones. |
 
 ### Built and play-tested 2026-08-17 — Flyway
@@ -892,3 +894,46 @@ Scripted play beat: driving, three crush stages on a junker, a full
 flatten, a launched backflip landing for points, the combo chain inside
 its window, three rollovers ending the show, the timer ending it too,
 saves, and pause.
+
+### Built and play-tested 2026-08-19 — Chip and Patch (games 28 and 29)
+
+Two games built in parallel by separate builders, each confined to its own
+folder, then re-verified and integrated here. The hub also grew proper
+**Sports** and **Outdoors** shelves — at 27 games "action" had become a
+junk drawer.
+
+**Chip** is nine holes of putt-putt on a naturalistic course: mowed
+stripes, weathered rails, sand that reads as sand and water that reads as
+water. The board rotates 90 degrees in landscape so a phone held either
+way gets the whole hole.
+
+**Patch** is the second toy on the Kids shelf beside Prom — a cottage
+garden that cannot be lost, only tended.
+
+Bugs worth recording, all found by playing or looking, never by reading:
+
+- **Chip's flagstick was drawn in world space**, so the moment the board
+  rotated for landscape it lay flat across the green and read as a red
+  hook in the grass. Screen space now, always upright.
+- **Chip's lip-out was fake.** Per-substep damping bled a 900 u/s ball
+  below the sink threshold *while it was still over the hole*, so hot
+  balls dropped anyway. A latched flag now lets entry speed decide the
+  whole pass.
+- **Chip indexed `HOLES[9]` after the ninth hole-out** and threw every
+  frame behind the scorecard — invisible in source, an error flood on
+  screen. Verified fixed here by playing a full round out: nine sinks,
+  scorecard, save, zero errors.
+- **Patch's tilled soil read as wooden decking** (aligned full-width
+  furrows), its fence posts ran like scaffolding through the beds, and
+  its butterflies vanished at the bottom of every wing flap.
+
+And one lesson about verification itself: the integrator's first
+containment test for Chip reported a clean pass over 18,000 frames while
+also flooding 18,000 canvas errors. Both numbers were wrong — the test
+called the exposed `place()` helper with no arguments, wiping the ball's
+position to `undefined`, so every `legal()` check was comparing NaN and
+trivially passing. Re-run against the API correctly (`setHole` → `aimAt`
+→ `strike`), it is a genuine pass: 108 full-power shots across all nine
+holes, 8,166 frames, never once through a rail, zero NaN, zero errors.
+**A green test can be green for the wrong reason. Check that your test
+touched what you think it touched.**

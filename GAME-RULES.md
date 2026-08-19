@@ -153,3 +153,24 @@ Score currencies: bits, credits, cash. Death screens get themed headlines
   move; reshuffle preserving the multiset when moves run out.
 - An endgame the bot can't reach isn't tested (Firewall's unwinnable boss
   and Deadlock's re-triggering FINISH THEM were both endgame-only bugs).
+
+---
+
+## 11. BUILDING SEVERAL GAMES AT ONCE
+
+Parallel builds work — one game per folder is a clean split, since the only
+shared files are the hub, the README and the two harness files. Rules that
+made it work, and one that had to be learned:
+
+- **The builder writes ONLY `29_games/<id>/index.html`.** The hub card,
+  README row, `playtest.js` and `ui-audit.js` registrations are the
+  integrator's job. Two builders editing the hub array is a merge fight.
+- **Give every builder its own scratchpad subfolder.** Three builders
+  sharing one scratch directory silently overwrote each other's
+  `syntax.js` / `play.js`, and one syntax gate validated a *different
+  game's* file and passed. A green check on the wrong file is worse than
+  a red one. `scratchpad/<game>test/` per builder.
+- **The integrator re-verifies every game itself** — syntax gate, the
+  3-profile matrix, `ui-audit.js`, and its own look at the screenshots.
+  A builder's report is a claim, not evidence; the point of the second
+  pass is that it cannot inherit the first pass's mistakes.
