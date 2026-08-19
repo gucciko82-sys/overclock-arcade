@@ -945,6 +945,53 @@ var GAMES = [
       x.beginPath(); x.arc(10, -1.4, 1.4, 0, 7); x.fill();
       x.restore();
     }
+  },
+  {
+    id: 'smash', name: 'Smash', cat: 'action', tag: 'Monster Truck', isNew: true,
+    desc: 'Freestyle night at the fairgrounds. Crush the junk cars, fly the ramps, throw backflips, keep the shiny side up — the crowd is watching.',
+    best: function () { var s = lsJSON('smash_v1'); return s && s.high > 0 ? ['Best freestyle', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      /* stadium night */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#14161c'); g.addColorStop(0.5, '#2e3038'); g.addColorStop(0.62, '#5a4834'); g.addColorStop(1, '#3c3022');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* crowd rows */
+      for (var r2 = 0; r2 < 3; r2++) {
+        x.fillStyle = ['#8a7a6a', '#6a7a8a', '#7a6a7a'][r2];
+        for (var cx2 = 4 + r2 * 3; cx2 < w; cx2 += 11) x.fillRect(cx2, h * (0.2 + r2 * 0.1), 2.4, 2.4);
+      }
+      /* flattened car + fresh car */
+      x.fillStyle = '#3a5a7a';
+      x.fillRect(w * 0.52, h * 0.82, 26, 5);
+      x.fillStyle = '#7a3a34';
+      x.beginPath();
+      x.moveTo(w * 0.72, h * 0.87); x.lineTo(w * 0.73, h * 0.76); x.lineTo(w * 0.8, h * 0.73);
+      x.lineTo(w * 0.86, h * 0.76); x.lineTo(w * 0.87, h * 0.87);
+      x.closePath(); x.fill();
+      /* the truck mid-air, nose up */
+      x.save();
+      x.translate(w * 0.36, h * 0.5); x.rotate(-0.45);
+      x.fillStyle = '#1c1e24';
+      x.beginPath(); x.arc(-14, 8, 9, 0, 7); x.fill();
+      x.beginPath(); x.arc(14, 8, 9, 0, 7); x.fill();
+      x.fillStyle = '#2e323a';
+      x.beginPath(); x.arc(-14, 8, 4, 0, 7); x.fill();
+      x.beginPath(); x.arc(14, 8, 4, 0, 7); x.fill();
+      x.fillStyle = '#8a2c26';
+      x.beginPath();
+      x.moveTo(-20, -2); x.lineTo(-19, -8); x.lineTo(2, -9); x.lineTo(5, -15); x.lineTo(14, -15);
+      x.lineTo(17, -8); x.lineTo(20, -7); x.lineTo(20, -2);
+      x.closePath(); x.fill();
+      x.fillStyle = '#e8b84a';
+      x.beginPath();
+      x.moveTo(-20, -2);
+      for (var fl = 0; fl <= 4; fl++) x.lineTo(-20 + 10 * fl, fl % 2 ? -5 : -2);
+      x.closePath(); x.fill();
+      x.restore();
+      /* floodlight glows */
+      x.fillStyle = 'rgba(240,230,200,0.85)';
+      x.fillRect(w * 0.16, h * 0.08, 12, 4); x.fillRect(w * 0.7, h * 0.08, 12, 4);
+    }
   }
 ];
 

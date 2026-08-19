@@ -44,6 +44,7 @@ from the Vercel dashboard whenever.
 | `prom/` | **Prom** | The princess game (and the barbie game) — Princess of the ROM kingdom. A dress-up studio (5 skin tones, 4 hairstyles x 8 colours, 4 crowns, 4 gown silhouettes x 10 colours, sparkles, shoes, extras) and a royal-ball finale with a waltz, a spotlight walk, twirls, fireworks and an adoring court. No timers, no losing. Counts royal debuts. |
 | `scope/` | **Scope** | The hunting game, and the arcade's first fully naturalistic one — no neon, just first light. Deer (does and 4-to-10-point bucks) and turkey (hens and strutting toms) drift into a misty dawn meadow; five tags, a 2.5-hour morning compressed into 150 seconds, a magnified scope lens rendered by drawing the whole scene twice, and breath you hold to steady the sway. Calm animals score double — wait for the feed. Miss and the whole field bolts. Saves best morning and best buck. |
 | `cast/` | **Cast** | The fishing game — you cast a line, code casts a type. One evening on a golden-hour pond, naturalistic like Scope: bluegill, crappie, largemouth bass and channel cats, each holding its own depth band, each with real weight ranges and its own fight. One button does everything — hold to charge the cast, tap to set the hook when the bobber dips, hold to reel and let go before the tension bar snaps the line. Bass jump, cats bulldog, the pond occasionally hands you a boot. Saves best evening (total pounds) and best fish. |
+| `smash/` | **Smash** | Monster truck freestyle ("smashing the stack" is a real term; so is smashing a minivan). Seventy-five seconds under the floodlights: two-wheel-plus-chassis physics with real suspension, eleven junk cars and a bus that crush flat in three stages each, three dirt ramps, backflip/frontflip detection off cumulative air rotation, airtime points, a combo multiplier up to x5, and a crowd that bobs harder the hotter your chain gets. Three rollovers and the show is over. |
 | `botnet/` | **Botnet** | Fixed shooter, Galaga school. Squads swoop in on bezier entry paths, settle into a formation that breathes and sways as one organism, then peel off in dive runs that fire aimed shots — divers are worth double. Four bot types (drone/worm/brute/harvester), kill-chain bonus, SPAM envelope bonus ship, accuracy bonus per wave, slow-mo on harvester kills, extra life every 15,000 bits. Drag-to-fly with autofire on phones. |
 
 ### Built and play-tested 2026-08-17 — Flyway
@@ -858,3 +859,36 @@ boot scoring nothing, dusk ending the evening into the tally, and both
 saves. One rig lesson repeated from Quadcore: a bite can only exist while
 the rod is soaking — the first snap/boot tests forced bites on an idle
 rod and hookset() rightly refused.
+
+### Built and play-tested 2026-08-19 — Smash (game 27)
+
+"A monster truck game." SMASH — smashing the stack, smashing a minivan.
+Freestyle night in a stadium: crowd banks that bob harder when your
+combo is hot, floodlight towers with cones, a dirt floor with tire ruts,
+and a truck that is mostly suspension: two sprung wheels under a rigid
+chassis, fixed-step physics at 120Hz, gas leans back in the air and
+brake noses down, exactly like Gravity Grip taught us.
+
+Three bugs found by script and trace, none by reading:
+- **A leftover `this._ = 0` line threw on every physics step** under
+  strict mode (plain-call `this` is undefined) — the truck sat frozen at
+  the start line while the page reported a healthy title screen.
+- **The truck self-righted from fully upside down.** Two causes, found
+  by tracing the angle over time: the auto-level torque had no upright
+  gate, and — the good one — the suspension torque used the upright
+  lever sign (`force * wheelSide`), so with the truck inverted the
+  contact force torqued it back over the top. The fix is physics: torque
+  about the REAL lever arm, `force * (contactX - centerX)`. A wrong sign
+  convention turned the suspension into a self-righting motor.
+- **The wheels smeared diagonally whenever the truck rotated** — they
+  were drawn inside the rotated body frame using world-vertical offsets.
+  Wheels render in world space now, hanging off the chassis side even
+  mid-flip.
+- **The rollover timer reset on every spring bounce** — an inverted
+  truck bouncing on its own wheels never accumulated the 0.7s. The
+  timer now decays instead of resetting.
+
+Scripted play beat: driving, three crush stages on a junker, a full
+flatten, a launched backflip landing for points, the combo chain inside
+its window, three rollovers ending the show, the timer ending it too,
+saves, and pause.
