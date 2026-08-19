@@ -1137,6 +1137,178 @@ var GAMES = [
       x.fillStyle = '#f8f8f4';
       x.beginPath(); x.arc(w * 0.78, h * 0.56, 3.4, 0, 7); x.fill();
     }
+  },
+  {
+    id: 'cache', name: 'Cache', cat: 'kids', tag: 'Memory', isNew: true,
+    desc: 'Cache memory, and a memory game. Turn two cards, keep the pair, clear the board — three sizes, twelve symbols, and no way to lose.',
+    best: function () {
+      var s = lsJSON('cache_v1');
+      if (!s) return null;
+      var n = s.normal && s.normal.moves;
+      return n > 0 ? ['Normal best', n + ' moves'] : null;
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      x.strokeStyle = 'rgba(120,150,220,0.09)'; x.lineWidth = 1;
+      for (var g3 = 0; g3 < w; g3 += 16) { x.beginPath(); x.moveTo(g3, 0); x.lineTo(g3, h); x.stroke(); }
+      /* six cards: four face-down, two matched face-up */
+      var cw = w * 0.2, ch = h * 0.3;
+      function card(cx, cy, up, draw, col) {
+        x.fillStyle = up ? 'rgba(30,42,78,0.95)' : '#16204a';
+        x.strokeStyle = up ? col : 'rgba(120,150,220,0.35)';
+        x.lineWidth = up ? 2 : 1.2;
+        x.beginPath(); x.roundRect(cx - cw / 2, cy - ch / 2, cw, ch, 6); x.fill(); x.stroke();
+        if (up) { x.save(); x.translate(cx, cy); x.strokeStyle = col; x.lineWidth = 2.2; x.shadowColor = col; x.shadowBlur = 8; draw(x); x.restore(); }
+        else {
+          x.strokeStyle = 'rgba(120,150,220,0.28)'; x.lineWidth = 1;
+          x.beginPath(); x.moveTo(cx - cw * 0.2, cy - ch * 0.15); x.lineTo(cx + cw * 0.1, cy - ch * 0.15); x.lineTo(cx + cw * 0.1, cy + ch * 0.2); x.stroke();
+        }
+      }
+      /* gold star pair, matched */
+      function star(g) { g.beginPath(); for (var i2 = 0; i2 < 10; i2++) { var a2 = i2 / 10 * 7 - 1.57, rr = i2 % 2 ? 4 : 9; g[i2 ? 'lineTo' : 'moveTo'](Math.cos(a2) * rr, Math.sin(a2) * rr); } g.closePath(); g.stroke(); }
+      function bolt(g) { g.beginPath(); g.moveTo(3, -9); g.lineTo(-4, 1); g.lineTo(1, 1); g.lineTo(-3, 9); g.lineTo(5, -1); g.lineTo(0, -1); g.closePath(); g.stroke(); }
+      card(w * 0.22, h * 0.3, true, star, '#e8b84a');
+      card(w * 0.5, h * 0.3, false);
+      card(w * 0.78, h * 0.3, true, star, '#e8b84a');
+      card(w * 0.22, h * 0.72, false);
+      card(w * 0.5, h * 0.72, true, bolt, '#7de2ff');
+      card(w * 0.78, h * 0.72, false);
+    }
+  },
+  {
+    id: 'parse', name: 'Parse', cat: 'puzzle', tag: 'Word Game', isNew: true,
+    desc: 'Parsing a string, and puzzling out a word. Five letters, six guesses — gold for right-and-in-place, blue for right-but-wrong-slot.',
+    best: function () {
+      var s = lsJSON('parse_v1');
+      if (!s || !s.played) return null;
+      return ['Streak', (s.streak || 0) + ' · best ' + (s.best || 0)];
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      var word = ['P', 'A', 'R', 'S', 'E'];
+      var st = ['absent', 'present', 'exact', 'absent', 'exact'];
+      var tw = w * 0.16, th = tw, x0 = w * 0.5 - (tw * 5 + 8 * 4) / 2;
+      for (var i3 = 0; i3 < 5; i3++) {
+        var tx = x0 + i3 * (tw + 8), ty = h * 0.34;
+        if (st[i3] === 'exact') { x.fillStyle = '#e8b84a'; x.strokeStyle = '#f5d98a'; x.lineWidth = 2.4; }
+        else if (st[i3] === 'present') { x.fillStyle = '#3d7fd0'; x.strokeStyle = '#8ec2ff'; x.lineWidth = 2.4; }
+        else { x.fillStyle = '#26304e'; x.strokeStyle = 'rgba(140,165,215,0.3)'; x.lineWidth = 1.2; }
+        x.beginPath(); x.roundRect(tx, ty, tw, th, 5); x.fill();
+        if (st[i3] === 'present') { x.save(); x.setLineDash([4, 3]); x.stroke(); x.restore(); } else x.stroke();
+        /* shape markers so colour is redundant */
+        if (st[i3] === 'exact') { x.fillStyle = 'rgba(255,255,255,0.55)'; x.beginPath(); x.moveTo(tx + tw - 7, ty); x.lineTo(tx + tw, ty); x.lineTo(tx + tw, ty + 7); x.closePath(); x.fill(); }
+        if (st[i3] === 'present') { x.fillStyle = 'rgba(255,255,255,0.7)'; x.beginPath(); x.arc(tx + tw - 5, ty + 5, 2.2, 0, 7); x.fill(); }
+        x.fillStyle = st[i3] === 'absent' ? 'rgba(220,230,250,0.75)' : '#0d1430';
+        x.font = '800 ' + Math.round(tw * 0.6) + 'px "Segoe UI", sans-serif';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(word[i3], tx + tw / 2, ty + th / 2 + 1);
+      }
+      /* empty rows below */
+      x.strokeStyle = 'rgba(140,165,215,0.22)'; x.lineWidth = 1.2;
+      for (var r3 = 0; r3 < 2; r3++) for (var c4 = 0; c4 < 5; c4++) {
+        x.beginPath(); x.roundRect(x0 + c4 * (tw + 8), h * 0.34 + (r3 + 1) * (th + 7), tw, th, 5); x.stroke();
+      }
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'spare', name: 'Spare', cat: 'sports', tag: 'Bowling', isNew: true,
+    desc: 'A spare part, and a bowling spare. Ten frames down honey maple: lock your stance, your power and your hook, then watch the pins carry.',
+    best: function () { var s = lsJSON('spare_v1'); return s && s.best > 0 ? ['Best game', fmtInt(s.best)] : null; },
+    cover: function (x, w, h) {
+      x.fillStyle = '#171208'; x.fillRect(0, 0, w, h);
+      /* lane in perspective */
+      x.fillStyle = '#c9944e';
+      x.beginPath();
+      x.moveTo(w * 0.5 - w * 0.1, h * 0.22); x.lineTo(w * 0.5 + w * 0.1, h * 0.22);
+      x.lineTo(w * 0.5 + w * 0.42, h); x.lineTo(w * 0.5 - w * 0.42, h);
+      x.closePath(); x.fill();
+      /* boards */
+      x.strokeStyle = 'rgba(90,60,26,0.35)'; x.lineWidth = 1;
+      for (var bd = -4; bd <= 4; bd++) {
+        x.beginPath();
+        x.moveTo(w * 0.5 + bd * w * 0.024, h * 0.22);
+        x.lineTo(w * 0.5 + bd * w * 0.1, h);
+        x.stroke();
+      }
+      /* gutters */
+      x.fillStyle = '#20170c';
+      x.beginPath(); x.moveTo(w * 0.5 - w * 0.1, h * 0.22); x.lineTo(w * 0.5 - w * 0.42, h); x.lineTo(w * 0.5 - w * 0.55, h); x.lineTo(w * 0.5 - w * 0.14, h * 0.22); x.closePath(); x.fill();
+      x.beginPath(); x.moveTo(w * 0.5 + w * 0.1, h * 0.22); x.lineTo(w * 0.5 + w * 0.42, h); x.lineTo(w * 0.5 + w * 0.55, h); x.lineTo(w * 0.5 + w * 0.14, h * 0.22); x.closePath(); x.fill();
+      /* arrows */
+      x.fillStyle = 'rgba(120,80,34,0.75)';
+      for (var ar = -3; ar <= 3; ar++) {
+        var axp = w * 0.5 + ar * w * 0.035, ayp = h * 0.55 + Math.abs(ar) * h * 0.03;
+        x.beginPath(); x.moveTo(axp, ayp - 7); x.lineTo(axp + 4, ayp + 4); x.lineTo(axp - 4, ayp + 4); x.closePath(); x.fill();
+      }
+      /* pins */
+      var rows = [[0], [-1, 1], [-2, 0, 2], [-3, -1, 1, 3]];
+      for (var r4 = 0; r4 < rows.length; r4++) {
+        for (var pi = 0; pi < rows[r4].length; pi++) {
+          var px2 = w * 0.5 + rows[r4][pi] * w * 0.022, py2 = h * 0.2 - r4 * h * 0.012 + h * 0.02;
+          x.fillStyle = '#f4efe2';
+          x.beginPath(); x.ellipse(px2, py2, 3.6, 7, 0, 0, 7); x.fill();
+          x.fillStyle = '#c0392b';
+          x.fillRect(px2 - 2.6, py2 - 2, 5.2, 1.6);
+        }
+      }
+      /* the ball */
+      var bg2 = x.createRadialGradient(w * 0.44, h * 0.76, 2, w * 0.46, h * 0.8, 22);
+      bg2.addColorStop(0, '#9c3b4a'); bg2.addColorStop(1, '#5d1f2c');
+      x.fillStyle = bg2;
+      x.beginPath(); x.arc(w * 0.46, h * 0.8, 17, 0, 7); x.fill();
+      x.fillStyle = 'rgba(20,10,12,0.8)';
+      x.beginPath(); x.arc(w * 0.44, h * 0.75, 2.4, 0, 7); x.fill();
+      x.beginPath(); x.arc(w * 0.5, h * 0.76, 2.4, 0, 7); x.fill();
+    }
+  },
+  {
+    id: 'grind', name: 'Grind', cat: 'sports', tag: 'Skateboarding', isNew: true,
+    desc: 'Grinding a CPU, and grinding a rail. Ollie, kickflip, spin and lock into a 50-50 — chain it all into one long line, and do not bail.',
+    best: function () { var s = lsJSON('grind_v1'); return s && s.best > 0 ? ['Best run', fmtInt(s.best)] : null; },
+    cover: function (x, w, h) {
+      /* dusk sky over a concrete park */
+      var sg = x.createLinearGradient(0, 0, 0, h * 0.62);
+      sg.addColorStop(0, '#41537a'); sg.addColorStop(1, '#d99a63');
+      x.fillStyle = sg; x.fillRect(0, 0, w, h * 0.62);
+      x.fillStyle = '#3a4436';
+      for (var hl = 0; hl < 5; hl++) {
+        x.beginPath(); x.arc(w * (0.1 + hl * 0.22), h * 0.62, w * 0.13, Math.PI, 0); x.fill();
+      }
+      /* chain-link fence */
+      x.strokeStyle = 'rgba(190,200,210,0.28)'; x.lineWidth = 1;
+      for (var fx2 = 0; fx2 < w; fx2 += 7) { x.beginPath(); x.moveTo(fx2, h * 0.44); x.lineTo(fx2 + 7, h * 0.62); x.stroke(); }
+      /* concrete */
+      x.fillStyle = '#9a9a94'; x.fillRect(0, h * 0.62, w, h * 0.38);
+      x.fillStyle = 'rgba(60,60,58,0.25)';
+      for (var sp2 = 0; sp2 < 40; sp2++) x.fillRect((sp2 * 53) % w, h * 0.64 + (sp2 * 31) % (h * 0.34), 2, 2);
+      x.strokeStyle = 'rgba(70,70,68,0.4)'; x.lineWidth = 1.4;
+      x.beginPath(); x.moveTo(0, h * 0.78); x.lineTo(w, h * 0.78); x.stroke();
+      /* the rail */
+      x.strokeStyle = '#b9bec6'; x.lineWidth = 3.4;
+      x.beginPath(); x.moveTo(w * 0.12, h * 0.8); x.lineTo(w * 0.88, h * 0.8); x.stroke();
+      x.strokeStyle = '#6c7078'; x.lineWidth = 2.6;
+      x.beginPath(); x.moveTo(w * 0.2, h * 0.8); x.lineTo(w * 0.2, h * 0.93);
+      x.moveTo(w * 0.8, h * 0.8); x.lineTo(w * 0.8, h * 0.93); x.stroke();
+      /* skater locked into a grind */
+      x.save(); x.translate(w * 0.5, h * 0.8);
+      x.fillStyle = '#2b2f36';
+      x.beginPath(); x.roundRect(-17, -4, 34, 4, 2); x.fill();      /* deck */
+      x.fillStyle = '#d9a03c';
+      x.beginPath(); x.arc(-11, 1, 2.4, 0, 7); x.fill();
+      x.beginPath(); x.arc(11, 1, 2.4, 0, 7); x.fill();
+      x.fillStyle = '#3f5f8f'; x.fillRect(-5, -17, 10, 13);        /* legs/torso */
+      x.fillStyle = '#c9542f'; x.fillRect(-6, -27, 12, 11);        /* shirt */
+      x.fillStyle = '#e8c9a0';
+      x.beginPath(); x.arc(0, -32, 5, 0, 7); x.fill();             /* head */
+      x.strokeStyle = '#c9542f'; x.lineWidth = 3; x.lineCap = 'round';
+      x.beginPath(); x.moveTo(-5, -24); x.lineTo(-15, -30);
+      x.moveTo(5, -24); x.lineTo(14, -19); x.stroke();
+      x.restore();
+      /* sparks off the rail */
+      x.fillStyle = '#ffd98a';
+      for (var sk2 = 0; sk2 < 7; sk2++) x.fillRect(w * 0.5 + 14 + sk2 * 5, h * 0.8 + (sk2 % 3) * 3 - 2, 2.4, 1.6);
+    }
   }
 ];
 

@@ -48,6 +48,10 @@ from the Vercel dashboard whenever.
 | `chip/` | **Chip** | Mini golf (a silicon chip; a chip shot). Nine holes, par 28: doglegs, bunkers, twin ponds with a causeway, stone bumpers, offset gates, an island green, and TAPEOUT which combines the lot. Hold to charge a ping-pong meter, release to strike; adaptive-substepped physics so the ball never tunnels a rail, sand at 4.2x friction, and a cup that lips out if you arrive too hot. Scorecard with birdies and bogeys; best round saves. Board rotates 90 degrees in landscape so the whole hole fills a phone held either way. |
 | `patch/` | **Patch** | A garden patch; a software patch. Twelve plots of warm dirt and five crops — carrot, tomato, sunflower, corn, pumpkin — each drawn distinctly through five growth stages. One tap does whatever the plot needs next: till, plant, water, harvest. Baskets sell for coins, coins buy seeds, earnings unlock the pricier ones. A sun arcs through the day, rain showers water the whole patch for free, and bees and butterflies shelter when it rains. No timer, no enemies, nothing dies — thirsty plants simply wait. The garden is saved and still there when you come back. |
 | `pitch/` | **Pitch** | Home run derby (you pitch a ball; you pitch an idea). Side-on ballpark at golden hour: the pitcher winds up and throws one of four pitches that genuinely fly differently — fastball 0.64s at 97 mph, slider, changeup off the same arm slot, and a curve that humps and falls at 0.96s and 79 mph. One button, timed against a 155ms contact window; W/S sets the swing plane. Real drag and backspin Magnus lift, so a barrel leaves at ~102 mph and 33 degrees and carries about 400 feet. Ten outs ends the round; the camera follows the ball out and reveals the 375-foot wall so you can see what it has to beat. |
+| `spare/` | **Spare** | A spare part; a bowling spare. Ten frames down a honey-maple lane with 39 drawn boards, the arrows in their staggered V, and recessed gutters. One button locks stance, then power, then hook; an oil pattern keeps the lane slick to 20 ft and dry past 44, so the hook bites late. Ten colliding pin bodies where a toppling pin sweeps its neighbours — which is where strike carry actually comes from. Real ten-pin scoring: a perfect game is exactly 300. |
+| `grind/` | **Grind** | Grinding a CPU; grinding a rail. A concrete park at dusk — quarter pipes, a funbox, flat bar, stair set with handrail, ledge and bowl. Ollie, kickflip, heelflip, shove-it, 180 through 720 spins, five grind types, and manuals on an unstable balance meter. Everything chains into one line while you stay off the ground, banked on a clean landing and lost entirely on a bail. 90 seconds a run. |
+| `cache/` | **Cache** | Cache memory; a memory game. Concentration with twelve procedurally drawn symbols — chip, resistor, capacitor, diode, cell, trace, gear, bolt, magnet, key, star, moon — all distinguishable by shape so colour is never load-bearing. Three board sizes, cards that genuinely turn over on their axis, a chain bonus for consecutive matches, and best-per-size records. No fail state. |
+| `parse/` | **Parse** | Parsing a string; puzzling out a word. Five letters, six guesses, 402 hand-reviewed family-safe answers against a 1,062-word accepted list. The duplicate-letter rule is the two-pass one done properly — guess EERIE against CRANE and exactly one E is marked. Colourblind-safe by shape as well as colour: exact tiles carry a corner wedge, present tiles a dashed border and a dot. Streak, best streak and a guess-distribution chart. |
 | `botnet/` | **Botnet** | Fixed shooter, Galaga school. Squads swoop in on bezier entry paths, settle into a formation that breathes and sways as one organism, then peel off in dive runs that fire aimed shots — divers are worth double. Four bot types (drone/worm/brute/harvester), kill-chain bonus, SPAM envelope bonus ship, accuracy bonus per wave, slow-mo on harvester kills, extra life every 15,000 bits. Drag-to-fly with autofire on phones. |
 
 ### Built and play-tested 2026-08-17 — Flyway
@@ -976,3 +980,52 @@ audit clean, zero console errors.
 
 That is **30 games**. The hub now shelves them as Action, Shooters,
 Racing, Sports, Outdoors, Puzzle, Strategy and Kids.
+
+### Built and play-tested 2026-08-19 — Spare, Grind, Cache and Parse (games 31-34)
+
+Four built at once, each builder locked to its own folder and its own
+scratch directory (the fix for last batch's collision, now §11 law).
+Every one re-verified here before shipping — and in this batch the
+integrator's independent checks were run against hand-computed truth
+rather than the builders' own tables.
+
+**Verified by the integrator, not taken on report:**
+
+- **Spare's scoring**, against a known truth table: twelve strikes = 300
+  with the 30/60/90 progression; nine-and-spare ten times = 190; all
+  gutters = 0; strike-then-4-then-3 scores frame 1 as 17; both 10th-frame
+  fill cases (X 7 2 = 19, 7/ 6 = 16) correct.
+- **Parse's letter marking**, against marks worked out by hand: CRANE /
+  EERIE marks exactly one E — the one in the right slot — with the
+  leading E absent. Plus ALLOY/LLAMA, SPEED/ERASE, ABBEY/BABES. Its word
+  list independently checked: 402 answers, all five lowercase letters, no
+  duplicates, all present in the accepted set, none flagged unsafe.
+- **Cache's third-card lock**: during the 0.8s mismatch window a third
+  tap is refused and the pair flips back cleanly.
+- **Grind's bail rule**: a bail zeroes the live chain and leaves the
+  banked score untouched; a clean bank adds.
+
+Bugs the builders found that no assertion could have caught — the
+screenshot pass earning its keep for the fourth batch running:
+
+- **Cache's moon rendered as a solid blob.** The crescent traced the
+  wrong side of the inner circle, so the subtraction filled the disc.
+  Every state assertion passed with it broken.
+- **Grind's sky gradient was keyed to screen height**, so everything
+  behind the park painted as orange sunset and the bowl read as a hole
+  punched through to the sky. Its chain-link fence was also 3x too tall
+  and its treeline grew out of the concrete.
+- **Spare's aiming marker was scaled by near-camera perspective** and
+  rendered as a 100px billboard covering the lane; its ball in hand sat
+  behind the foul line and was painted over by the approach.
+- **Parse's M and P keys were global mute/pause hotkeys**, so typing
+  LLAMA silently muted the game and swallowed the M — the guess never
+  submitted.
+
+And one physics root cause worth keeping: **no strike was reachable in
+Spare** until the pin solver moved from a fixed substep *count* to a
+fixed substep *size*. At 47 ft/s a pin travelled more than its own
+diameter per step and tunnelled straight through its neighbours. Strike
+rate went 0% to 13% on that alone, then 31% once the hook was tuned back.
+
+That is **34 games**.

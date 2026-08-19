@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Cache — Memory Match</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="Concentration in silicon. Flip two cache lines, hold the pair if the symbols match, and chain matches for bonus bits. Three board sizes, no timer pressure, no way to lose.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cache">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eaf2ff;
+    --dim: rgba(234,242,255,0.58);
+    --panel: rgba(9,13,30,0.62);
+    --line: rgba(255,255,255,0.13);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.22); }
+  body:not(.playing) #topbtns { display: none; }
+
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(11,15,30,0.78), rgba(6,8,18,0.95));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(520px, 100%);
+    background: rgba(10,14,30,0.84);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 20px 18px 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(30px, 9vw, 52px);
+    letter-spacing: 0.14em; font-weight: 800; line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 24px rgba(255,204,77,0.45);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(19px, 5.5vw, 28px); letter-spacing: 0.08em; font-weight: 800; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.05em; margin-bottom: 10px; }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 10px auto 4px; max-width: 340px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(255,255,255,0.09); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0 6px; }
+  .stat { background: rgba(255,255,255,0.045); border: 1px solid var(--line); border-radius: 12px; padding: 7px 6px; }
+  .stat .k { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(16px, 4.6vw, 22px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .best { font-size: 12px; color: var(--dim); margin-top: 8px; line-height: 1.5; }
+  .best b { color: var(--accent); }
+  .btn {
+    margin-top: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; min-width: 84px; padding: 0 24px;
+    border-radius: 14px; border: 1px solid rgba(255,204,77,0.55);
+    background: rgba(255,204,77,0.13); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.14em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,204,77,0.3); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(255,255,255,0.05); }
+  .btn.size { padding: 0 14px; min-width: 96px; flex-direction: column; gap: 2px; }
+  .btn.size i { font-style: normal; font-size: 9px; letter-spacing: 0.12em; color: var(--dim); font-weight: 700; }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(24px, 7vw, 40px); font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+  @media (max-height: 620px) {
+    .card { padding: 12px 14px; border-radius: 14px; }
+    .keys { display: none; }
+    .tagline { margin-bottom: 6px; }
+    .btn { margin-top: 9px; min-height: 46px; }
+    .stats { margin: 8px 0 4px; }
+  }
+  @media (max-width: 400px) {
+    .btn { padding: 0 18px; letter-spacing: 0.08em; }
+    .btn.size { min-width: 88px; padding: 0 8px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   CACHE — memory match for the Overclock arcade.
+   The cache lines are face-down. Flip two, keep the pair if the symbols
+   agree, and the board clears. Chain matches without a miss for bonus
+   bits. Three board sizes, no timer pressure, no fail state — the calm
+   one in the cabinet.
+   One file, no assets, oscillator audio.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'cache_v1';
+var K_MUTE = 'cache_muted_v1';
+var K_LAST = 'cache_size_v1';
+var MISS_HOLD = 0.8;        /* seconds a mismatched pair stays visible */
+var FACE_BG = '#101a34';
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function loadJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function mulberry(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function shuffle(arr) {
+  for (var i = arr.length - 1; i > 0; i--) {
+    var j = (Math.random() * (i + 1)) | 0, t = arr[i];
+    arr[i] = arr[j]; arr[j] = t;
+  }
+  return arr;
+}
+function fmtTime(secs) {
+  var s = Math.max(0, Math.floor(secs));
+  var m = (s / 60) | 0;
+  var r = s % 60;
+  return m + ':' + (r < 10 ? '0' : '') + r;
+}
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.5;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.5;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(28, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseBurst(dur, vol, freq, delay, type) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var n = Math.max(1, Math.floor(actx.sampleRate * dur));
+  var buf = actx.createBuffer(1, n, actx.sampleRate);
+  var ch = buf.getChannelData(0);
+  for (var i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  var src = actx.createBufferSource(); src.buffer = buf;
+  var f = actx.createBiquadFilter(); f.type = type || 'lowpass'; f.frequency.value = freq;
+  var g = actx.createGain(); g.gain.value = vol;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+}
+var sfx = {
+  flip:  function () { noiseBurst(0.05, 0.14, 2600, 0, 'bandpass'); tone('triangle', 520, 700, 0.05, 0.05); },
+  match: function (chain) {
+    var f = 523 * Math.pow(1.12, Math.min(chain - 1, 8));
+    tone('triangle', f, f, 0.1, 0.12);
+    tone('triangle', f * 1.5, f * 1.5, 0.2, 0.1, 0.08);
+    noiseBurst(0.07, 0.1, 3400, 0, 'bandpass');
+  },
+  miss:  function () { tone('sine', 200, 132, 0.18, 0.09); },
+  turn:  function () { noiseBurst(0.06, 0.08, 1400, 0, 'bandpass'); },
+  win:   function () {
+    var n = [523, 659, 784, 1047];
+    for (var i = 0; i < n.length; i++) tone('triangle', n[i], n[i], 0.3, 0.12, i * 0.13);
+    tone('sine', 262, 262, 0.9, 0.08, 0.4);
+  },
+  click: function () { tone('square', 640, 820, 0.04, 0.05); }
+};
+
+/* -------------------------------------------------------------- symbols -- */
+/* Twelve procedurally drawn symbols. Every one is a different silhouette,
+   so the board is playable with colour removed entirely. */
+var SYMS = [
+  { id: 'chip',      name: 'Chip',      col: '#7de2ff' },
+  { id: 'resistor',  name: 'Resistor',  col: '#ffb26b' },
+  { id: 'capacitor', name: 'Capacitor', col: '#8effc1' },
+  { id: 'diode',     name: 'Diode',     col: '#ff6b9e' },
+  { id: 'battery',   name: 'Cell',      col: '#c9a2ff' },
+  { id: 'trace',     name: 'Trace',     col: '#9fb6ff' },
+  { id: 'gear',      name: 'Gear',      col: '#ffcc4d' },
+  { id: 'bolt',      name: 'Bolt',      col: '#ffe66b' },
+  { id: 'magnet',    name: 'Magnet',    col: '#ff8a6b' },
+  { id: 'key',       name: 'Key',       col: '#b9f06b' },
+  { id: 'star',      name: 'Star',      col: '#f2a6ff' },
+  { id: 'moon',      name: 'Moon',      col: '#a8e6ff' }
+];
+
+/* All symbols are drawn in a unit box, roughly -1..1, then scaled. */
+function symPath(g, id) {
+  var i, a;
+  if (id === 'chip') {
+    g.lineWidth = 0.15; g.lineCap = 'round';
+    for (i = 0; i < 3; i++) {
+      var yy = -0.44 + i * 0.44;
+      g.beginPath(); g.moveTo(-0.98, yy); g.lineTo(-0.6, yy); g.stroke();
+      g.beginPath(); g.moveTo(0.6, yy); g.lineTo(0.98, yy); g.stroke();
+    }
+    g.lineWidth = 0.17;
+    rr(g, -0.6, -0.72, 1.2, 1.44, 0.14); g.stroke();
+    g.beginPath(); g.arc(-0.34, -0.44, 0.13, 0, TAU); g.fill();
+  } else if (id === 'resistor') {
+    g.lineWidth = 0.17; g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(-1, 0); g.lineTo(-0.66, 0);
+    for (i = 0; i < 6; i++) g.lineTo(-0.55 + i * 0.22, (i % 2 ? 0.44 : -0.44));
+    g.lineTo(0.66, 0); g.lineTo(1, 0);
+    g.stroke();
+  } else if (id === 'capacitor') {
+    g.lineWidth = 0.17; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-1, 0); g.lineTo(-0.18, 0); g.stroke();
+    g.beginPath(); g.moveTo(0.18, 0); g.lineTo(1, 0); g.stroke();
+    g.lineWidth = 0.2;
+    g.beginPath(); g.moveTo(-0.18, -0.66); g.lineTo(-0.18, 0.66); g.stroke();
+    g.beginPath(); g.moveTo(0.18, -0.66); g.lineTo(0.18, 0.66); g.stroke();
+  } else if (id === 'diode') {
+    g.lineWidth = 0.17; g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(-1, 0); g.lineTo(-0.52, 0); g.stroke();
+    g.beginPath(); g.moveTo(0.34, 0); g.lineTo(1, 0); g.stroke();
+    g.beginPath();
+    g.moveTo(-0.52, -0.62); g.lineTo(-0.52, 0.62); g.lineTo(0.34, 0);
+    g.closePath(); g.fill();
+    g.lineWidth = 0.2;
+    g.beginPath(); g.moveTo(0.34, -0.62); g.lineTo(0.34, 0.62); g.stroke();
+  } else if (id === 'battery') {
+    g.lineWidth = 0.17; g.lineJoin = 'round';
+    rr(g, -0.2, -0.98, 0.4, 0.24, 0.06); g.fill();
+    rr(g, -0.56, -0.76, 1.12, 1.68, 0.16); g.stroke();
+    rr(g, -0.32, 0.06, 0.64, 0.62, 0.08); g.fill();
+  } else if (id === 'trace') {
+    g.lineWidth = 0.18; g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(-0.86, 0.6); g.lineTo(-0.26, 0.6);
+    g.lineTo(-0.26, -0.42); g.lineTo(0.52, -0.42); g.lineTo(0.52, 0.72);
+    g.stroke();
+    g.beginPath(); g.arc(-0.86, 0.6, 0.19, 0, TAU); g.fill();
+    g.beginPath(); g.arc(0.52, 0.72, 0.19, 0, TAU); g.fill();
+    g.lineWidth = 0.12;
+    g.beginPath(); g.arc(-0.26, -0.42, 0.2, 0, TAU); g.stroke();
+  } else if (id === 'gear') {
+    var teeth = 8, step = TAU / teeth, rin = 0.62, rout = 0.99;
+    g.beginPath();
+    for (i = 0; i < teeth; i++) {
+      var a0 = i * step;
+      pt(g, i === 0, rin, a0 - step * 0.27);
+      pt(g, false, rout, a0 - step * 0.16);
+      pt(g, false, rout, a0 + step * 0.16);
+      pt(g, false, rin, a0 + step * 0.27);
+    }
+    g.closePath();
+    g.moveTo(0.34, 0);
+    g.arc(0, 0, 0.34, 0, TAU, true);
+    g.fill();
+  } else if (id === 'bolt') {
+    g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(0.18, -1);
+    g.lineTo(-0.64, 0.14);
+    g.lineTo(-0.06, 0.14);
+    g.lineTo(-0.3, 1);
+    g.lineTo(0.64, -0.2);
+    g.lineTo(0.04, -0.2);
+    g.closePath(); g.fill();
+  } else if (id === 'magnet') {
+    g.lineWidth = 0.34; g.lineCap = 'butt'; g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(-0.62, 0.72);
+    g.lineTo(-0.62, 0.02);
+    g.arc(0, 0.02, 0.62, Math.PI, 0, false);
+    g.lineTo(0.62, 0.72);
+    g.stroke();
+    var save = g.fillStyle;
+    g.fillStyle = '#eaf2ff';
+    g.fillRect(-0.79, 0.44, 0.34, 0.3);
+    g.fillRect(0.45, 0.44, 0.34, 0.3);
+    g.fillStyle = save;
+  } else if (id === 'key') {
+    g.lineWidth = 0.2; g.lineCap = 'round';
+    g.beginPath(); g.arc(-0.5, 0, 0.4, 0, TAU); g.stroke();
+    g.beginPath(); g.moveTo(-0.1, 0); g.lineTo(0.94, 0); g.stroke();
+    g.lineWidth = 0.17;
+    g.beginPath(); g.moveTo(0.5, 0.02); g.lineTo(0.5, 0.5); g.stroke();
+    g.beginPath(); g.moveTo(0.82, 0.02); g.lineTo(0.82, 0.38); g.stroke();
+  } else if (id === 'star') {
+    g.beginPath();
+    for (i = 0; i < 5; i++) {
+      a = -Math.PI / 2 + i * TAU / 5;
+      var b = a + TAU / 10;
+      if (i === 0) g.moveTo(Math.cos(a), Math.sin(a)); else g.lineTo(Math.cos(a), Math.sin(a));
+      g.lineTo(Math.cos(b) * 0.46, Math.sin(b) * 0.46);
+    }
+    g.closePath(); g.fill();
+  } else if (id === 'moon') {
+    /* crescent = outer disc minus a disc offset to the right. The two circles
+       meet at (0.4936, ±0.8); the inner boundary must be traced back along the
+       LEFT of the inner circle (counterclockwise), or the shape fills solid. */
+    g.beginPath();
+    g.arc(0, 0, 0.94, 1.018, TAU - 1.018, false);
+    g.arc(0.5, 0, 0.8, -1.579, 1.579, true);
+    g.closePath(); g.fill();
+  }
+}
+function pt(g, first, r, a) {
+  var x = Math.cos(a) * r, y = Math.sin(a) * r;
+  if (first) g.moveTo(x, y); else g.lineTo(x, y);
+}
+function rr(g, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+  g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y);
+  g.closePath();
+}
+function drawSymbol(g, symIdx, R, col, glow) {
+  var s = SYMS[symIdx];
+  g.save();
+  g.strokeStyle = col || s.col;
+  g.fillStyle = col || s.col;
+  if (glow > 0) { g.shadowColor = col || s.col; g.shadowBlur = glow; }
+  g.translate(0, 0);
+  g.scale(R, R);
+  symPath(g, s.id);
+  g.restore();
+  g.shadowBlur = 0;
+}
+
+/* --------------------------------------------------------------- state --- */
+var SIZES = {
+  easy:   { label: 'EASY',   a: 4, b: 3, cells: 12 },
+  normal: { label: 'NORMAL', a: 4, b: 4, cells: 16 },
+  sharp:  { label: 'SHARP',  a: 6, b: 4, cells: 24 }
+};
+var SIZE_KEYS = ['easy', 'normal', 'sharp'];
+
+var G = {
+  state: 'title',        /* title | play | pause | won */
+  sizeKey: 'normal',
+  moves: 0, matches: 0, pairs: 8,
+  elapsed: 0,
+  chain: 0, bestChain: 0, bits: 0,
+  lock: false, missT: 0, endT: 0,
+  chainT: 0, chainTxt: '',
+  cursor: 0, cursorVis: false,
+  newBest: false, lastRec: null,
+  shake: 0
+};
+var deck = [];
+var sel = [];
+var floaters = [], sparks = [];
+var timeScale = 1, slowT = 0;
+
+function readBest() {
+  var raw = loadJSON(K_SAVE, null);
+  var out = { easy: null, normal: null, sharp: null };
+  if (!raw || typeof raw !== 'object' || Object.prototype.toString.call(raw) === '[object Array]') return out;
+  for (var i = 0; i < SIZE_KEYS.length; i++) {
+    var k = SIZE_KEYS[i], e = raw[k];
+    if (e && typeof e === 'object' && Object.prototype.toString.call(e) !== '[object Array]' &&
+        typeof e.moves === 'number' && isFinite(e.moves) && e.moves > 0 &&
+        typeof e.secs === 'number' && isFinite(e.secs) && e.secs >= 0) {
+      out[k] = { moves: Math.round(e.moves), secs: Math.round(e.secs * 10) / 10 };
+    }
+  }
+  return out;
+}
+function isBetter(cand, prev) {
+  if (!prev) return true;
+  if (cand.moves !== prev.moves) return cand.moves < prev.moves;
+  return cand.secs < prev.secs;
+}
+function writeBest(key, rec) {
+  var all = readBest();
+  if (!isBetter(rec, all[key])) { BEST = all; return false; }
+  all[key] = rec;
+  saveJSON(K_SAVE, all);
+  BEST = readBest();
+  return true;
+}
+function bestText(key) {
+  var b = BEST[key];
+  if (!b) return '—';
+  return b.moves + ' moves · ' + fmtTime(b.secs);
+}
+var BEST = readBest();
+
+/* ---------------------------------------------------------------- deck --- */
+function gridDims() {
+  var s = SIZES[G.sizeKey];
+  var portrait = view.h > view.w * 1.02;
+  return portrait ? { cols: s.b, rows: s.a } : { cols: s.a, rows: s.b };
+}
+function makeTraces(seed) {
+  var rng = mulberry(seed);
+  var list = [];
+  for (var k = 0; k < 3; k++) {
+    var pos = 0.16 + rng() * 0.68;
+    var pos2 = 0.16 + rng() * 0.68;
+    var a = 0.06 + rng() * 0.2, b = 0.72 + rng() * 0.22;
+    var bend = 0.34 + rng() * 0.32;
+    var line = (rng() < 0.5)
+      ? [[a, pos], [bend, pos], [bend, pos2], [b, pos2]]
+      : [[pos, a], [pos, bend], [pos2, bend], [pos2, b]];
+    list.push(line);
+  }
+  return list;
+}
+function buildDeck(sizeKey) {
+  var spec = SIZES[sizeKey];
+  var pairs = spec.cells / 2;
+  var pool = [];
+  for (var i = 0; i < SYMS.length; i++) pool.push(i);
+  shuffle(pool);
+  var chosen = pool.slice(0, pairs);
+  var arr = [];
+  for (i = 0; i < chosen.length; i++) { arr.push(chosen[i]); arr.push(chosen[i]); }
+  shuffle(arr);
+  deck = [];
+  for (i = 0; i < arr.length; i++) {
+    deck.push({
+      sym: arr[i], up: false, matched: false,
+      flip: 0, pop: 0, glow: 0,
+      tr: makeTraces(1000 + i * 977 + ((Math.random() * 500) | 0))
+    });
+  }
+  G.pairs = pairs;
+}
+
+/* ----------------------------------------------------------- game flow --- */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+
+function sizeButtons() {
+  var h = '<div class="btnrow">';
+  for (var i = 0; i < SIZE_KEYS.length; i++) {
+    var k = SIZE_KEYS[i], s = SIZES[k];
+    h += '<button class="btn size" data-act="start" data-size="' + k + '">' + s.label +
+         '<i>' + s.a + '&times;' + s.b + '</i></button>';
+  }
+  return h + '</div>';
+}
+function titleScreen() {
+  G.state = 'title';
+  document.body.classList.remove('playing');
+  BEST = readBest();
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>CACHE</h1>' +
+      '<div class="tagline">Concentration in silicon. Flip two cache lines — matching symbols stay lit, the rest go dark again. Chain matches without a miss for bonus bits. No clock pressure, no way to lose.</div>' +
+      '<div class="keys">' +
+        '<div>Flip a card<span>Tap / click</span></div>' +
+        '<div>Move cursor<span>Arrow keys or d-pad</span></div>' +
+        '<div>Flip with keys<span>Space / Enter / A</span></div>' +
+        '<div>Pause<span>P or Esc</span></div>' +
+        '<div>Mute<span>M</span></div>' +
+      '</div>' +
+      sizeButtons() +
+      '<div class="best">' +
+        'Best · EASY <b>' + bestText('easy') + '</b><br>' +
+        'NORMAL <b>' + bestText('normal') + '</b> &nbsp;·&nbsp; SHARP <b>' + bestText('sharp') + '</b>' +
+      '</div>' +
+    '</div>');
+}
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Moves</div><div class="v accent">' + G.moves + '</div></div>' +
+        '<div class="stat"><div class="k">Time</div><div class="v">' + fmtTime(G.elapsed) + '</div></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="title">CHANGE SIZE</button>' +
+      '</div>' +
+    '</div>');
+}
+function winScreen() {
+  G.state = 'won';
+  document.body.classList.remove('playing');
+  var rec = { moves: G.moves, secs: Math.round(G.elapsed * 10) / 10 };
+  G.lastRec = rec;
+  G.newBest = writeBest(G.sizeKey, rec);
+  sfx.win();
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Cache coherent</div>' +
+      '<h2>ALL PAIRS FOUND</h2>' +
+      (G.newBest ? '<div class="tagline" style="color:var(--accent)">NEW BEST — ' + SIZES[G.sizeKey].label + '</div>'
+                 : '<div class="tagline">' + SIZES[G.sizeKey].label + ' board cleared</div>') +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Moves</div><div class="v accent">' + G.moves + '</div></div>' +
+        '<div class="stat"><div class="k">Time</div><div class="v">' + fmtTime(G.elapsed) + '</div></div>' +
+        '<div class="stat"><div class="k">Bits</div><div class="v">' + G.bits + '</div></div>' +
+        '<div class="stat"><div class="k">Best chain</div><div class="v">&times;' + Math.max(1, G.bestChain) + '</div></div>' +
+      '</div>' +
+      '<div class="best">Best ' + SIZES[G.sizeKey].label + ': <b>' + bestText(G.sizeKey) + '</b></div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="again">PLAY AGAIN</button>' +
+        '<button class="btn ghost" data-act="title">CHANGE SIZE</button>' +
+      '</div>' +
+    '</div>');
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  sfx.click();
+  var act = btn.getAttribute('data-act');
+  if (act === 'start') startGame(btn.getAttribute('data-size') || G.sizeKey);
+  else if (act === 'again') startGame(G.sizeKey);
+  else if (act === 'resume') togglePause();
+  else if (act === 'title') titleScreen();
+});
+
+function startGame(sizeKey) {
+  initAudio();
+  if (!SIZES[sizeKey]) sizeKey = 'normal';
+  G.sizeKey = sizeKey;
+  saveStr(K_LAST, sizeKey);
+  hideOverlay();
+  document.body.classList.add('playing');
+  buildDeck(sizeKey);
+  sel.length = 0;
+  floaters.length = 0; sparks.length = 0;
+  G.moves = 0; G.matches = 0; G.elapsed = 0;
+  G.chain = 0; G.bestChain = 0; G.bits = 0;
+  G.lock = false; G.missT = 0; G.endT = 0;
+  G.chainT = 0; G.chainTxt = '';
+  G.cursor = 0; G.newBest = false; G.shake = 0;
+  timeScale = 1; slowT = 0;
+  G.state = 'play';
+}
+function togglePause() {
+  if (G.state === 'play') { G.state = 'pause'; pauseScreen(); }
+  else if (G.state === 'pause') { G.state = 'play'; hideOverlay(); document.body.classList.add('playing'); }
+}
+
+/* ------------------------------------------------------------ the rules -- */
+function tapCard(i) {
+  if (G.state !== 'play') return false;
+  if (G.lock) return false;                 /* the mismatch window: no third card */
+  var c = deck[i];
+  if (!c || c.matched || c.up) return false;
+  if (c.flip > 0.03) return false;          /* still turning back over */
+  c.up = true;
+  sfx.flip();
+  sel.push(i);
+  if (sel.length < 2) return true;
+
+  G.moves++;
+  var a = deck[sel[0]], b = deck[sel[1]];
+  if (a.sym === b.sym) {
+    a.matched = b.matched = true;
+    a.pop = b.pop = 1; a.glow = b.glow = 1;
+    G.matches++;
+    G.chain++;
+    if (G.chain > G.bestChain) G.bestChain = G.chain;
+    var bonus = G.chain >= 2 ? 25 * (G.chain - 1) : 0;
+    G.bits += 10 + bonus;
+    sparkPair(sel[0], sel[1], SYMS[a.sym].col);
+    floatAt(sel[1], '+' + (10 + bonus), '#ffcc4d');
+    if (G.chain >= 2) { G.chainT = 1.7; G.chainTxt = 'CHAIN ×' + G.chain; }
+    sfx.match(G.chain);
+    G.shake = Math.min(6, G.shake + (G.chain >= 3 ? 4 : 2));
+    sel.length = 0;
+    if (G.matches >= G.pairs) { G.endT = 0.9; slowT = 0.55; }
+  } else {
+    G.lock = true;
+    G.missT = MISS_HOLD;
+    G.chain = 0;
+    sfx.miss();
+  }
+  return true;
+}
+function sparkPair(i, j, col) {
+  var idx = [i, j];
+  for (var k = 0; k < 2; k++) {
+    for (var n = 0; n < 7; n++) {
+      sparks.push({ i: idx[k], dx: rnd(-1, 1), dy: rnd(-1.2, 0.6), t: rnd(0.3, 0.6), col: col });
+    }
+  }
+}
+function floatAt(i, txt, col) { floaters.push({ i: i, txt: txt, col: col, t: 1.2 }); }
+
+/* ---------------------------------------------------------------- input -- */
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var view = { w: 900, h: 600, dpr: 1 };
+
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(240, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+function metrics() {
+  var d = gridDims();
+  var topH = 74;
+  var padX = 14, padB = 16;
+  var availW = Math.max(40, view.w - padX * 2);
+  var availH = Math.max(40, view.h - topH - padB);
+  var cs = Math.min(availW / d.cols, availH / d.rows, 168);
+  return {
+    cs: cs, cols: d.cols, rows: d.rows,
+    ox: (view.w - cs * d.cols) / 2,
+    oy: topH + (availH - cs * d.rows) / 2
+  };
+}
+function cardFromXY(x, y) {
+  var m = metrics();
+  var c = Math.floor((x - m.ox) / m.cs), r = Math.floor((y - m.oy) / m.cs);
+  if (r < 0 || r >= m.rows || c < 0 || c >= m.cols) return -1;
+  var i = r * m.cols + c;
+  return (i >= 0 && i < deck.length) ? i : -1;
+}
+
+cv.addEventListener('pointerdown', function (e) {
+  initAudio();
+  if (G.state === 'play') {
+    var i = cardFromXY(e.clientX, e.clientY);
+    if (i >= 0) { G.cursor = i; tapCard(i); }
+  }
+  e.preventDefault();
+});
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+function moveCursor(dc, dr) {
+  var m = metrics();
+  if (!G.cursorVis) { G.cursorVis = true; return; }
+  var r = (G.cursor / m.cols) | 0, c = G.cursor % m.cols;
+  r = clamp(r + dr, 0, m.rows - 1);
+  c = clamp(c + dc, 0, m.cols - 1);
+  var i = r * m.cols + c;
+  if (i >= 0 && i < deck.length) { G.cursor = i; sfx.turn(); }
+}
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+  initAudio();
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'p' || k === 'escape') { if (G.state === 'play' || G.state === 'pause') togglePause(); return; }
+  if (G.state === 'title') {
+    if (k === '1') startGame('easy');
+    else if (k === '2') startGame('normal');
+    else if (k === '3') startGame('sharp');
+    else if (k === ' ' || k === 'enter') startGame(loadStr(K_LAST, 'normal'));
+    return;
+  }
+  if (G.state === 'won') {
+    if (k === ' ' || k === 'enter' || k === 'r') startGame(G.sizeKey);
+    return;
+  }
+  if (G.state !== 'play') return;
+  if (k === 'arrowleft' || k === 'a') moveCursor(-1, 0);
+  else if (k === 'arrowright' || k === 'd') moveCursor(1, 0);
+  else if (k === 'arrowup' || k === 'w') moveCursor(0, -1);
+  else if (k === 'arrowdown' || k === 's') moveCursor(0, 1);
+  else if (k === ' ' || k === 'enter') { G.cursorVis = true; tapCard(G.cursor); }
+});
+
+var padA = false, padStart = false, padRepeat = 0;
+function pollPad(dt) {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null;
+  for (var i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  var ax = (p.axes && p.axes.length > 0) ? p.axes[0] : 0;
+  var ay = (p.axes && p.axes.length > 1) ? p.axes[1] : 0;
+  var bt = p.buttons || [];
+  var dl = (bt[14] && bt[14].pressed) || ax < -0.5;
+  var dr2 = (bt[15] && bt[15].pressed) || ax > 0.5;
+  var du = (bt[12] && bt[12].pressed) || ay < -0.5;
+  var dd = (bt[13] && bt[13].pressed) || ay > 0.5;
+  padRepeat -= dt;
+  if (G.state === 'play' && (dl || dr2 || du || dd)) {
+    if (padRepeat <= 0) {
+      if (dl) moveCursor(-1, 0); else if (dr2) moveCursor(1, 0);
+      else if (du) moveCursor(0, -1); else if (dd) moveCursor(0, 1);
+      padRepeat = 0.18;
+    }
+  } else if (!(dl || dr2 || du || dd)) padRepeat = 0;
+  var a = !!(bt[0] && bt[0].pressed);
+  if (a && !padA) {
+    initAudio();
+    if (G.state === 'play') { G.cursorVis = true; tapCard(G.cursor); }
+    else if (G.state === 'title') startGame(loadStr(K_LAST, 'normal'));
+    else if (G.state === 'won') startGame(G.sizeKey);
+  }
+  padA = a;
+  var st = !!(bt[9] && bt[9].pressed);
+  if (st && !padStart && (G.state === 'play' || G.state === 'pause')) togglePause();
+  padStart = st;
+}
+
+window.addEventListener('blur', function () { if (G.state === 'play') togglePause(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden && G.state === 'play') togglePause(); });
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () {
+  initAudio();
+  if (G.state === 'play' || G.state === 'pause') togglePause();
+});
+
+/* ----------------------------------------------------------------- sim --- */
+function update(dt, raw) {
+  /* animation timers run on scaled time, rules run on real time */
+  for (var i = 0; i < deck.length; i++) {
+    var c = deck[i];
+    var target = c.up ? 1 : 0;
+    if (c.flip !== target) {
+      var d = dt * 3.8;
+      if (c.flip < target) c.flip = Math.min(target, c.flip + d);
+      else c.flip = Math.max(target, c.flip - d);
+    }
+    if (c.pop > 0) c.pop = Math.max(0, c.pop - dt * 3.2);
+  }
+  for (i = floaters.length - 1; i >= 0; i--) { floaters[i].t -= dt; if (floaters[i].t <= 0) floaters.splice(i, 1); }
+  for (i = sparks.length - 1; i >= 0; i--) { sparks[i].t -= dt; if (sparks[i].t <= 0) sparks.splice(i, 1); }
+  if (G.shake > 0) { G.shake -= G.shake * 9 * dt + 0.4 * dt; if (G.shake < 0.05) G.shake = 0; }
+  if (G.chainT > 0) G.chainT -= dt;
+
+  if (G.state !== 'play') return;
+  G.elapsed += raw;
+
+  if (G.missT > 0) {
+    G.missT -= raw;
+    if (G.missT <= 0) {
+      if (sel.length === 2) {
+        deck[sel[0]].up = false;
+        deck[sel[1]].up = false;
+        sfx.turn();
+      }
+      sel.length = 0;
+      G.lock = false;
+    }
+  }
+  if (G.endT > 0) {
+    G.endT -= raw;
+    if (G.endT <= 0) winScreen();
+  }
+}
+
+/* -------------------------------------------------------------- render --- */
+function cardRect(m, i) {
+  var r = (i / m.cols) | 0, c = i % m.cols;
+  return { x: m.ox + c * m.cs, y: m.oy + r * m.cs, cx: m.ox + (c + 0.5) * m.cs, cy: m.oy + (r + 0.5) * m.cs };
+}
+
+function drawBack(g, w, h, card, t) {
+  var grd = g.createLinearGradient(0, -h / 2, 0, h / 2);
+  grd.addColorStop(0, '#16203f');
+  grd.addColorStop(1, '#0d142a');
+  g.fillStyle = grd;
+  rr(g, -w / 2, -h / 2, w, h, w * 0.13); g.fill();
+  g.strokeStyle = 'rgba(255,204,77,0.3)';
+  g.lineWidth = Math.max(1, w * 0.022);
+  rr(g, -w / 2, -h / 2, w, h, w * 0.13); g.stroke();
+
+  /* circuit traces */
+  g.save();
+  rr(g, -w / 2 + w * 0.05, -h / 2 + h * 0.05, w * 0.9, h * 0.9, w * 0.09);
+  g.clip();
+  g.strokeStyle = 'rgba(125,226,255,0.2)';
+  g.lineWidth = Math.max(1, w * 0.026);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (var k = 0; k < card.tr.length; k++) {
+    var pts = card.tr[k];
+    g.beginPath();
+    for (var n = 0; n < pts.length; n++) {
+      var px = -w / 2 + pts[n][0] * w, py = -h / 2 + pts[n][1] * h;
+      if (n === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.stroke();
+    g.fillStyle = 'rgba(255,204,77,0.32)';
+    var e0 = pts[0], e1 = pts[pts.length - 1];
+    g.beginPath(); g.arc(-w / 2 + e0[0] * w, -h / 2 + e0[1] * h, w * 0.035, 0, TAU); g.fill();
+    g.beginPath(); g.arc(-w / 2 + e1[0] * w, -h / 2 + e1[1] * h, w * 0.035, 0, TAU); g.fill();
+  }
+  g.restore();
+
+  /* centre emblem: a hex die-mark */
+  g.strokeStyle = 'rgba(255,204,77,0.5)';
+  g.lineWidth = Math.max(1.2, w * 0.028);
+  g.beginPath();
+  for (var i = 0; i < 6; i++) {
+    var a = -Math.PI / 2 + i * TAU / 6;
+    var x = Math.cos(a) * w * 0.17, y = Math.sin(a) * w * 0.17;
+    if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  g.closePath(); g.stroke();
+  g.fillStyle = 'rgba(255,204,77,0.55)';
+  g.beginPath(); g.arc(0, 0, w * 0.045, 0, TAU); g.fill();
+}
+
+function drawFace(g, w, h, card, t) {
+  var sym = SYMS[card.sym];
+  var lit = card.matched;
+  g.fillStyle = lit ? '#152449' : FACE_BG;
+  rr(g, -w / 2, -h / 2, w, h, w * 0.13); g.fill();
+  /* inner vignette */
+  var grd = g.createRadialGradient(0, -h * 0.12, w * 0.1, 0, 0, w * 0.72);
+  grd.addColorStop(0, 'rgba(255,255,255,0.06)');
+  grd.addColorStop(1, 'rgba(0,0,0,0.22)');
+  g.fillStyle = grd;
+  rr(g, -w / 2, -h / 2, w, h, w * 0.13); g.fill();
+
+  var pulse = lit ? (0.6 + 0.4 * (0.5 + 0.5 * Math.sin(t * 3.4))) : 0;
+  g.strokeStyle = lit ? 'rgba(255,204,77,' + (0.55 + pulse * 0.45).toFixed(3) + ')' : 'rgba(255,255,255,0.16)';
+  g.lineWidth = Math.max(1.4, w * (lit ? 0.04 : 0.022));
+  if (lit) { g.shadowColor = '#ffcc4d'; g.shadowBlur = w * 0.22 * pulse; }
+  rr(g, -w / 2, -h / 2, w, h, w * 0.13); g.stroke();
+  g.shadowBlur = 0;
+
+  drawSymbol(g, card.sym, w * 0.29, sym.col, w * (lit ? 0.16 : 0.1));
+}
+
+function drawCard(g, m, i, t) {
+  var card = deck[i];
+  var rct = cardRect(m, i);
+  var gap = m.cs * 0.07;
+  var w = m.cs - gap * 2, h = m.cs - gap * 2;
+  var p = clamp(card.flip, 0, 1);
+  var e = p * p * (3 - 2 * p);
+  var sx = Math.abs(Math.cos(e * Math.PI));
+  var sc = 1 + card.pop * 0.16;
+  var lift = Math.sin(e * Math.PI) * m.cs * 0.07;
+
+  /* drop shadow under the card, strongest mid-turn */
+  g.save();
+  g.globalAlpha = 0.35;
+  g.fillStyle = '#05070f';
+  rr(g, rct.cx - w / 2 * sx * sc + 2, rct.cy - h / 2 * sc + 4, w * sx * sc, h * sc, w * 0.13);
+  g.fill();
+  g.restore();
+
+  g.save();
+  g.translate(rct.cx, rct.cy - lift);
+  g.scale(Math.max(sx, 0.0015) * sc, sc);
+  if (e < 0.5) drawBack(g, w, h, card, t);
+  else drawFace(g, w, h, card, t);
+  g.restore();
+
+  /* the turning edge catches the light */
+  if (sx < 0.3 && p > 0.001 && p < 0.999) {
+    g.save();
+    g.globalAlpha = (1 - sx / 0.3) * 0.8;
+    g.fillStyle = '#ffcc4d';
+    g.shadowColor = '#ffcc4d'; g.shadowBlur = 10;
+    var ew = Math.max(2, m.cs * 0.035);
+    g.fillRect(rct.cx - ew / 2, rct.cy - lift - h / 2 * sc, ew, h * sc);
+    g.restore();
+    g.shadowBlur = 0;
+  }
+}
+
+function drawHUD(t) {
+  var W = view.w;
+  ctx.textAlign = 'left';
+  ctx.font = '700 9.5px "Segoe UI", sans-serif';
+  ctx.fillStyle = 'rgba(234,242,255,0.5)';
+  ctx.fillText('MOVES', 14, 20);
+  ctx.font = '800 24px "Segoe UI", sans-serif';
+  ctx.fillStyle = '#ffcc4d';
+  ctx.fillText(String(G.moves), 14, 44);
+  ctx.font = '700 10px "Segoe UI", sans-serif';
+  ctx.fillStyle = 'rgba(234,242,255,0.5)';
+  ctx.fillText(SIZES[G.sizeKey].label + ' · BEST ' + bestText(G.sizeKey), 14, 62);
+
+  ctx.textAlign = 'center';
+  ctx.font = '800 22px "Segoe UI", sans-serif';
+  ctx.fillStyle = '#eaf2ff';
+  ctx.fillText(fmtTime(G.elapsed), W / 2, 30);
+  ctx.font = '700 9.5px "Segoe UI", sans-serif';
+  ctx.fillStyle = 'rgba(234,242,255,0.5)';
+  ctx.fillText(G.matches + ' / ' + G.pairs + ' PAIRS', W / 2, 44);
+
+  if (G.chainT > 0 && G.chainTxt) {
+    var a = clamp(G.chainT / 0.4, 0, 1);
+    ctx.globalAlpha = a;
+    ctx.font = '800 13px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#ffcc4d';
+    ctx.shadowColor = '#ffcc4d'; ctx.shadowBlur = 12;
+    ctx.fillText(G.chainTxt, W / 2, 62);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+  ctx.textAlign = 'left';
+}
+
+function render(t) {
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  var g = ctx.createLinearGradient(0, 0, 0, view.h);
+  g.addColorStop(0, '#0d1330');
+  g.addColorStop(1, '#0b0f1e');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, view.w, view.h);
+
+  /* faint backdrop lattice — the die under the cache */
+  ctx.strokeStyle = 'rgba(125,226,255,0.045)';
+  ctx.lineWidth = 1;
+  var step = 46;
+  ctx.beginPath();
+  for (var x = (view.w % step) / 2; x < view.w; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, view.h); }
+  for (var y = (view.h % step) / 2; y < view.h; y += step) { ctx.moveTo(0, y); ctx.lineTo(view.w, y); }
+  ctx.stroke();
+
+  if (G.state === 'title' || !deck.length) return;
+
+  var m = metrics();
+  ctx.save();
+  if (G.shake > 0.3) ctx.translate(rnd(-G.shake, G.shake) * 0.5, rnd(-G.shake, G.shake) * 0.5);
+
+  /* board plate */
+  var pad = m.cs * 0.06;
+  ctx.fillStyle = 'rgba(255,255,255,0.028)';
+  rr(ctx, m.ox - pad, m.oy - pad, m.cs * m.cols + pad * 2, m.cs * m.rows + pad * 2, 16); ctx.fill();
+  ctx.strokeStyle = 'rgba(125,226,255,0.14)';
+  ctx.lineWidth = 1.5;
+  rr(ctx, m.ox - pad, m.oy - pad, m.cs * m.cols + pad * 2, m.cs * m.rows + pad * 2, 16); ctx.stroke();
+
+  for (var i = 0; i < deck.length; i++) drawCard(ctx, m, i, t);
+
+  /* keyboard / gamepad cursor */
+  if (G.cursorVis && G.state === 'play' && G.cursor < deck.length) {
+    var rc = cardRect(m, G.cursor);
+    var half = m.cs * 0.43;
+    var pl = 0.55 + 0.45 * Math.sin(t * 5);
+    ctx.strokeStyle = 'rgba(255,204,77,' + (0.5 + pl * 0.5).toFixed(3) + ')';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    var arm = half * 0.42;
+    var corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    ctx.beginPath();
+    for (var ci = 0; ci < 4; ci++) {
+      var sxx = corners[ci][0], syy = corners[ci][1];
+      ctx.moveTo(rc.cx + sxx * half - sxx * arm, rc.cy + syy * half);
+      ctx.lineTo(rc.cx + sxx * half, rc.cy + syy * half);
+      ctx.lineTo(rc.cx + sxx * half, rc.cy + syy * half - syy * arm);
+    }
+    ctx.stroke();
+  }
+
+  /* sparks */
+  for (i = 0; i < sparks.length; i++) {
+    var sp = sparks[i];
+    var r2 = cardRect(m, sp.i);
+    ctx.globalAlpha = clamp(sp.t / 0.6, 0, 1);
+    ctx.fillStyle = sp.col;
+    var k = (0.6 - sp.t);
+    ctx.fillRect(r2.cx + sp.dx * k * m.cs - 2, r2.cy + sp.dy * k * m.cs - 2, 4, 4);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  /* floaters — outlined, or they vanish against a matched card's gold glow */
+  ctx.textAlign = 'center';
+  ctx.lineJoin = 'round';
+  for (i = 0; i < floaters.length; i++) {
+    var fl = floaters[i];
+    var r3 = cardRect(m, fl.i);
+    var fx = clamp(r3.cx, 40, view.w - 40);
+    var fy = Math.max(88, r3.cy - m.cs * 0.44 - (1.2 - fl.t) * 30);
+    ctx.globalAlpha = clamp(fl.t, 0, 1);
+    ctx.font = '800 17px "Segoe UI", sans-serif';
+    ctx.lineWidth = 4.5;
+    ctx.strokeStyle = 'rgba(4,6,14,0.92)';
+    ctx.strokeText(fl.txt, fx, fy);
+    ctx.fillStyle = fl.col;
+    ctx.fillText(fl.txt, fx, fy);
+    ctx.globalAlpha = 1;
+  }
+  ctx.textAlign = 'left';
+
+  drawHUD(t);
+}
+
+/* ----------------------------------------------------------------- loop -- */
+var lastT = 0, timeAcc = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var raw = (now - lastT) / 1000;
+  lastT = now;
+  if (raw > 0.05) raw = 0.05;
+  if (raw < 0) raw = 0;
+  if (slowT > 0) {
+    slowT -= raw;
+    timeScale = slowT > 0 ? 0.35 + 0.65 * (1 - clamp(slowT / 0.55, 0, 1)) : 1;
+  }
+  var dt = raw * timeScale;
+  timeAcc += dt;
+  pollPad(raw);
+  update(dt, raw);
+  render(timeAcc);
+}
+
+/* ----------------------------------------------------------------- boot -- */
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+G.sizeKey = SIZES[loadStr(K_LAST, 'normal')] ? loadStr(K_LAST, 'normal') : 'normal';
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>
