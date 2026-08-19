@@ -732,3 +732,35 @@ effect you are asserting). Full 3-profile matrix and ui-audit clean on all
 three, zero console errors. One design gap caught by the watcher: rock
 deaths (the common kind) had no shockwave because only explode() carried
 rings — killShip now fires its own.
+
+### Graphics pass 2026-08-18/19 — the remaining six older games
+
+Second half of the better-graphics request: every pre-Downlink game is now
+at the current juice bar. The kit was fitted to each game's fiction rather
+than pasted on — a racer does not want a nebula, and a circuit board does
+not want stars.
+
+- **Starfall:** parallax nebulae behind the grid (they drift with the
+  ship), and player death now joins the boss kill in slow motion.
+- **Apex Run:** stars in the sunset and night skies (dawn stays clean),
+  crash shake + red impact flash on scenery and traffic collisions, and
+  speed streaks past 65% throttle. No slow-mo — a hit-stop mid-race
+  feels like lag, not drama.
+- **Gravity Grip:** nebulae over the ridge line, and crashes fire a
+  gold + white double shockwave. The rings age in sim-time, so they
+  expand in slow motion during the existing 0.14x crash — that is
+  deliberate, and the test had to learn to wait for it.
+- **Firewall:** a downed ROOTKIT now lands a double ring and a beat of
+  hit-stop. The circuit-board backdrop was left alone on purpose.
+- **Flyway:** every dropped bird fires a shockwave (gold for bolting
+  birds), and the marsh holds its breath for a beat on the dramatic
+  shots — a bolting bird, or the shot that empties the sky.
+- **Voidrunner (WebGL):** damage hit-stop only — pure dt-scaling, zero
+  GL changes, because a WebGL regression can be GPU-specific and this is
+  the one game the headless harness cannot run. Verified in a real
+  fronted browser: slowT spikes to 0.14 and decays clean, zero console
+  errors, 752m test flight healthy.
+
+All five 2D games script-verified through the injected-hook rig (real
+crash, real boss kill, real duck kills asserted), full matrix + ui-audit
+clean, zero console errors everywhere.

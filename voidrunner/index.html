@@ -1449,7 +1449,7 @@ const Game = {
   angVel: [0,0,0],            /* body-local pitch / yaw / roll rates */
   camPos: [0,0,0], camQuat: qIdent(),
   speed: SPEED_BASE, boostFuel: BOOST_MAX, boosting: false, boostLock: 0,
-  shield: 100, damageTimer: 0, hitFlash: 0, shake: 0,
+  shield: 100, damageTimer: 0, hitFlash: 0, shake: 0, slowT: 0,
   distance: 0, score: 0, rings: 0, kills: 0,
   mult: 1, grazeTime: 0, grazeCool: 0,
   best: parseFloat(store.get(K_BEST) || "0") || 0,
@@ -1468,7 +1468,7 @@ const Game = {
     this.camQuat = this.quat.slice();
     this.camPos = vAdd(this.pos, qRotate(this.quat, [0, 1.7, 7.4]));
     this.speed = SPEED_BASE; this.boostFuel = BOOST_MAX; this.boosting = false; this.boostLock = 0;
-    this.shield = 100; this.damageTimer = 0; this.hitFlash = 0; this.shake = 0;
+    this.shield = 100; this.damageTimer = 0; this.hitFlash = 0; this.shake = 0; this.slowT = 0;
     this.distance = 0; this.score = 0; this.rings = 0; this.kills = 0;
     this.mult = 1; this.grazeTime = 0; this.grazeCool = 0;
     this.time = 0; this.fireCool = 0; this.newBest = false;
@@ -1520,6 +1520,7 @@ const Game = {
     this.shield -= amount;
     this.damageTimer = 2.6;
     this.hitFlash = 1;
+    this.slowT = Math.max(this.slowT, 0.14);   // a breath of hit-stop
     this.shake = Math.min(1.4, this.shake + amount * 0.020);
     this.mult = 1; this.grazeTime = 0;
     burst(this.pos, color || [1.0, 0.35, 0.42], 12, 18);
@@ -2319,6 +2320,9 @@ function frame(now) {
   last = now;
   /* clamp so a tab switch or a stall can never teleport the ship into a wall */
   dt = clamp(dt, 0.0005, 0.05);
+
+  /* damage hit-stop: decays in real time, scales sim time (no GL changes) */
+  if (Game.slowT > 0) { Game.slowT = Math.max(0, Game.slowT - dt); dt *= 0.45; }
 
   pollInput();
 

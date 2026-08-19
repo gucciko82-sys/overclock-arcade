@@ -975,6 +975,7 @@ function startRun() {
   resetVehicle(startX);
   resetEntities(startX);
   clearParts();
+  RINGS.length = 0;
   dist = 0; score = 0; coinCount = 0; fuel = FUEL_MAX;
   bonus = 0; flips = 0; airBest = 0; timeScale = 1;
   crashTimer = 0; deadTimer = 0; outOfFuel = false; newRecord = false; crashKind = '';
@@ -1139,6 +1140,7 @@ function update(dt) {
     }
     if (acc > FIXED_DT * MAX_STEPS) acc = 0;
     stepParts(sdt);
+    stepRings(sdt);
     runTime += sdt;
   }
 
@@ -1312,6 +1314,36 @@ function postStep(dt) {
   if (hit >= 0) doCrash(hit === 7 ? 'HEAD DOWN' : (Math.cos(V.ang) < 0 ? 'LANDED UPSIDE DOWN' : 'CHASSIS DOWN'));
 }
 
+const RINGS = [];
+function addRing(x, y, col, maxR, dur) {
+  RINGS.push({ x, y, r: 0.1, maxR, life: dur, max: dur, col });
+}
+function stepRings(dt) {
+  for (let i = RINGS.length - 1; i >= 0; i--) {
+    const r = RINGS[i];
+    r.life -= dt;
+    if (r.life <= 0) { RINGS.splice(i, 1); continue; }
+    const k = 1 - r.life / r.max;
+    r.r = 0.1 + (r.maxR - 0.1) * (1 - (1 - k) * (1 - k));
+  }
+}
+function drawRings() {
+  for (let i = 0; i < RINGS.length; i++) {
+    const r = RINGS[i];
+    const a = clamp(r.life / r.max, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = a * 0.8;
+    ctx.strokeStyle = r.col;
+    ctx.lineWidth = 1.5 + 3 * a;
+    ctx.shadowColor = r.col;
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.arc(worldToScreenX(r.x), worldToScreenY(r.y), r.r * cam.s, 0, 6.2832);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 function doCrash(kind) {
   if (state !== 'play') return;
   state = 'crashing';
@@ -1319,6 +1351,8 @@ function doCrash(kind) {
   crashTimer = 0;
   timeScale = 0.14;
   cam.shake = 22;
+  addRing(V.x, V.y, '#ffcc4d', 3.6, 0.55);
+  addRing(V.x, V.y, '#ffffff', 1.8, 0.32);
   Audio_.crash();
   for (let i = 0; i < 34; i++)
     emit(V.x + rnd(-0.8, 0.8), V.y + rnd(-0.5, 0.5),
@@ -1372,6 +1406,23 @@ function drawSky() {
     ctx.fillRect(sx * W, s.y * H - (cam.y * 0.9) % 40, s.r, s.r);
   }
   ctx.restore();
+
+  // nebulae — drift against the camera, deepest layer of the night
+  const NEB = [
+    { x: 0.25, y: 0.2, r: 0.5, col: '58,72,168' },
+    { x: 0.85, y: 0.32, r: 0.44, col: '118,52,150' },
+    { x: 0.55, y: 0.08, r: 0.38, col: '32,96,140' }
+  ];
+  for (let ni = 0; ni < NEB.length; ni++) {
+    const n = NEB[ni];
+    const nx = ((n.x - (cam.x * 0.003) % 1) % 1 + 1) % 1 * W;
+    const nr = n.r * Math.max(W, H);
+    const ng = ctx.createRadialGradient(nx, n.y * H, 0, nx, n.y * H, nr);
+    ng.addColorStop(0, 'rgba(' + n.col + ',0.13)');
+    ng.addColorStop(1, 'rgba(' + n.col + ',0)');
+    ctx.fillStyle = ng;
+    ctx.fillRect(nx - nr, n.y * H - nr, nr * 2, nr * 2);
+  }
 
   // horizon glow
   const hg = ctx.createRadialGradient(W * 0.72, H * 0.52, 0, W * 0.72, H * 0.52, Math.max(W, H) * 0.6);
@@ -1860,6 +1911,7 @@ function render(a, t) {
   drawFuels(t);
   drawCoins(t);
   drawParts();
+  drawRings();
   drawVehicle(a, t);
   drawAirGauge(a);
   drawSpeedLines();

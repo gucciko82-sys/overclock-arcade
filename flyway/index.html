@@ -475,7 +475,12 @@ var tally = [];              // 'hit' | 'miss' per duck this round
 var totalDucks = 0;
 var rule = roundRule(1);
 
-var ducks = [], feathers = [], pops = [];
+var ducks = [], feathers = [], pops = [], rings = [];
+var slowT = 0;                 // hit-stop: bolting birds and flush-clearing shots
+
+function spawnRing(x, y, col, maxR, dur) {
+  rings.push({ x: x, y: y, r: 3, maxR: maxR, life: dur, max: dur, col: col });
+}
 var dog = null;
 var shake = 0, flash = 0, vignette = 0;
 var timer = 0, stateT = 0;
@@ -1235,9 +1240,15 @@ function fire(x, y) {
       score += pts;
       totalDucks++;
       feather(d.x, d.y, d.hue);
+      spawnRing(d.x, d.y, d.bolting ? GOLD : 'rgba(255,255,255,0.9)', d.bolting ? 90 : 60, 0.4);
       popText(d.x, d.y - 30, '+' + pts, GOLD);
       Audio_.fall();
       hitAny = true;
+      /* the dramatic shots play out for a beat: a bolting bird, or the
+         shot that empties the sky */
+      var live = 0;
+      for (var di = 0; di < ducks.length; di++) if (ducks[di].alive && !ducks[di].falling) live++;
+      if (d.bolting || live === 0) slowT = Math.max(slowT, 0.3);
       break;                       // one shell, one bird
     }
   }
@@ -1557,6 +1568,22 @@ function render() {
   }
   ctx.globalAlpha = 1;
 
+  // shot shockwaves
+  for (i = 0; i < rings.length; i++) {
+    var rg = rings[i];
+    var ra = clamp(rg.life / rg.max, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = ra * 0.8;
+    ctx.strokeStyle = rg.col;
+    ctx.lineWidth = 1.5 + 2.5 * ra;
+    ctx.shadowColor = rg.col;
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.arc(rg.x, rg.y, rg.r, 0, 6.283);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // muzzle flash
   if (muzzle && muzzle.t < 0.11) {
     var mt = 1 - muzzle.t / 0.11;
@@ -1638,6 +1665,13 @@ function update(dt) {
     pops[i].t += dt;
     if (pops[i].t >= pops[i].life) pops.splice(i, 1);
   }
+  for (i = rings.length - 1; i >= 0; i--) {
+    var rg2 = rings[i];
+    rg2.life -= dt;
+    if (rg2.life <= 0) { rings.splice(i, 1); continue; }
+    var rk = 1 - rg2.life / rg2.max;
+    rg2.r = 3 + (rg2.maxR - 3) * (1 - (1 - rk) * (1 - rk));
+  }
 
   if (state === S_INTRO) {
     if (dog) {
@@ -1682,6 +1716,9 @@ function frame(ts) {
   lastT = ts;
   if (!isFinite(dt) || dt < 0) dt = 0;
   if (dt > 0.10) dt = 0.10;        // tab was hidden — do not simulate the gap
+
+  /* hit-stop: the whole marsh holds its breath at third speed */
+  if (slowT > 0) { slowT = Math.max(0, slowT - dt); dt *= 0.35; }
 
   if (state !== S_PAUSE && state !== S_OVER && state !== S_ROUND && state !== S_TITLE)
     update(dt);

@@ -1398,6 +1398,7 @@ function playerHit() {
   run.combo = 1; run.comboGrace = 0;
   sfx.death();
   shake = 30;
+  slowmo = Math.max(slowmo, 0.9);
   explode(player.x, player.y, COL.ship, 55, 400 * scale);
   explode(player.x, player.y, '#ffffff', 25, 260 * scale);
   spawnRing(player.x, player.y, 220 * scale, 0.8, COL.ship, 3);
@@ -1619,6 +1620,24 @@ function drawBackground(dt) {
   // parallax follows the ship, plus a slow constant drift so the title screen breathes
   starOffX -= player.vx * dt * 0.06 + dt * 5;
   starOffY -= player.vy * dt * 0.06 + dt * 2;
+
+  // nebulae — deepest parallax layer, drifting colour behind the grid
+  var NEB = [
+    { x: 0.22, y: 0.3, r: 0.55, col: '58,72,168' },
+    { x: 0.8, y: 0.65, r: 0.5, col: '118,52,150' },
+    { x: 0.55, y: 0.1, r: 0.42, col: '32,96,140' }
+  ];
+  for (var nbi = 0; nbi < NEB.length; nbi++) {
+    var nb = NEB[nbi];
+    var nx = ((nb.x * view.w + starOffX * 0.12) % (view.w * 1.4) + view.w * 1.4) % (view.w * 1.4) - view.w * 0.2;
+    var ny = ((nb.y * view.h + starOffY * 0.12) % (view.h * 1.4) + view.h * 1.4) % (view.h * 1.4) - view.h * 0.2;
+    var nr = nb.r * Math.max(view.w, view.h);
+    var ng = ctx.createRadialGradient(nx, ny, 0, nx, ny, nr);
+    ng.addColorStop(0, 'rgba(' + nb.col + ',0.13)');
+    ng.addColorStop(1, 'rgba(' + nb.col + ',0)');
+    ctx.fillStyle = ng;
+    ctx.fillRect(nx - nr, ny - nr, nr * 2, nr * 2);
+  }
 
   // grid
   var g = 74 * scale;

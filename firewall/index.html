@@ -938,7 +938,12 @@ function killEnemy(e){
   spawnText(e.x,e.y,'+'+e.bounty,'#ffcc4d');
   var n=e.E.boss?36:10;
   for(var i=0;i<n;i++) spawnPart(e.x,e.y,e.E.col,e.E.boss?5:3);
-  if(e.E.boss){ spawnRing(e.x,e.y,'#ffcc4d',3.2); sfx('boom'); S.shake=0.5; }
+  if(e.E.boss){
+    spawnRing(e.x,e.y,'#ffcc4d',3.2);
+    spawnRing(e.x,e.y,'#ffffff',1.8);
+    sfx('boom'); S.shake=0.5;
+    slowT=0.35;               // savour a downed ROOTKIT
+  }
   else sfx('kill');
 }
 
@@ -2190,12 +2195,16 @@ function gameOver(won){
 
 /* ---------------------------------------------------------------- loop */
 var lastT=0, uiAcc=0;
+var slowT=0;
 function frame(ts){
   requestAnimationFrame(frame);
   var dt=(ts-lastT)/1000;
   lastT=ts;
   if(!isFinite(dt)||dt<0) dt=0;
   if(dt>0.05) dt=0.05;
+
+  /* boss-kill hit-stop: the board savours it at third speed */
+  if(slowT>0){ slowT-=dt; if(slowT<0) slowT=0; dt*=0.3; }
 
   if(S.screen==='play'&&!S.paused){
     for(var i=0;i<S.speed;i++) step(dt);
