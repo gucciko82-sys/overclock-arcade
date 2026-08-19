@@ -1029,3 +1029,42 @@ diameter per step and tunnelled straight through its neighbours. Strike
 rate went 0% to 13% on that alone, then 31% once the hook was tuned back.
 
 That is **34 games**.
+
+### Built and play-tested 2026-08-19 — Sweep, Sprint, Type, Fragment, Scan (games 35-39)
+
+Seven builders were launched at once and all seven died mid-flight on a
+session API limit. Five had written a complete file first; two (SUM and
+SYNTAX) never got past reading the house style. The five survivors were
+drafts abandoned partway through their own verification — so they were
+treated as untrusted and re-verified here from scratch.
+
+Note for next time: **seven concurrent builders is past the budget.**
+Four was comfortable; seven was not. Batch size is a cost decision, not
+just a speed one.
+
+Verified by the integrator, not taken on report:
+
+- **Sweep** — 360 freshly generated boards across all three sizes: the
+  first click was never a mine, the mine count was always exact, and the
+  no-guess guarantee held on 100% of beginner and intermediate boards and
+  96% of expert. The remainder fall back to a plain board after the
+  repair cap, which is the designed safeguard against a hang.
+- **Type** — the WPM and accuracy maths driven to exact known cases: 50
+  correct characters in 30s is exactly 20 wpm, 200 in 60s is 40, and 45
+  correct of 50 keystrokes is 90%. Pause/resume also works, which its
+  builder had flagged as a suspected bug before it died.
+- **Fragment** — screen wrap tested in all four directions: position
+  wraps and velocity is preserved every time. Its builder died before
+  taking a single screenshot, so every visual check here is the
+  integrator's.
+- **Sprint** — the core mechanic proven: alternating sides builds speed
+  (1.12), while mashing one side decays it (0.53). Mashing must not work,
+  and it doesn't.
+- **Scan** — the no-speech fallback: with `speechSynthesis` forced
+  undefined before any page script ran, the game still starts, still
+  plays, and throws nothing.
+
+All five pass the three-profile matrix and the control audit with zero
+console errors.
+
+That is **39 games**.

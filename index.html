@@ -1309,8 +1309,150 @@ var GAMES = [
       x.fillStyle = '#ffd98a';
       for (var sk2 = 0; sk2 < 7; sk2++) x.fillRect(w * 0.5 + 14 + sk2 * 5, h * 0.8 + (sk2 % 3) * 3 - 2, 2.4, 1.6);
     }
+  },
+  {
+    id: 'sweep', name: 'Sweep', cat: 'puzzle', tag: 'Minesweeper', isNew: true,
+    desc: 'Minesweeper the good way: the first click is always safe, and every board is generated so pure logic can finish it — no coin-flip guesses.',
+    best: function () { var s = lsJSON('sweep_v1'); if (!s) return null; var t = s.beginner; return t > 0 ? ['Beginner', t + 's'] : null; },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      var c = Math.min(w, h) / 7;
+      for (var r = 0; r < 5; r++) for (var q = 0; q < 6; q++) {
+        var bx = w * 0.08 + q * c, by = h * 0.14 + r * c;
+        var open = (r + q) % 3 !== 0;
+        x.fillStyle = open ? '#131c3f' : '#1e2a55';
+        x.fillRect(bx, by, c - 2, c - 2);
+        x.strokeStyle = open ? 'rgba(120,150,220,0.18)' : 'rgba(150,180,240,0.35)';
+        x.lineWidth = 1; x.strokeRect(bx + 0.5, by + 0.5, c - 3, c - 3);
+        if (open && (r * 6 + q) % 4 === 1) {
+          var n = 1 + ((r + q) % 3);
+          x.fillStyle = ['#7de2ff', '#8effc1', '#ffcc4d', '#ff9ed2'][n % 4];
+          x.font = '800 ' + Math.round(c * 0.55) + 'px "Segoe UI", sans-serif';
+          x.textAlign = 'center'; x.textBaseline = 'middle';
+          x.fillText(String(n), bx + c / 2 - 1, by + c / 2 - 1);
+        }
+      }
+      var fx = w * 0.08 + 4 * c + c / 2, fy = h * 0.14 + 1 * c + c / 2;
+      x.strokeStyle = '#e8b84a'; x.lineWidth = 1.6;
+      x.beginPath(); x.moveTo(fx, fy + c * 0.28); x.lineTo(fx, fy - c * 0.28); x.stroke();
+      x.fillStyle = '#e8b84a';
+      x.beginPath(); x.moveTo(fx, fy - c * 0.28); x.lineTo(fx + c * 0.3, fy - c * 0.14); x.lineTo(fx, fy); x.closePath(); x.fill();
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'sprint', name: 'Sprint', cat: 'sports', tag: 'Track & Field', isNew: true,
+    desc: 'A three-event meet on a red track: the 100 metres, the hurdles and the long jump. Alternate your feet — mashing one key gets you nowhere.',
+    best: function () { var s = lsJSON('sprint_v1'); return s && s.dash > 0 ? ['100m', Number(s.dash).toFixed(2) + 's'] : null; },
+    cover: function (x, w, h) {
+      var sk = x.createLinearGradient(0, 0, 0, h * 0.42);
+      sk.addColorStop(0, '#6f9ec4'); sk.addColorStop(1, '#bcd4e4');
+      x.fillStyle = sk; x.fillRect(0, 0, w, h * 0.42);
+      x.fillStyle = '#4a5364'; x.fillRect(0, h * 0.28, w, h * 0.16);
+      for (var s2 = 0; s2 < 90; s2++) {
+        x.fillStyle = ['rgba(230,200,170,0.6)', 'rgba(170,190,220,0.55)', 'rgba(210,160,150,0.5)'][s2 % 3];
+        x.fillRect((s2 * 29) % w, h * 0.3 + (s2 % 5) * 4, 3, 3);
+      }
+      x.fillStyle = '#2f6b3a'; x.fillRect(0, h * 0.44, w, h * 0.08);
+      x.fillStyle = '#b8482f'; x.fillRect(0, h * 0.52, w, h * 0.48);
+      x.strokeStyle = 'rgba(255,255,255,0.8)'; x.lineWidth = 1.6;
+      for (var l = 1; l < 5; l++) { x.beginPath(); x.moveTo(0, h * 0.52 + l * h * 0.1); x.lineTo(w, h * 0.52 + l * h * 0.1); x.stroke(); }
+      x.save(); x.translate(w * 0.42, h * 0.78);
+      x.fillStyle = '#e8c9a0';
+      x.beginPath(); x.arc(0, -20, 4.4, 0, 7); x.fill();
+      x.fillStyle = '#2f5fa8'; x.fillRect(-3.4, -16, 7, 10);
+      x.strokeStyle = '#e8c9a0'; x.lineWidth = 2.6; x.lineCap = 'round';
+      x.beginPath(); x.moveTo(-2, -14); x.lineTo(-9, -19); x.moveTo(2, -14); x.lineTo(8, -9); x.stroke();
+      x.strokeStyle = '#2b3550';
+      x.beginPath(); x.moveTo(-1, -6); x.lineTo(-8, 3); x.moveTo(1, -6); x.lineTo(8, 1); x.stroke();
+      x.restore();
+    }
+  },
+  {
+    id: 'type', name: 'Type', cat: 'kids', tag: 'Typing', isNew: true,
+    desc: 'A data type, and learning to type. Nine lessons from the home row to real code, with a keyboard that shows the next key and which finger owns it.',
+    best: function () {
+      var s = lsJSON('type_v1');
+      if (!s || !s.best) return null;
+      var k = Object.keys(s.best)[0];
+      var b = k ? s.best[k] : null;
+      return b && b.w ? ['Best', b.w + ' wpm'] : null;
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      x.fillStyle = 'rgba(232,184,74,0.9)';
+      x.font = '800 ' + Math.round(h * 0.16) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText('asdf jkl;', w / 2, h * 0.3);
+      var keys = ['A', 'S', 'D', 'F', 'J', 'K', 'L', ';'];
+      var kw = w * 0.1, kh = h * 0.16, x0 = w / 2 - (kw * 8 + 4 * 7) / 2;
+      for (var i = 0; i < 8; i++) {
+        var kx = x0 + i * (kw + 4), ky = h * 0.56;
+        var hot = i === 3;
+        x.fillStyle = hot ? '#e8b84a' : '#1e2a55';
+        x.beginPath(); x.roundRect(kx, ky, kw, kh, 4); x.fill();
+        x.strokeStyle = hot ? '#f5d98a' : 'rgba(140,170,230,0.35)'; x.lineWidth = 1.2; x.stroke();
+        x.fillStyle = hot ? '#0d1430' : 'rgba(210,225,255,0.8)';
+        x.font = '700 ' + Math.round(kh * 0.5) + 'px "Segoe UI", sans-serif';
+        x.fillText(keys[i], kx + kw / 2, ky + kh / 2 + 1);
+      }
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'fragment', name: 'Fragment', cat: 'shooter', tag: 'Asteroids', isNew: true,
+    desc: 'Memory fragmentation, and rocks fragmenting. Newtonian drift with no friction, rocks that split all the way down, and a hyperspace that might kill you.',
+    best: function () { var s = lsJSON('fragment_v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      x.fillStyle = '#04060a'; x.fillRect(0, 0, w, h);
+      x.strokeStyle = 'rgba(150,220,255,0.85)'; x.lineWidth = 1.4;
+      function rock(cx, cy, r, n, seed) {
+        x.beginPath();
+        for (var i = 0; i < n; i++) {
+          var a = i / n * 7;
+          var rr = r * (0.72 + ((Math.sin(seed + i * 2.3) + 1) / 2) * 0.45);
+          if (i) x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+          else x.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+        }
+        x.closePath(); x.stroke();
+      }
+      rock(w * 0.24, h * 0.3, 20, 9, 1.2);
+      rock(w * 0.74, h * 0.26, 13, 8, 3.7);
+      rock(w * 0.8, h * 0.74, 17, 9, 5.1);
+      rock(w * 0.18, h * 0.76, 9, 7, 2.4);
+      x.strokeStyle = '#ffffff'; x.lineWidth = 1.6;
+      x.save(); x.translate(w * 0.5, h * 0.52); x.rotate(-0.5);
+      x.beginPath(); x.moveTo(11, 0); x.lineTo(-8, 7); x.lineTo(-4, 0); x.lineTo(-8, -7); x.closePath(); x.stroke();
+      x.strokeStyle = 'rgba(255,190,120,0.9)';
+      x.beginPath(); x.moveTo(-5, 0); x.lineTo(-13, 0); x.stroke();
+      x.restore();
+      x.fillStyle = 'rgba(150,220,255,0.9)';
+      x.fillRect(w * 0.62, h * 0.44, 2, 2); x.fillRect(w * 0.66, h * 0.4, 2, 2);
+    }
+  },
+  {
+    id: 'scan', name: 'Scan', cat: 'kids', tag: 'Reading', isNew: true,
+    desc: 'A lexical scanner, and scanning a page. Letter sounds, blending c-a-t into cat, sight words and short passages — and it reads them aloud.',
+    best: function () { var s = lsJSON('scan_v1'); if (!s) return null; var st = s.stage || s.unlocked; return st > 0 ? ['Stage', st + ' / 7'] : null; },
+    cover: function (x, w, h) {
+      x.fillStyle = '#12101c'; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#e8934a';
+      x.font = '800 ' + Math.round(h * 0.3) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText('c a t', w / 2, h * 0.34);
+      x.strokeStyle = 'rgba(232,147,74,0.7)'; x.lineWidth = 2; x.lineCap = 'round';
+      x.beginPath();
+      x.moveTo(w * 0.34, h * 0.5); x.quadraticCurveTo(w * 0.42, h * 0.58, w * 0.5, h * 0.5);
+      x.moveTo(w * 0.5, h * 0.5); x.quadraticCurveTo(w * 0.58, h * 0.58, w * 0.66, h * 0.5);
+      x.stroke();
+      x.fillStyle = '#f2ead9';
+      x.font = '800 ' + Math.round(h * 0.24) + 'px "Segoe UI", sans-serif';
+      x.fillText('cat', w / 2, h * 0.74);
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
   }
 ];
+
 
 /* ------------------------------------------------------------ rendering -- */
 var CATS = [

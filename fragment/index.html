@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Fragment — Vector Asteroids</title>
+<meta name="theme-color" content="#04060a">
+<meta name="description" content="Memory fragmentation on a vector monitor. Newtonian drift, wrapping space, rocks that split into pieces of themselves, and a hyperspace key that might drop you inside one.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fragment">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #04060a;
+    --accent: #bfe6ff;
+    --fg: #eaf6ff;
+    --dim: rgba(200,228,255,0.56);
+    --panel: rgba(8,16,26,0.62);
+    --line: rgba(159,216,255,0.24);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; background: #000; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* ---- top-right icon buttons: the reserved 100x52 box ---- */
+  #topbtns {
+    position: absolute;
+    top: max(6px, env(safe-area-inset-top));
+    right: max(6px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .iconbtn:active { background: rgba(159,216,255,0.26); }
+  body:not(.playing) #topbtns { display: none; }
+
+  /* ---- touch controls: only after a real touch AND only while playing ---- */
+  #touchui { position: absolute; inset: 0; z-index: 5; pointer-events: none; display: none; }
+  body.touch.playing #touchui { display: block; }
+  .tbtn {
+    position: absolute; pointer-events: auto;
+    border-radius: 14px;
+    background: rgba(159,216,255,0.07); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    display: flex; align-items: center; justify-content: center;
+    text-shadow: 0 0 10px rgba(159,216,255,0.5);
+  }
+  .tbtn:active { background: rgba(159,216,255,0.3); }
+  #tLeft, #tRight { width: 62px; height: 62px; font-size: 20px; border-radius: 50%; }
+  #tLeft  { left: max(12px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom)); }
+  #tRight { left: calc(max(12px, env(safe-area-inset-left)) + 70px); bottom: max(14px, env(safe-area-inset-bottom)); }
+  #tThrust {
+    right: calc(max(12px, env(safe-area-inset-right)) + 82px);
+    bottom: max(14px, env(safe-area-inset-bottom));
+    width: 62px; height: 62px; border-radius: 50%;
+  }
+  #tFire {
+    right: max(12px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom));
+    width: 72px; height: 72px; border-radius: 50%;
+    color: #04121c; background: rgba(159,216,255,0.8); border-color: rgba(214,240,255,0.8);
+    text-shadow: none;
+  }
+  #tHyper {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(max(14px, env(safe-area-inset-bottom)) + 80px);
+    width: 72px; height: 44px; font-size: 10px;
+  }
+  @media (max-width: 400px) {
+    #tLeft, #tRight, #tThrust { width: 56px; height: 56px; }
+    #tRight { left: calc(max(10px, env(safe-area-inset-left)) + 62px); }
+    #tThrust { right: calc(max(10px, env(safe-area-inset-right)) + 74px); }
+    #tFire { width: 66px; height: 66px; }
+    #tHyper { width: 66px; height: 42px; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 72px); }
+  }
+
+  /* ---- overlay cards ---- */
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none; align-items: safe center; justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) 14px max(12px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 40%, rgba(6,14,26,0.72), rgba(2,4,8,0.95));
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(540px, 100%); margin: auto 0;
+    background: rgba(6,12,22,0.78);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px 18px 18px;
+    box-shadow: 0 0 60px rgba(90,170,255,0.12), 0 24px 70px rgba(0,0,0,0.7);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.34em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(34px, 11vw, 66px);
+    letter-spacing: 0.2em; font-weight: 700; line-height: 1;
+    color: var(--fg);
+    text-shadow: 0 0 12px rgba(150,210,255,0.9), 0 0 40px rgba(90,170,255,0.55);
+  }
+  .gover {
+    margin: 2px 0 4px;
+    font-size: clamp(22px, 7vw, 38px); font-weight: 700;
+    letter-spacing: 0.16em; text-transform: uppercase; color: #ff7b93;
+    text-shadow: 0 0 18px rgba(255,123,147,0.6);
+  }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.03em; margin: 8px auto 0; max-width: 430px; line-height: 1.5; }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 14px auto 4px; max-width: 360px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(159,216,255,0.13); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 4px; }
+  .stat { background: rgba(159,216,255,0.05); border: 1px solid var(--line); border-radius: 10px; padding: 7px 5px; }
+  .stat .k { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(16px, 5vw, 22px); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .best { font-size: 12px; color: var(--dim); margin-top: 10px; }
+  .best b { color: var(--accent); }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    margin-top: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 48px; min-width: 120px; padding: 0 26px;
+    border-radius: 10px; border: 1px solid rgba(159,216,255,0.6);
+    background: rgba(159,216,255,0.14); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; cursor: pointer;
+    text-shadow: 0 0 10px rgba(159,216,255,0.6);
+  }
+  .btn:active { background: rgba(159,216,255,0.32); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(159,216,255,0.05); text-shadow: none; }
+  .paused { font-size: clamp(24px, 8vw, 42px); font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent);
+            text-shadow: 0 0 18px rgba(159,216,255,0.55); }
+  @media (max-height: 620px) {
+    .card { padding: 12px 14px; border-radius: 12px; }
+    .keys { display: none; }
+    h1 { font-size: clamp(28px, 8vw, 44px); }
+    .tagline { font-size: 11.5px; }
+    .btn { margin-top: 10px; min-height: 44px; }
+    .stats { margin: 10px 0 2px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="touchui">
+    <button class="tbtn" id="tLeft" type="button" aria-label="Rotate left">&#9664;</button>
+    <button class="tbtn" id="tRight" type="button" aria-label="Rotate right">&#9654;</button>
+    <button class="tbtn" id="tThrust" type="button" aria-label="Thrust">THRUST</button>
+    <button class="tbtn" id="tFire" type="button" aria-label="Fire">FIRE</button>
+    <button class="tbtn" id="tHyper" type="button" aria-label="Hyperspace">HYPER</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   FRAGMENT — Overclock arcade.
+   Memory fragmentation drawn on a vector monitor. One ship, Newtonian
+   drift, a wrapping page of address space, and rocks that break into
+   pieces of themselves. Hyperspace is the panic key; sometimes it
+   rematerialises you inside a rock, and that is the whole point.
+   One file, no assets, oscillator audio, top-level script so the
+   playtest harness can reach state.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'fragment_v1';
+var K_MUTE = 'fragment_muted_v1';
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function sgnRnd() { return Math.random() < 0.5 ? -1 : 1; }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+
+/* Defensive save reader: anything that is not a finite, non-negative number
+   reads as "no high score" rather than throwing into the hub's best() call. */
+function loadHigh() {
+  try {
+    var raw = localStorage.getItem(K_SAVE);
+    if (!raw) return 0;
+    var o = JSON.parse(raw);
+    if (!o || typeof o !== 'object') return 0;
+    var h = o.high;
+    if (typeof h !== 'number' || !isFinite(h) || h < 0) return 0;
+    return Math.floor(h);
+  } catch (e) { return 0; }
+}
+function saveHigh(h) { try { localStorage.setItem(K_SAVE, JSON.stringify({ high: Math.floor(h) })); } catch (e) {} }
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+var rumbleGain = null, rumbleFilter = null, sirenOsc = null, sirenGain = null;
+var noiseBuf = null;
+
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') { try { actx.resume(); } catch (e) {} } return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.4;
+    master.connect(actx.destination);
+
+    /* one noise buffer, reused by every percussive cue and by the rumble */
+    var n = Math.floor(actx.sampleRate * 1.2);
+    noiseBuf = actx.createBuffer(1, n, actx.sampleRate);
+    var d = noiseBuf.getChannelData(0);
+    for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+
+    /* persistent thrust rumble: one looping source whose gain tracks state */
+    var src = actx.createBufferSource();
+    src.buffer = noiseBuf; src.loop = true;
+    rumbleFilter = actx.createBiquadFilter();
+    rumbleFilter.type = 'lowpass'; rumbleFilter.frequency.value = 340;
+    rumbleGain = actx.createGain(); rumbleGain.gain.value = 0;
+    src.connect(rumbleFilter); rumbleFilter.connect(rumbleGain); rumbleGain.connect(master);
+    src.start();
+
+    /* persistent saucer siren: one oscillator, gain gated by saucer presence */
+    sirenOsc = actx.createOscillator();
+    sirenOsc.type = 'sawtooth'; sirenOsc.frequency.value = 220;
+    sirenGain = actx.createGain(); sirenGain.gain.value = 0;
+    sirenOsc.connect(sirenGain); sirenGain.connect(master);
+    sirenOsc.start();
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.4;
+  var b = document.getElementById('muteBtn');
+  if (b) { b.innerHTML = m ? '&#128263;' : '&#9835;'; b.setAttribute('aria-label', m ? 'Unmute' : 'Mute'); }
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t0 = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t0);
+  if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + Math.min(0.012, dur * 0.25));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(master);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+function noiseHit(dur, cut, vol, delay, sweepTo) {
+  if (!actx || muted || !noiseBuf) return;
+  var t0 = actx.currentTime + (delay || 0);
+  var s = actx.createBufferSource(); s.buffer = noiseBuf;
+  s.playbackRate.value = rnd(0.85, 1.15);
+  var f = actx.createBiquadFilter(); f.type = 'lowpass';
+  f.frequency.setValueAtTime(cut, t0);
+  if (sweepTo) f.frequency.exponentialRampToValueAtTime(Math.max(60, sweepTo), t0 + dur);
+  var g = actx.createGain();
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  s.connect(f); f.connect(g); g.connect(master);
+  s.start(t0); s.stop(t0 + dur + 0.02);
+}
+var SFX = {
+  fire:   function () { tone('square', 900, 240, 0.075, 0.10); },
+  bang3:  function () { noiseHit(0.52, 700, 0.42, 0, 90); tone('triangle', 120, 44, 0.4, 0.13); },
+  bang2:  function () { noiseHit(0.36, 1100, 0.34, 0, 140); tone('triangle', 190, 70, 0.28, 0.10); },
+  bang1:  function () { noiseHit(0.24, 1900, 0.28, 0, 260); tone('triangle', 300, 120, 0.18, 0.08); },
+  death:  function () { noiseHit(1.0, 900, 0.5, 0, 60); tone('sawtooth', 260, 32, 0.9, 0.16); },
+  hyper:  function () { tone('sine', 1300, 90, 0.3, 0.14); noiseHit(0.3, 2600, 0.14, 0, 200); },
+  extra:  function () { tone('square', 523, 523, 0.1, 0.11); tone('square', 784, 784, 0.1, 0.11, 0.1); tone('square', 1046, 1046, 0.24, 0.12, 0.2); },
+  wave:   function () { tone('triangle', 330, 330, 0.16, 0.11); tone('triangle', 494, 494, 0.3, 0.12, 0.15); },
+  ufoDie: function () { noiseHit(0.5, 1400, 0.36, 0, 100); tone('square', 420, 60, 0.4, 0.12); },
+  ufoShot:function () { tone('sawtooth', 500, 180, 0.1, 0.07); },
+  beat:   function (lo) { tone('square', lo ? 62 : 84, lo ? 54 : 74, 0.11, 0.16); }
+};
+
+/* ----------------------------------------------------------------- view -- */
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var bloomCv = document.createElement('canvas');
+var bctx = bloomCv.getContext('2d');
+var view = { w: 900, h: 600, dpr: 1, s: 1 };
+
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(240, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var ow = view.w, oh = view.h;
+  view.w = w; view.h = h; view.dpr = dpr;
+  view.s = clamp(Math.min(w, h) / 620, 0.6, 1.2);
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+  bloomCv.width = Math.max(2, Math.round(w / 4));
+  bloomCv.height = Math.max(2, Math.round(h / 4));
+  /* keep everything inside the new page: scale positions, never strand */
+  if (ow !== w || oh !== h) {
+    var fx = w / ow, fy = h / oh;
+    var all = [].concat(rocks, bullets, sbullets, saucers, debris, sparks);
+    for (var i = 0; i < all.length; i++) { all[i].x *= fx; all[i].y *= fy; }
+    ship.x *= fx; ship.y *= fy;
+  }
+  ship.r = 11 * view.s;
+  for (var j = 0; j < rocks.length; j++) rocks[j].r = ROCK_R[rocks[j].size] * view.s;
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+/* --------------------------------------------------- vector stroke font -- */
+/* Glyphs live on a 4 wide x 6 tall grid, y down, as polyline point lists.
+   Drawing the HUD with real strokes (not a UI typeface) is half of why the
+   screen reads as a vector cabinet rather than a canvas game. */
+var FONT = {
+  '0': [[0,1,1,0,3,0,4,1,4,5,3,6,1,6,0,5,0,1]],
+  '1': [[0.8,1,2,0,2,6],[0.6,6,3.4,6]],
+  '2': [[0,1,1,0,3,0,4,1,4,2,0,6,4,6]],
+  '3': [[0,0,4,0,2,2.4,4,3.4,4,5,3,6,1,6,0,5]],
+  '4': [[3,6,3,0,0,4,4,4]],
+  '5': [[4,0,0,0,0,2.6,3,2.6,4,3.6,4,5,3,6,1,6,0,5]],
+  '6': [[4,0,1,0,0,1,0,5,1,6,3,6,4,5,4,3.6,3,2.8,0,2.8]],
+  '7': [[0,0,4,0,1.6,6]],
+  '8': [[1,0,3,0,4,1,4,2,3,2.9,1,2.9,0,2,0,1,1,0],[1,2.9,0,3.9,0,5,1,6,3,6,4,5,4,3.9,3,2.9]],
+  '9': [[0,6,3,6,4,5,4,1,3,0,1,0,0,1,0,2.4,1,3.2,4,3.2]],
+  'A': [[0,6,2,0,4,6],[0.8,4,3.2,4]],
+  'B': [[0,0,3,0,4,1,3,2.9,0,2.9],[0,0,0,6],[0,2.9,3,2.9,4,4.2,3,6,0,6]],
+  'C': [[4,1,3,0,1,0,0,1,0,5,1,6,3,6,4,5]],
+  'D': [[0,0,0,6],[0,0,3,0,4,1.5,4,4.5,3,6,0,6]],
+  'E': [[4,0,0,0,0,6,4,6],[0,3,2.9,3]],
+  'F': [[4,0,0,0,0,6],[0,3,2.9,3]],
+  'G': [[4,1,3,0,1,0,0,1,0,5,1,6,3,6,4,5,4,3.4,2.2,3.4]],
+  'H': [[0,0,0,6],[4,0,4,6],[0,3,4,3]],
+  'I': [[1,0,3,0],[2,0,2,6],[1,6,3,6]],
+  'J': [[3,0,3,5,2,6,1,6,0,5]],
+  'K': [[0,0,0,6],[4,0,0,3.4],[1.4,2.3,4,6]],
+  'L': [[0,0,0,6,4,6]],
+  'M': [[0,6,0,0,2,2.8,4,0,4,6]],
+  'N': [[0,6,0,0,4,6,4,0]],
+  'O': [[1,0,3,0,4,1,4,5,3,6,1,6,0,5,0,1,1,0]],
+  'P': [[0,6,0,0,3,0,4,1,4,2.4,3,3.4,0,3.4]],
+  'Q': [[1,0,3,0,4,1,4,5,3,6,1,6,0,5,0,1,1,0],[2.6,4.2,4.3,6.3]],
+  'R': [[0,6,0,0,3,0,4,1,4,2.4,3,3.4,0,3.4],[2,3.4,4,6]],
+  'S': [[4,1,3,0,1,0,0,1,0,2.4,1,3.2,3,3.2,4,4,4,5,3,6,1,6,0,5]],
+  'T': [[0,0,4,0],[2,0,2,6]],
+  'U': [[0,0,0,5,1,6,3,6,4,5,4,0]],
+  'V': [[0,0,2,6,4,0]],
+  'W': [[0,0,1,6,2,3.2,3,6,4,0]],
+  'X': [[0,0,4,6],[4,0,0,6]],
+  'Y': [[0,0,2,3,4,0],[2,3,2,6]],
+  'Z': [[0,0,4,0,0,6,4,6]],
+  '-': [[0.6,3,3.4,3]],
+  '.': [[1.8,5.7,2.2,5.7]],
+  ':': [[2,1.6,2,2.0],[2,4.2,2,4.6]],
+  '/': [[0,6,4,0]],
+  '!': [[2,0,2,4],[2,5.6,2,6]],
+  '×': [[0.6,1.4,3.4,4.6],[3.4,1.4,0.6,4.6]],
+  ' ': []
+};
+var GLYPH_W = 4, GLYPH_GAP = 1.7;
+
+function textWidth(str, size) {
+  var u = size / 6;
+  return str.length > 0 ? (str.length * (GLYPH_W + GLYPH_GAP) - GLYPH_GAP) * u : 0;
+}
+/* align: 'l' | 'c' | 'r' */
+function vecText(str, x, y, size, align, col, alpha) {
+  str = String(str).toUpperCase();
+  var u = size / 6;
+  var w = textWidth(str, size);
+  var sx = align === 'c' ? x - w / 2 : (align === 'r' ? x - w : x);
+  var paths = [];
+  for (var i = 0; i < str.length; i++) {
+    var g = FONT[str.charAt(i)];
+    if (!g) g = FONT[' '];
+    var ox = sx + i * (GLYPH_W + GLYPH_GAP) * u;
+    for (var p = 0; p < g.length; p++) {
+      var seg = g[p], pts = [];
+      for (var k = 0; k < seg.length; k += 2) pts.push(ox + seg[k] * u, y + seg[k + 1] * u);
+      paths.push(pts);
+    }
+  }
+  strokePaths(paths, col || '#dff1ff', Math.max(1, size * 0.11), alpha === undefined ? 1 : alpha, false);
+}
+
+/* ------------------------------------------------------------ draw core -- */
+/* Every stroke is drawn twice: a wide, dim halo and a thin, hot core. That
+   plus the 1/4-scale bloom pass and a whisper of per-vertex jitter is the
+   whole "vector monitor" recipe. No fills anywhere except the ship flame. */
+var JITTER = 0.55;
+function strokePaths(paths, col, lw, alpha, closed) {
+  var i, k, pts;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (var pass = 0; pass < 2; pass++) {
+    ctx.beginPath();
+    for (i = 0; i < paths.length; i++) {
+      pts = paths[i];
+      if (pts.length < 4) continue;
+      ctx.moveTo(pts[0] + (Math.random() - 0.5) * JITTER, pts[1] + (Math.random() - 0.5) * JITTER);
+      for (k = 2; k < pts.length; k += 2) {
+        ctx.lineTo(pts[k] + (Math.random() - 0.5) * JITTER, pts[k + 1] + (Math.random() - 0.5) * JITTER);
+      }
+      if (closed) ctx.closePath();
+    }
+    if (pass === 0) { ctx.strokeStyle = col; ctx.globalAlpha = alpha * 0.22; ctx.lineWidth = lw * 3.4; }
+    else { ctx.strokeStyle = col; ctx.globalAlpha = alpha; ctx.lineWidth = lw; }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ----------------------------------------------------------- wrap logic -- */
+/* The classic bug is popping across the seam. Two rules keep it seamless:
+   positions are wrapped by modulo (never clamped), and anything whose
+   bounding circle crosses an edge is DRAWN on every side it touches. */
+function wrapPos(o) {
+  var W = view.w, H = view.h;
+  o.x = ((o.x % W) + W) % W;
+  o.y = ((o.y % H) + H) % H;
+}
+function wdx(a, b) { var W = view.w, d = a - b; if (d > W / 2) d -= W; else if (d < -W / 2) d += W; return d; }
+function wdy(a, b) { var H = view.h, d = a - b; if (d > H / 2) d -= H; else if (d < -H / 2) d += H; return d; }
+function wdist(ax, ay, bx, by) { var dx = wdx(ax, bx), dy = wdy(ay, by); return Math.sqrt(dx * dx + dy * dy); }
+function hits(a, b) { var d = wdist(a.x, a.y, b.x, b.y); return d < (a.r + b.r); }
+
+/* Call fn(x, y) once per visible ghost of an object at (x,y) with radius r. */
+function wrapDraw(x, y, r, fn) {
+  var W = view.w, H = view.h;
+  var xs = [x], ys = [y], i, j;
+  if (x - r < 0) xs.push(x + W);
+  if (x + r > W) xs.push(x - W);
+  if (y - r < 0) ys.push(y + H);
+  if (y + r > H) ys.push(y - H);
+  for (i = 0; i < xs.length; i++) for (j = 0; j < ys.length; j++) fn(xs[i], ys[j]);
+}
+
+/* ---------------------------------------------------------------- state -- */
+var G = {
+  state: 'title',        /* title | play | pause | over */
+  score: 0, high: loadHigh(), lives: 3, wave: 0,
+  nextLife: 10000, extraLives: 0,
+  waveRocks: 1, respawnT: 0, waveT: 0,
+  banner: '', bannerT: 0,
+  shake: 0, flash: 0,
+  saucerT: 26, beatT: 0, beatLo: false,
+  shots: 0, hitsCount: 0, hypers: 0, biggest: 0
+};
+var ship = {
+  x: 450, y: 300, vx: 0, vy: 0, a: -Math.PI / 2, r: 11,
+  alive: true, inv: 0, thrusting: false, cool: 0, hyperCool: 0, warp: 0
+};
+var rocks = [], bullets = [], sbullets = [], saucers = [], debris = [], sparks = [], floaters = [];
+
+/* tuning */
+var ROCK_R = { 3: 46, 2: 24, 1: 12 };
+var ROCK_SCORE = { 3: 20, 2: 50, 1: 100 };
+var TURN_RATE = 3.5;          /* rad / s */
+var THRUST_ACC = 210;         /* px / s^2 at scale 1 */
+var DRIFT_KEEP = 0.985;       /* per SECOND — a whisper, not friction */
+var MAX_SPEED = 430;
+var BULLET_SPEED = 540;
+var BULLET_LIFE = 1.05;       /* seconds — bullets die, they never wrap forever */
+var MAX_BULLETS = 5;
+var FIRE_COOL = 0.17;
+var HYPER_RISK = 0.13;        /* chance hyperspace kills you outright */
+var HYPER_COOL = 0.7;
+var INV_TIME = 2.4;
+
+/* ------------------------------------------------------------ entities --- */
+function makeRock(x, y, size, vx, vy, parentProf) {
+  var n = size === 3 ? 13 : (size === 2 ? 11 : 9);
+  var prof = [], i;
+  if (parentProf && parentProf.length) {
+    /* A fragment is literally a slice of its parent's silhouette, resampled
+       and lightly re-jittered, so a child reads as a piece of the rock it
+       came out of rather than a fresh random blob. */
+    var start = (Math.random() * parentProf.length) | 0;
+    for (i = 0; i < n; i++) {
+      var t = i / n * (parentProf.length * 0.6);
+      var idx = (start + Math.floor(t)) % parentProf.length;
+      prof.push(clamp(parentProf[idx] * rnd(0.9, 1.12), 0.6, 1.34));
+    }
+  } else {
+    for (i = 0; i < n; i++) prof.push(rnd(0.7, 1.22));
+  }
+  return {
+    x: x, y: y, vx: vx, vy: vy, size: size,
+    r: ROCK_R[size] * view.s,
+    prof: prof, n: n,
+    ang: rnd(0, TAU),
+    spin: rnd(-1, 1) * (0.35 + (3 - size) * 0.32),
+    hitFlash: 0
+  };
+}
+function rockSpeed(size) {
+  var base = (24 + G.wave * 3.4) * view.s;
+  return base * (1 + (3 - size) * 0.42) * rnd(0.7, 1.35);
+}
+function spawnWave() {
+  G.wave++;
+  var count = Math.min(4 + G.wave, 11);
+  rocks.length = 0;
+  for (var i = 0; i < count; i++) {
+    /* start them off the ship's back so a wave never opens with a cheap death */
+    var p = safeSpot(ship.x, ship.y, 190 * view.s);
+    var ang = rnd(0, TAU), sp = rockSpeed(3);
+    rocks.push(makeRock(p.x, p.y, 3, Math.cos(ang) * sp, Math.sin(ang) * sp, null));
+  }
+  G.waveRocks = rocks.length;
+  G.waveT = 0;
+  G.saucerT = Math.max(8, 26 - G.wave * 1.6) * rnd(0.7, 1.15);
+  banner('WAVE ' + G.wave);
+  SFX.wave();
+}
+function safeSpot(ax, ay, minD) {
+  var W = view.w, H = view.h;
+  for (var t = 0; t < 60; t++) {
+    var x = rnd(0, W), y = rnd(0, H);
+    if (wdist(x, y, ax, ay) < minD) continue;
+    var ok = true;
+    for (var i = 0; i < rocks.length; i++) {
+      if (wdist(x, y, rocks[i].x, rocks[i].y) < rocks[i].r + 40 * view.s) { ok = false; break; }
+    }
+    if (ok) return { x: x, y: y };
+  }
+  return { x: rnd(0, W), y: rnd(0, H) };
+}
+/* True when nothing dangerous is within `pad` of (x,y) — used to hold a
+   respawn until the middle of the page is genuinely clear. */
+function spotClear(x, y, pad) {
+  var i;
+  for (i = 0; i < rocks.length; i++) if (wdist(x, y, rocks[i].x, rocks[i].y) < rocks[i].r + pad) return false;
+  for (i = 0; i < saucers.length; i++) if (wdist(x, y, saucers[i].x, saucers[i].y) < saucers[i].r + pad) return false;
+  for (i = 0; i < sbullets.length; i++) if (wdist(x, y, sbullets[i].x, sbullets[i].y) < pad * 0.55) return false;
+  return true;
+}
+function banner(txt) { G.banner = txt; G.bannerT = 2.0; }
+function floater(x, y, txt) {
+  floaters.push({ x: x, y: y, txt: txt, t: 0.9 });
+  if (floaters.length > 24) floaters.shift();
+}
+function burst(x, y, count, spd, life, col) {
+  for (var i = 0; i < count; i++) {
+    var a = rnd(0, TAU), s = spd * rnd(0.25, 1);
+    sparks.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: life * rnd(0.5, 1), life: life, col: col || '#cfeaff' });
+  }
+  if (sparks.length > 300) sparks.splice(0, sparks.length - 300);
+}
+function addScore(n, x, y) {
+  G.score += n;
+  if (x !== undefined) floater(x, y, '+' + n);
+  while (G.score >= G.nextLife) {
+    G.nextLife += 10000;
+    G.lives++; G.extraLives++;
+    banner('EXTRA SHIP');
+    SFX.extra();
+  }
+}
+
+/* ---------------------------------------------------------- ship actions -- */
+function fire() {
+  if (G.state !== 'play' || !ship.alive || ship.cool > 0) return;
+  if (bullets.length >= MAX_BULLETS) return;
+  ship.cool = FIRE_COOL;
+  var sp = BULLET_SPEED * view.s;
+  bullets.push({
+    x: ship.x + Math.cos(ship.a) * ship.r,
+    y: ship.y + Math.sin(ship.a) * ship.r,
+    vx: Math.cos(ship.a) * sp + ship.vx * 0.55,
+    vy: Math.sin(ship.a) * sp + ship.vy * 0.55,
+    t: BULLET_LIFE, r: 2.2 * view.s
+  });
+  G.shots++;
+  SFX.fire();
+}
+function hyperspace() {
+  if (G.state !== 'play' || !ship.alive || ship.hyperCool > 0) return;
+  ship.hyperCool = HYPER_COOL;
+  G.hypers++;
+  /* leave a shredded outline behind at the old address */
+  spawnDebris(ship.x, ship.y, 0.5, 0.5);
+  ship.x = rnd(0, view.w); ship.y = rnd(0, view.h);
+  ship.vx *= 0.25; ship.vy *= 0.25;
+  ship.warp = 0.35;
+  SFX.hyper();
+  /* the risk IS the mechanic: a bad roll, or a bad address, kills you */
+  var bad = Math.random() < HYPER_RISK;
+  if (!bad) {
+    for (var i = 0; i < rocks.length; i++) {
+      if (wdist(ship.x, ship.y, rocks[i].x, rocks[i].y) < rocks[i].r + ship.r) { bad = true; break; }
+    }
+  }
+  if (bad) { killShip('REMATERIALISED INSIDE A ROCK'); }
+}
+function spawnDebris(x, y, vx, vy) {
+  for (var i = 0; i < 7; i++) {
+    var a = rnd(0, TAU);
+    debris.push({
+      x: x, y: y,
+      vx: vx * 0.4 + Math.cos(a) * rnd(14, 60) * view.s,
+      vy: vy * 0.4 + Math.sin(a) * rnd(14, 60) * view.s,
+      ang: rnd(0, TAU), spin: rnd(-2.2, 2.2),
+      len: rnd(6, 17) * view.s, t: rnd(1.4, 2.6), life: 2.6
+    });
+  }
+  if (debris.length > 90) debris.splice(0, debris.length - 90);
+}
+function killShip(reason) {
+  if (!ship.alive) return;
+  ship.alive = false;
+  ship.thrusting = false;
+  G.lives--;
+  G.respawnT = 1.9;
+  G.shake = 16; G.flash = 0.5;
+  G.deathReason = reason || '';
+  spawnDebris(ship.x, ship.y, ship.vx, ship.vy);
+  burst(ship.x, ship.y, 22, 150 * view.s, 0.9, '#ffd6de');
+  SFX.death();
+  if (rumbleGain) try { rumbleGain.gain.value = 0; } catch (e) {}
+  if (G.lives <= 0) { G.respawnT = 2.2; }
+}
+function respawn() {
+  var cx = view.w / 2, cy = view.h / 2;
+  if (!spotClear(cx, cy, 110 * view.s)) {
+    /* hold in the void rather than drop the player into a rock */
+    var p = null;
+    for (var t = 0; t < 40; t++) {
+      var x = rnd(view.w * 0.15, view.w * 0.85), y = rnd(view.h * 0.15, view.h * 0.85);
+      if (spotClear(x, y, 110 * view.s)) { p = { x: x, y: y }; break; }
+    }
+    if (!p) { G.respawnT = 0.25; return false; }
+    cx = p.x; cy = p.y;
+  }
+  ship.x = cx; ship.y = cy;
+  ship.vx = 0; ship.vy = 0; ship.a = -Math.PI / 2;
+  ship.alive = true; ship.inv = INV_TIME; ship.cool = 0; ship.hyperCool = 0; ship.warp = 0.3;
+  return true;
+}
+
+/* ------------------------------------------------------------- fragment -- */
+/* The split rule, exactly: large -> two medium -> two small -> gone. Each
+   child keeps the parent's momentum and gets a divergence kick perpendicular
+   to it, so a fragmenting rock opens like a pair of parentheses. */
+function destroyRock(idx, byPlayer) {
+  var rk = rocks[idx];
+  if (!rk) return null;
+  rocks.splice(idx, 1);
+  var kids = [];
+  if (rk.size > 1) {
+    var base = Math.atan2(rk.vy, rk.vx);
+    var kick = (34 + G.wave * 2.5) * view.s * rnd(0.85, 1.3);
+    for (var i = 0; i < 2; i++) {
+      var side = i === 0 ? 1 : -1;
+      var dir = base + side * rnd(0.5, 1.15);
+      var sp = Math.sqrt(rk.vx * rk.vx + rk.vy * rk.vy) * rnd(1.0, 1.25) + kick * 0.35;
+      var k = makeRock(
+        rk.x + Math.cos(dir) * rk.r * 0.35,
+        rk.y + Math.sin(dir) * rk.r * 0.35,
+        rk.size - 1,
+        rk.vx * 0.9 + Math.cos(dir) * kick,
+        rk.vy * 0.9 + Math.sin(dir) * kick,
+        rk.prof
+      );
+      var ksp = Math.sqrt(k.vx * k.vx + k.vy * k.vy);
+      var cap = 260 * view.s;
+      if (ksp > cap) { k.vx *= cap / ksp; k.vy *= cap / ksp; }
+      k.spin = rk.spin * rnd(1.1, 1.9) * (Math.random() < 0.5 ? -1 : 1);
+      rocks.push(k); kids.push(k);
+      void sp;
+    }
+  }
+  burst(rk.x, rk.y, rk.size === 3 ? 16 : (rk.size === 2 ? 11 : 7), (60 + rk.r * 2.2), 0.6, '#bfe6ff');
+  G.shake = Math.max(G.shake, rk.size * 2.6);
+  if (rk.size === 3) SFX.bang3(); else if (rk.size === 2) SFX.bang2(); else SFX.bang1();
+  if (byPlayer) {
+    G.hitsCount++;
+    addScore(ROCK_SCORE[rk.size], rk.x, rk.y);
+  }
+  return kids;
+}
+
+/* -------------------------------------------------------------- saucers -- */
+function spawnSaucer() {
+  /* small sniper gets likelier as waves climb; early on it is the big dumb one */
+  var smallChance = clamp(0.12 + G.wave * 0.075 + G.score / 60000, 0.12, 0.78);
+  var small = Math.random() < smallChance;
+  var fromLeft = Math.random() < 0.5;
+  var s = {
+    small: small,
+    r: (small ? 12 : 21) * view.s,
+    x: fromLeft ? -30 : view.w + 30,
+    y: rnd(view.h * 0.12, view.h * 0.88),
+    vx: (fromLeft ? 1 : -1) * (small ? 128 : 92) * view.s * (1 + G.wave * 0.03),
+    vy: 0,
+    travel: view.w + 90,
+    jinkT: rnd(0.5, 1.4),
+    fireT: small ? rnd(0.7, 1.4) : rnd(0.5, 1.2)
+  };
+  saucers.push(s);
+}
+function saucerFire(s) {
+  var sp = (small_speed(s)) * view.s;
+  var a;
+  if (s.small && ship.alive) {
+    /* lead the target: solve roughly for intercept, then add a little slop
+       that shrinks as the waves climb */
+    var dx = wdx(ship.x, s.x), dy = wdy(ship.y, s.y);
+    var d = Math.sqrt(dx * dx + dy * dy) || 1;
+    var tt = d / sp;
+    var px = dx + ship.vx * tt, py = dy + ship.vy * tt;
+    a = Math.atan2(py, px) + rnd(-1, 1) * Math.max(0.03, 0.24 - G.wave * 0.018);
+  } else {
+    a = rnd(0, TAU);
+  }
+  sbullets.push({ x: s.x + Math.cos(a) * s.r, y: s.y + Math.sin(a) * s.r, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 1.5, r: 2.4 * view.s });
+  SFX.ufoShot();
+}
+function small_speed(s) { return s.small ? 340 : 290; }
+function killSaucer(i, byPlayer) {
+  var s = saucers[i];
+  if (!s) return;
+  saucers.splice(i, 1);
+  burst(s.x, s.y, 16, 150 * view.s, 0.7, '#d8f2ff');
+  spawnDebris(s.x, s.y, s.vx * 0.3, 0);
+  G.shake = Math.max(G.shake, 8);
+  SFX.ufoDie();
+  if (byPlayer) addScore(s.small ? 1000 : 200, s.x, s.y);
+}
+
+/* ------------------------------------------------------------- the sim --- */
+var held = { left: false, right: false, thrust: false, fire: false };
+var nowT = 0;
+
+function update(dt) {
+  /* things that keep moving on the title screen and after death */
+  var i;
+  for (i = debris.length - 1; i >= 0; i--) {
+    var d = debris[i];
+    d.x += d.vx * dt; d.y += d.vy * dt; d.ang += d.spin * dt; d.t -= dt;
+    wrapPos(d);
+    if (d.t <= 0) debris.splice(i, 1);
+  }
+  for (i = sparks.length - 1; i >= 0; i--) {
+    var sp = sparks[i];
+    sp.x += sp.vx * dt; sp.y += sp.vy * dt; sp.t -= dt;
+    sp.vx *= Math.pow(0.35, dt); sp.vy *= Math.pow(0.35, dt);
+    wrapPos(sp);
+    if (sp.t <= 0) sparks.splice(i, 1);
+  }
+  for (i = floaters.length - 1; i >= 0; i--) {
+    floaters[i].t -= dt; floaters[i].y -= 22 * dt;
+    if (floaters[i].t <= 0) floaters.splice(i, 1);
+  }
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 34);
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 2.2);
+  if (G.bannerT > 0) G.bannerT -= dt;
+  if (ship.warp > 0) ship.warp = Math.max(0, ship.warp - dt);
+
+  /* rocks drift in every state — the title screen is an attract field */
+  for (i = 0; i < rocks.length; i++) {
+    var ark = rocks[i];
+    ark.x += ark.vx * dt; ark.y += ark.vy * dt; ark.ang += ark.spin * dt;
+    if (ark.hitFlash > 0) ark.hitFlash -= dt;
+    wrapPos(ark);
+  }
+
+  if (G.state !== 'play') { updateAudioTracks(dt); return; }
+  G.waveT += dt;
+
+  /* ------- ship ------- */
+  if (ship.alive) {
+    if (held.left || padHeld.left) ship.a -= TURN_RATE * dt;
+    if (held.right || padHeld.right) ship.a += TURN_RATE * dt;
+    ship.thrusting = !!(held.thrust || padHeld.thrust);
+    if (ship.thrusting) {
+      var acc = THRUST_ACC * view.s * dt;
+      ship.vx += Math.cos(ship.a) * acc;
+      ship.vy += Math.sin(ship.a) * acc;
+      if (Math.random() < 0.55) {
+        var ba = ship.a + Math.PI + rnd(-0.34, 0.34);
+        sparks.push({
+          x: ship.x + Math.cos(ship.a + Math.PI) * ship.r * 0.9,
+          y: ship.y + Math.sin(ship.a + Math.PI) * ship.r * 0.9,
+          vx: ship.vx * 0.4 + Math.cos(ba) * rnd(50, 120) * view.s,
+          vy: ship.vy * 0.4 + Math.sin(ba) * rnd(50, 120) * view.s,
+          t: 0.26, life: 0.26, col: '#9fd8ff'
+        });
+      }
+    }
+    /* a whisper of drag — enough that a runaway eventually settles, far too
+       little to bail you out of a bad vector */
+    var keep = Math.pow(DRIFT_KEEP, dt);
+    ship.vx *= keep; ship.vy *= keep;
+    var spd = Math.sqrt(ship.vx * ship.vx + ship.vy * ship.vy), cap = MAX_SPEED * view.s;
+    if (spd > cap) { ship.vx *= cap / spd; ship.vy *= cap / spd; }
+    ship.x += ship.vx * dt; ship.y += ship.vy * dt;
+    wrapPos(ship);
+    if (ship.cool > 0) ship.cool -= dt;
+    if (ship.hyperCool > 0) ship.hyperCool -= dt;
+    if (ship.inv > 0) ship.inv -= dt;
+    if (held.fire || padHeld.fire) fire();
+  } else if (G.respawnT > 0) {
+    G.respawnT -= dt;
+    if (G.respawnT <= 0) {
+      if (G.lives <= 0) { gameOver(); return; }
+      respawn();
+    }
+  }
+
+  /* ------- bullets (they expire; nothing wraps forever) ------- */
+  for (i = bullets.length - 1; i >= 0; i--) {
+    var b = bullets[i];
+    b.x += b.vx * dt; b.y += b.vy * dt; b.t -= dt;
+    wrapPos(b);
+    if (b.t <= 0) { bullets.splice(i, 1); continue; }
+    var done = false;
+    for (var j = rocks.length - 1; j >= 0; j--) {
+      if (wdist(b.x, b.y, rocks[j].x, rocks[j].y) < rocks[j].r) {
+        bullets.splice(i, 1); destroyRock(j, true); done = true; break;
+      }
+    }
+    if (done) continue;
+    for (var k = saucers.length - 1; k >= 0; k--) {
+      if (wdist(b.x, b.y, saucers[k].x, saucers[k].y) < saucers[k].r) {
+        bullets.splice(i, 1); killSaucer(k, true); break;
+      }
+    }
+  }
+
+  /* ------- saucers ------- */
+  G.saucerT -= dt;
+  if (G.saucerT <= 0 && saucers.length < (G.wave >= 6 ? 2 : 1) && rocks.length > 0) {
+    spawnSaucer();
+    G.saucerT = Math.max(7, 24 - G.wave * 1.5) * rnd(0.8, 1.3);
+  }
+  for (i = saucers.length - 1; i >= 0; i--) {
+    var s = saucers[i];
+    s.jinkT -= dt;
+    if (s.jinkT <= 0) {
+      s.jinkT = rnd(0.6, 1.6);
+      s.vy = (Math.random() < 0.35 ? 0 : sgnRnd() * rnd(40, 105) * view.s);
+    }
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    s.travel -= Math.abs(s.vx) * dt;
+    s.y = ((s.y % view.h) + view.h) % view.h;
+    if (s.travel <= 0) { saucers.splice(i, 1); continue; }
+    if (s.x < -60 || s.x > view.w + 60) { if (s.travel < view.w * 0.4) { saucers.splice(i, 1); continue; } }
+    s.fireT -= dt;
+    if (s.fireT <= 0 && s.x > -10 && s.x < view.w + 10) {
+      s.fireT = (s.small ? rnd(0.85, 1.5) : rnd(0.55, 1.25)) * Math.max(0.55, 1.1 - G.wave * 0.03);
+      saucerFire(s);
+    }
+    /* saucers are not immune to the rocks they fly through */
+    for (var q = rocks.length - 1; q >= 0; q--) {
+      if (wdist(s.x, s.y, rocks[q].x, rocks[q].y) < rocks[q].r + s.r) {
+        destroyRock(q, false); killSaucer(i, false); break;
+      }
+    }
+  }
+
+  /* ------- saucer bullets ------- */
+  for (i = sbullets.length - 1; i >= 0; i--) {
+    var sb = sbullets[i];
+    sb.x += sb.vx * dt; sb.y += sb.vy * dt; sb.t -= dt;
+    wrapPos(sb);
+    if (sb.t <= 0) { sbullets.splice(i, 1); continue; }
+    var gone = false;
+    for (var m = rocks.length - 1; m >= 0; m--) {
+      if (wdist(sb.x, sb.y, rocks[m].x, rocks[m].y) < rocks[m].r) {
+        sbullets.splice(i, 1); destroyRock(m, false); gone = true; break;
+      }
+    }
+    if (gone) continue;
+    if (ship.alive && ship.inv <= 0 && wdist(sb.x, sb.y, ship.x, ship.y) < ship.r + sb.r) {
+      sbullets.splice(i, 1); killShip('SHOT DOWN BY A SAUCER');
+    }
+  }
+
+  /* ------- ship vs world ------- */
+  if (ship.alive && ship.inv <= 0) {
+    for (i = 0; i < rocks.length; i++) {
+      if (wdist(ship.x, ship.y, rocks[i].x, rocks[i].y) < rocks[i].r + ship.r * 0.72) {
+        destroyRock(i, false); killShip('RAN INTO A ROCK'); break;
+      }
+    }
+    if (ship.alive) {
+      for (i = saucers.length - 1; i >= 0; i--) {
+        if (wdist(ship.x, ship.y, saucers[i].x, saucers[i].y) < saucers[i].r + ship.r) {
+          killSaucer(i, false); killShip('COLLIDED WITH A SAUCER'); break;
+        }
+      }
+    }
+  }
+
+  /* ------- wave clear ------- */
+  if (rocks.length === 0 && G.state === 'play') {
+    G.waveClearT = (G.waveClearT || 0) + dt;
+    if (G.waveClearT > 1.1) { G.waveClearT = 0; spawnWave(); }
+  } else { G.waveClearT = 0; }
+
+  heartbeat(dt);
+  updateAudioTracks(dt);
+}
+
+/* The two-tone heartbeat: it is the wave clock. Fewer rocks left, faster the
+   pulse — the original's whole nervous system lives in this one function. */
+function heartbeat(dt) {
+  var left = 0;
+  for (var i = 0; i < rocks.length; i++) left += rocks[i].size === 3 ? 4 : (rocks[i].size === 2 ? 2 : 1);
+  var full = Math.max(1, G.waveRocks * 7);
+  var ratio = clamp(left / full, 0, 1);
+  var interval = 0.29 + 0.82 * ratio;
+  G.beatInterval = interval;
+  G.beatT -= dt;
+  if (G.beatT <= 0) {
+    G.beatT = interval;
+    G.beatLo = !G.beatLo;
+    G.beatPulse = 1;
+    SFX.beat(G.beatLo);
+  }
+  if (G.beatPulse > 0) G.beatPulse = Math.max(0, G.beatPulse - dt * 4.5);
+}
+function updateAudioTracks(dt) {
+  void dt;
+  if (!actx) return;
+  try {
+    if (rumbleGain) {
+      var want = (G.state === 'play' && ship.alive && ship.thrusting) ? 0.5 : 0;
+      rumbleGain.gain.value += (want - rumbleGain.gain.value) * 0.2;
+      if (rumbleFilter) rumbleFilter.frequency.value = 300 + (ship.thrusting ? 180 : 0);
+    }
+    if (sirenGain) {
+      var on = (G.state === 'play' && saucers.length > 0) ? 0.055 : 0;
+      sirenGain.gain.value += (on - sirenGain.gain.value) * 0.25;
+      if (sirenOsc) {
+        var small = saucers.length && saucers[0].small;
+        sirenOsc.frequency.value = (small ? 330 : 190) + Math.sin(nowT * 26) * (small ? 60 : 40);
+      }
+    }
+  } catch (e) {}
+}
+
+/* ------------------------------------------------------------ game over -- */
+function gameOver() {
+  G.state = 'over';
+  document.body.classList.remove('playing');
+  held.left = held.right = held.thrust = held.fire = false;
+  if (rumbleGain) try { rumbleGain.gain.value = 0; } catch (e) {}
+  if (sirenGain) try { sirenGain.gain.value = 0; } catch (e) {}
+  var newBest = false;
+  if (G.score > G.high) { G.high = G.score; saveHigh(G.high); newBest = true; }
+  overScreen(newBest);
+}
+
+/* --------------------------------------------------------------- render -- */
+var COL_ROCK = '#a8d8ff';
+var COL_SHIP = '#eaf6ff';
+var COL_SHOT = '#ffffff';
+var COL_UFO = '#9ff0e0';
+var COL_ENEMY = '#ff9ab0';
+
+function rockPath(rk, x, y) {
+  var pts = [], i;
+  for (i = 0; i <= rk.n; i++) {
+    var idx = i % rk.n;
+    var a = rk.ang + idx / rk.n * TAU;
+    pts.push(x + Math.cos(a) * rk.r * rk.prof[idx], y + Math.sin(a) * rk.r * rk.prof[idx]);
+  }
+  return pts;
+}
+function shipPath(x, y, a, r) {
+  var nose = [x + Math.cos(a) * r * 1.45, y + Math.sin(a) * r * 1.45];
+  var l = [x + Math.cos(a + 2.5) * r, y + Math.sin(a + 2.5) * r];
+  var rr = [x + Math.cos(a - 2.5) * r, y + Math.sin(a - 2.5) * r];
+  var tl = [x + Math.cos(a + Math.PI) * r * 0.42, y + Math.sin(a + Math.PI) * r * 0.42];
+  return [[nose[0], nose[1], l[0], l[1], tl[0], tl[1], rr[0], rr[1], nose[0], nose[1]]];
+}
+function saucerPath(x, y, r, small) {
+  var w = r, h = r * 0.42;
+  var body = [
+    x - w, y, x - w * 0.45, y - h, x + w * 0.45, y - h, x + w, y,
+    x + w * 0.45, y + h, x - w * 0.45, y + h, x - w, y
+  ];
+  var dome = [x - w * 0.45, y - h, x - w * 0.2, y - h * 2.1, x + w * 0.2, y - h * 2.1, x + w * 0.45, y - h];
+  var line = [x - w, y, x + w, y];
+  var p = [body, dome, line];
+  if (!small) p.push([x - w * 0.45, y + h, x - w * 0.2, y + h * 1.9, x + w * 0.2, y + h * 1.9, x + w * 0.45, y + h]);
+  return p;
+}
+
+function render() {
+  var W = view.w, H = view.h;
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+
+  /* phosphor persistence rather than a hard clear: strokes leave a short,
+     fading ghost exactly like a real vector tube */
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'rgba(4,6,10,0.52)';
+  ctx.fillRect(0, 0, W, H);
+
+  if (G.flash > 0) {
+    ctx.fillStyle = 'rgba(120,180,255,' + (G.flash * 0.16).toFixed(3) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  ctx.save();
+  if (G.shake > 0.2) ctx.translate(rnd(-G.shake, G.shake) * 0.35, rnd(-G.shake, G.shake) * 0.35);
+
+  /* free-memory dust: a very dim static field so empty space is not empty */
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = 'rgba(90,140,190,0.5)';
+  for (var s0 = 0; s0 < DUST.length; s0 += 2) {
+    ctx.fillRect(DUST[s0] * W, DUST[s0 + 1] * H, 1, 1);
+  }
+  ctx.globalAlpha = 1;
+
+  var i;
+  /* ---- rocks ---- */
+  for (i = 0; i < rocks.length; i++) {
+    (function (rk) {
+      wrapDraw(rk.x, rk.y, rk.r + 4, function (dx, dy) {
+        strokePaths([rockPath(rk, dx, dy)], COL_ROCK, 1.25, 0.95, false);
+      });
+    })(rocks[i]);
+  }
+
+  /* ---- debris (ship shredded into drifting lines) ---- */
+  for (i = 0; i < debris.length; i++) {
+    (function (d) {
+      var al = clamp(d.t / d.life, 0, 1);
+      wrapDraw(d.x, d.y, d.len, function (dx, dy) {
+        var c = Math.cos(d.ang) * d.len * 0.5, s = Math.sin(d.ang) * d.len * 0.5;
+        strokePaths([[dx - c, dy - s, dx + c, dy + s]], COL_SHIP, 1.1, al, false);
+      });
+    })(debris[i]);
+  }
+
+  /* ---- sparks ---- */
+  ctx.lineCap = 'round';
+  for (i = 0; i < sparks.length; i++) {
+    var sp = sparks[i];
+    var a2 = clamp(sp.t / sp.life, 0, 1);
+    ctx.globalAlpha = a2 * 0.9;
+    ctx.strokeStyle = sp.col;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(sp.x, sp.y);
+    ctx.lineTo(sp.x - sp.vx * 0.022, sp.y - sp.vy * 0.022);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  /* ---- bullets ---- */
+  for (i = 0; i < bullets.length; i++) {
+    (function (b) {
+      wrapDraw(b.x, b.y, 8, function (dx, dy) {
+        strokePaths([[dx - b.vx * 0.012, dy - b.vy * 0.012, dx, dy]], COL_SHOT, 2.0, 1, false);
+      });
+    })(bullets[i]);
+  }
+  for (i = 0; i < sbullets.length; i++) {
+    (function (b) {
+      wrapDraw(b.x, b.y, 8, function (dx, dy) {
+        var r = b.r * 1.6;
+        strokePaths([[dx, dy - r, dx + r, dy, dx, dy + r, dx - r, dy, dx, dy - r]], COL_ENEMY, 1.4, 1, false);
+      });
+    })(sbullets[i]);
+  }
+
+  /* ---- saucers ---- */
+  for (i = 0; i < saucers.length; i++) {
+    (function (s) {
+      wrapDraw(s.x, s.y, s.r * 2.2, function (dx, dy) {
+        strokePaths(saucerPath(dx, dy, s.r, s.small), COL_UFO, 1.25, 0.95, false);
+      });
+    })(saucers[i]);
+  }
+
+  /* ---- ship ---- */
+  if (ship.alive && (G.state === 'play' || G.state === 'pause')) {
+    var blink = ship.inv > 0 ? (Math.floor(nowT * 12) % 2 === 0 ? 0.35 : 1) : 1;
+    if (ship.warp > 0) blink *= 0.4 + 0.6 * (1 - ship.warp / 0.35);
+    (function () {
+      wrapDraw(ship.x, ship.y, ship.r * 2.4, function (dx, dy) {
+        strokePaths(shipPath(dx, dy, ship.a, ship.r * 1.05), COL_SHIP, 1.35, blink, false);
+        if (ship.thrusting && Math.floor(nowT * 30) % 2 === 0) {
+          var r = ship.r * 1.05;
+          var back = ship.a + Math.PI;
+          var fx = dx + Math.cos(back) * r * 0.45, fy = dy + Math.sin(back) * r * 0.45;
+          var tip = [fx + Math.cos(back) * r * rnd(0.9, 1.5), fy + Math.sin(back) * r * rnd(0.9, 1.5)];
+          strokePaths([[
+            dx + Math.cos(ship.a + 2.5) * r * 0.62, dy + Math.sin(ship.a + 2.5) * r * 0.62,
+            tip[0], tip[1],
+            dx + Math.cos(ship.a - 2.5) * r * 0.62, dy + Math.sin(ship.a - 2.5) * r * 0.62
+          ]], '#ffd9a8', 1.2, 0.95, false);
+        }
+      });
+    })();
+  }
+
+  /* ---- floaters ---- */
+  for (i = 0; i < floaters.length; i++) {
+    var f = floaters[i];
+    vecText(f.txt, f.x, f.y, 11 * view.s, 'c', '#dff1ff', clamp(f.t / 0.9, 0, 1) * 0.9);
+  }
+
+  ctx.restore();
+
+  drawHUD();
+
+  /* ---- bloom: 1/4-scale copy added back with `lighter` ---- */
+  try {
+    bctx.clearRect(0, 0, bloomCv.width, bloomCv.height);
+    bctx.drawImage(cv, 0, 0, bloomCv.width, bloomCv.height);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.42;
+    ctx.drawImage(bloomCv, 0, 0, W, H);
+    ctx.restore();
+  } catch (e) {}
+
+  /* ---- CRT scanlines + vignette ---- */
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = 'rgba(0,0,0,0.30)';
+  for (var y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.restore();
+  ctx.save();
+  var vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.28, W / 2, H / 2, Math.max(W, H) * 0.72);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+var DUST = (function () {
+  var a = [];
+  for (var i = 0; i < 150; i++) { a.push(Math.random(), Math.random()); }
+  return a;
+})();
+
+function drawHUD() {
+  if (G.state === 'title') return;
+  var W = view.w;
+  var pad = 12;
+  var sz = clamp(view.w * 0.032, 15, 24);
+
+  /* score, top-left */
+  vecText(String(G.score), pad, pad + 4, sz, 'l', '#dff1ff', 0.95);
+  /* lives as little ships under the score */
+  var ly = pad + sz + 16, lx = pad + 8;
+  for (var i = 0; i < Math.min(G.lives, 8); i++) {
+    strokePaths(shipPath(lx + i * 15, ly, -Math.PI / 2, 6.5), COL_SHIP, 1.1, 0.85, false);
+  }
+  /* wave, top-centre (never the top-right 100x52 box) */
+  vecText('WAVE ' + G.wave, W / 2, pad + 6, sz * 0.62, 'c', '#a8d8ff', 0.8);
+
+  /* heartbeat pip, under the centre — a visual for the audio cue */
+  var pulse = G.beatPulse || 0;
+  if (G.state === 'play' && pulse > 0) {
+    var pr = 3 + pulse * 5;
+    ctx.globalAlpha = pulse * 0.7;
+    ctx.strokeStyle = '#bfe6ff'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(W / 2, pad + sz * 0.62 + 18, pr, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  /* banner */
+  if (G.bannerT > 0 && G.banner) {
+    var t = clamp(G.bannerT / 2.0, 0, 1);
+    var al = t > 0.75 ? (1 - t) / 0.25 : Math.min(1, t / 0.35);
+    vecText(G.banner, view.w / 2, view.h * 0.3, clamp(view.w * 0.055, 20, 40), 'c', '#dff1ff', al * 0.95);
+  }
+  /* hyperspace readiness, bottom-left, out of the way of touch buttons */
+  if (G.state === 'play' && !document.body.classList.contains('touch')) {
+    var ready = ship.alive && ship.hyperCool <= 0;
+    vecText('HYPER', pad, view.h - pad - 12, 11, 'l', ready ? '#9ff0e0' : '#5a7a92', ready ? 0.75 : 0.35);
+  }
+}
+
+/* -------------------------------------------------------------- overlay -- */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+function num(n) { return n.toLocaleString('en-US'); }
+
+function titleScreen() {
+  G.state = 'title';
+  document.body.classList.remove('playing');
+  attract();
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>FRAGMENT</h1>' +
+      '<div class="tagline">A page of address space with no walls and no brakes. Every rock you shoot splits into pieces of itself, and every piece keeps the momentum you gave it. Thrust is cheap; stopping is not.</div>' +
+      '<div class="keys">' +
+        '<div>Rotate<span>&#8592; &#8594; or A / D</span></div>' +
+        '<div>Thrust<span>&#8593; or W</span></div>' +
+        '<div>Fire<span>Space</span></div>' +
+        '<div>Hyperspace<span>Shift or H &mdash; risky</span></div>' +
+        '<div>Pause / Mute<span>P or Esc / M</span></div>' +
+      '</div>' +
+      (G.high > 0 ? '<div class="best">Best run: <b>' + num(G.high) + '</b></div>' : '') +
+      '<button class="btn" data-act="start">LAUNCH</button>' +
+    '</div>');
+}
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="tagline">Momentum is held exactly where you left it.</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="quit">QUIT</button>' +
+      '</div>' +
+    '</div>');
+}
+var OVER_HEADS = ['MEMORY FRAGMENTED', 'SEGMENTATION FAULT', 'PAGE FAULT', 'HEAP CORRUPTED'];
+function overScreen(newBest) {
+  document.body.classList.remove('playing');
+  var acc = G.shots > 0 ? Math.round(G.hitsCount / G.shots * 100) : 0;
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Fragment</div>' +
+      '<div class="gover">' + OVER_HEADS[(G.wave + G.hypers) % OVER_HEADS.length] + '</div>' +
+      '<div class="tagline">' + (G.deathReason ? G.deathReason.toLowerCase() : 'out of ships') + '.</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Score</div><div class="v accent">' + num(G.score) + '</div></div>' +
+        '<div class="stat"><div class="k">Wave</div><div class="v">' + G.wave + '</div></div>' +
+        '<div class="stat"><div class="k">Accuracy</div><div class="v">' + acc + '%</div></div>' +
+      '</div>' +
+      (newBest ? '<div class="best">New best: <b>' + num(G.high) + '</b></div>'
+               : '<div class="best">Best run: <b>' + num(G.high) + '</b></div>') +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="start">LAUNCH</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>');
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 'start') startGame();
+  else if (act === 'resume') togglePause();
+  else if (act === 'quit' || act === 'title') titleScreen();
+});
+function togglePause() {
+  if (G.state === 'play') { G.state = 'pause'; held.left = held.right = held.thrust = held.fire = false; pauseScreen(); }
+  else if (G.state === 'pause') { G.state = 'play'; hideOverlay(); }
+}
+
+/* An attract field so the title screen is the game, drifting. */
+function attract() {
+  rocks.length = 0; bullets.length = 0; sbullets.length = 0;
+  saucers.length = 0; debris.length = 0; floaters.length = 0;
+  G.wave = 0;
+  for (var i = 0; i < 6; i++) {
+    var a = rnd(0, TAU), sp = rnd(16, 46) * view.s;
+    rocks.push(makeRock(rnd(0, view.w), rnd(0, view.h), 3 - (i % 2), Math.cos(a) * sp, Math.sin(a) * sp, null));
+  }
+}
+
+function startGame() {
+  initAudio();
+  hideOverlay();
+  document.body.classList.add('playing');
+  G.score = 0; G.lives = 3; G.wave = 0; G.nextLife = 10000; G.extraLives = 0;
+  G.shots = 0; G.hitsCount = 0; G.hypers = 0; G.respawnT = 0; G.waveClearT = 0;
+  G.shake = 0; G.flash = 0; G.beatT = 0.6; G.beatLo = false; G.deathReason = '';
+  rocks.length = 0; bullets.length = 0; sbullets.length = 0;
+  saucers.length = 0; debris.length = 0; sparks.length = 0; floaters.length = 0;
+  ship.x = view.w / 2; ship.y = view.h / 2;
+  ship.vx = 0; ship.vy = 0; ship.a = -Math.PI / 2;
+  ship.alive = true; ship.inv = INV_TIME; ship.cool = 0; ship.hyperCool = 0; ship.warp = 0.3;
+  ship.r = 11 * view.s;
+  held.left = held.right = held.thrust = held.fire = false;
+  G.state = 'play';
+  spawnWave();
+}
+
+/* ---------------------------------------------------------------- input -- */
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+  initAudio();
+  if (e.repeat) {
+    /* held keys are already latched; ignore auto-repeat */
+    if (k === 'arrowleft' || k === 'a' || k === 'arrowright' || k === 'd' ||
+        k === 'arrowup' || k === 'w' || k === ' ') return;
+  }
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'p' || k === 'escape') { if (G.state === 'play' || G.state === 'pause') togglePause(); return; }
+  if ((G.state === 'title' || G.state === 'over') && (k === ' ' || k === 'enter' || k === 'r')) { startGame(); return; }
+  if (k === 'arrowleft' || k === 'a') held.left = true;
+  else if (k === 'arrowright' || k === 'd') held.right = true;
+  else if (k === 'arrowup' || k === 'w') { held.thrust = true; }
+  else if (k === ' ') { held.fire = true; fire(); }
+  else if (k === 'shift' || k === 'h') hyperspace();
+});
+window.addEventListener('keyup', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === 'arrowleft' || k === 'a') held.left = false;
+  else if (k === 'arrowright' || k === 'd') held.right = false;
+  else if (k === 'arrowup' || k === 'w') held.thrust = false;
+  else if (k === ' ') held.fire = false;
+});
+
+function bindHold(id, on, off) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('pointerdown', function (e) { initAudio(); on(); e.preventDefault(); });
+  el.addEventListener('pointerup', function (e) { off(); e.preventDefault(); });
+  el.addEventListener('pointercancel', off);
+  el.addEventListener('pointerleave', off);
+  el.addEventListener('click', function (e) { e.preventDefault(); });
+}
+bindHold('tLeft', function () { held.left = true; }, function () { held.left = false; });
+bindHold('tRight', function () { held.right = true; }, function () { held.right = false; });
+bindHold('tThrust', function () { held.thrust = true; }, function () { held.thrust = false; });
+bindHold('tFire', function () { held.fire = true; fire(); }, function () { held.fire = false; });
+(function () {
+  var el = document.getElementById('tHyper');
+  if (!el) return;
+  el.addEventListener('pointerdown', function (e) { initAudio(); hyperspace(); e.preventDefault(); });
+})();
+
+var padHeld = { left: false, right: false, thrust: false, fire: false };
+var padFire = false, padHyper = false, padPause = false;
+function pollPad() {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null, i;
+  for (i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  var ax = (p.axes && p.axes.length) ? p.axes[0] : 0;
+  var btn = function (n) { return !!(p.buttons && p.buttons[n] && p.buttons[n].pressed); };
+  var trg = function (n) { return !!(p.buttons && p.buttons[n] && p.buttons[n].value > 0.45); };
+  padHeld.left = (ax < -0.25) || btn(14);
+  padHeld.right = (ax > 0.25) || btn(15);
+  padHeld.thrust = btn(12) || btn(7) || trg(7) || btn(2);
+  var f = btn(0) || btn(5);
+  padHeld.fire = f && G.state === 'play';
+  if (f && !padFire && (G.state === 'title' || G.state === 'over')) { initAudio(); startGame(); }
+  padFire = f;
+  var hy = btn(1) || btn(3) || btn(4);
+  if (hy && !padHyper) hyperspace();
+  padHyper = hy;
+  var st = btn(9);
+  if (st && !padPause && (G.state === 'play' || G.state === 'pause')) togglePause();
+  padPause = st;
+}
+
+window.addEventListener('blur', function () { if (G.state === 'play') togglePause(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden && G.state === 'play') togglePause(); });
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { if (G.state === 'play' || G.state === 'pause') togglePause(); });
+
+/* ----------------------------------------------------------------- loop -- */
+var lastT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  nowT += dt;
+  pollPad();
+  update(dt);
+  render();
+}
+
+/* ----------------------------------------------------------------- boot -- */
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

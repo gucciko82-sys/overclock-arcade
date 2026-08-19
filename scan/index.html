@@ -1,0 +1,1965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Scan — Learn to Read</title>
+<meta name="theme-color" content="#0f1322">
+<meta name="description" content="A real phonics ladder for a brand-new reader. Letter sounds, blending, word families, heart words, digraphs, sentences and short stories — spoken aloud, never punished, and it remembers what needs work.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scan">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0f1322;
+    /* warmer than house gold — the youngest stages get peach, not metal */
+    --accent: #ffb877;
+    --accent-soft: rgba(255,184,119,0.16);
+    --good: #7fe3c4;
+    --good-soft: rgba(127,227,196,0.16);
+    --vowel: #ff9d8a;      /* vowels warm  */
+    --cons: #9ec9ff;       /* consonants cool — the classic phonics contrast */
+    --fg: #f2f6ff;
+    --dim: rgba(242,246,255,0.62);
+    --panel: rgba(10,14,28,0.66);
+    --line: rgba(255,255,255,0.14);
+    --tgap: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: manipulation;
+  }
+  #stage {
+    position: fixed; inset: 0; overflow: hidden;
+    background:
+      radial-gradient(130% 80% at 50% -12%, rgba(255,184,119,0.09), rgba(255,184,119,0) 62%),
+      radial-gradient(95% 70% at 50% 112%, rgba(127,227,196,0.09), rgba(127,227,196,0) 66%),
+      var(--bg);
+  }
+
+  /* ------------------------------------------------------------- top bar -- */
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 8;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .iconbtn:active { background: var(--accent-soft); }
+  body:not(.playing) #topbtns { display: none; }
+
+  /* HUD lives top-LEFT and is width-capped so it can never reach the
+     100x52 box the icon buttons own. */
+  #hud {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    left: max(10px, env(safe-area-inset-left));
+    width: calc(100% - 124px);
+    max-width: 460px;
+    z-index: 4; pointer-events: none;
+  }
+  body:not(.playing) #hud { display: none; }
+  #hudtop { display: flex; align-items: baseline; gap: 8px; }
+  #stagename {
+    font-size: 13px; font-weight: 800; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--accent);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #stagenum { font-size: 10px; letter-spacing: 0.14em; color: var(--dim); white-space: nowrap; flex: 0 0 auto; }
+  #bar { margin-top: 5px; height: 7px; border-radius: 4px; background: rgba(255,255,255,0.10); overflow: hidden; }
+  #barfill { height: 100%; width: 0%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--good)); transition: width 300ms ease; }
+
+  /* --------------------------------------------------------------- play --- */
+  #play {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    padding: 60px 10px max(10px, env(safe-area-inset-bottom));
+  }
+  body.playing #play { display: flex; }
+
+  #cardwrap {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    overflow-y: auto; overflow-x: hidden;
+    width: 100%;
+  }
+  #prompt {
+    font-size: clamp(14px, 4.2vw, 19px); font-weight: 700;
+    color: var(--fg); text-align: center; line-height: 1.35;
+    margin-bottom: 10px; max-width: 620px;
+  }
+  #prompt b { color: var(--accent); }
+
+  /* ------------------------------------------------------- letter tiles -- */
+  #tiles {
+    display: flex; align-items: center; justify-content: center;
+    gap: var(--tgap); flex-wrap: nowrap;
+    transition: gap 820ms cubic-bezier(.4,0,.2,1);
+    margin-bottom: 6px; max-width: 100%;
+  }
+  #tiles.blending { gap: 0px; }
+  .tile {
+    display: flex; align-items: center; justify-content: center;
+    min-width: 1.05em;
+    padding: 0.10em 0.12em;
+    border-radius: 16px;
+    border: 3px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.045);
+    font-size: clamp(44px, 15.5vw, 104px);
+    font-weight: 800; line-height: 1.06;
+    letter-spacing: 0.01em;
+    transition: transform 220ms ease, background 220ms ease, border-color 220ms ease, color 220ms ease;
+  }
+  .tile.v { color: var(--vowel); border-color: rgba(255,157,138,0.42); }
+  .tile.c { color: var(--cons); border-color: rgba(158,201,255,0.36); }
+  .tile.lit {
+    transform: translateY(-6%) scale(1.08);
+    background: var(--accent-soft); border-color: var(--accent);
+  }
+  .tile.blame { animation: blame 900ms ease-in-out infinite; border-color: var(--accent); }
+  @keyframes blame {
+    0%,100% { transform: scale(1); background: var(--accent-soft); }
+    50%     { transform: scale(1.10); background: rgba(255,184,119,0.34); }
+  }
+  #tiles.blending .tile { border-color: rgba(255,255,255,0.10); border-radius: 8px; }
+
+  #whole {
+    height: 0; opacity: 0; overflow: hidden;
+    font-size: clamp(40px, 14vw, 92px); font-weight: 800;
+    color: var(--good); letter-spacing: 0.02em; line-height: 1.1;
+    transition: opacity 220ms ease;
+  }
+  #whole.on { height: auto; opacity: 1; animation: pop 300ms ease-out; }
+  @keyframes pop { 0% { transform: scale(0.8); } 60% { transform: scale(1.07); } 100% { transform: scale(1); } }
+
+  /* single huge word / sight word card */
+  #bigword {
+    font-size: clamp(46px, 16vw, 108px); font-weight: 800;
+    letter-spacing: 0.02em; line-height: 1.1; color: var(--fg);
+    text-align: center; word-break: break-word;
+  }
+  #bigword.heart { color: var(--accent); text-shadow: 0 0 30px rgba(255,184,119,0.35); }
+  #heartflag {
+    display: inline-block; margin-bottom: 8px;
+    padding: 6px 12px; border-radius: 999px;
+    background: var(--accent-soft); border: 1px solid rgba(255,184,119,0.5);
+    color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  /* reading text (sentences and passages) */
+  #text {
+    font-size: clamp(19px, 5.1vw, 27px); font-weight: 600;
+    line-height: 1.62; color: var(--fg);
+    max-width: 620px; text-align: left;
+    background: rgba(255,255,255,0.045);
+    border: 1px solid var(--line); border-radius: 16px;
+    padding: 14px 16px; margin-bottom: 10px;
+  }
+  #text mark { background: var(--accent-soft); color: var(--accent); border-radius: 5px; padding: 0 3px; }
+  #question {
+    font-size: clamp(16px, 4.4vw, 21px); font-weight: 800;
+    color: var(--accent); text-align: center; line-height: 1.35;
+    margin-bottom: 10px; max-width: 620px;
+  }
+  #qkind {
+    display: inline-block; margin-left: 6px; vertical-align: middle;
+    font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase;
+    color: var(--dim); border: 1px solid var(--line); border-radius: 999px;
+    padding: 3px 7px; font-weight: 800;
+  }
+
+  /* ------------------------------------------------------------- actions - */
+  #actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 10px 0 4px; }
+  .act {
+    min-height: 46px; min-width: 46px; padding: 0 18px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    border-radius: 14px; border: 1px solid rgba(255,184,119,0.5);
+    background: var(--accent-soft); color: var(--accent);
+    font-family: inherit; font-size: 13px; font-weight: 800; letter-spacing: 0.11em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .act:active { background: rgba(255,184,119,0.32); }
+  .act[hidden] { display: none !important; }
+
+  /* ------------------------------------------------------------- choices - */
+  #choices {
+    flex: 0 0 auto;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 9px;
+    width: 100%; max-width: 620px; margin: 8px auto 0;
+    padding-bottom: 2px;
+  }
+  #choices.wide { grid-template-columns: 1fr; }
+  .choice {
+    min-height: 62px; padding: 10px 12px;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    border-radius: 16px; border: 2px solid var(--line);
+    background: rgba(255,255,255,0.07); color: var(--fg);
+    font-family: inherit; font-weight: 800; line-height: 1.25;
+    font-size: clamp(19px, 5.4vw, 28px);
+    letter-spacing: 0.01em; cursor: pointer; word-break: break-word;
+    transition: transform 130ms ease, background 160ms ease, border-color 160ms ease;
+  }
+  .choice.small { font-size: clamp(14px, 3.9vw, 19px); letter-spacing: 0; font-weight: 700; }
+  .choice:active { transform: scale(0.97); background: rgba(255,255,255,0.13); }
+  .choice.sel { outline: 3px solid var(--accent); outline-offset: -3px; }
+  .choice.ok {
+    background: var(--good-soft); border-color: var(--good); color: var(--good);
+    animation: pop 340ms ease-out;
+  }
+  .choice.miss { background: rgba(255,184,119,0.10); border-color: rgba(255,184,119,0.55); color: var(--accent); opacity: 0.9; }
+  .choice.dimmed { opacity: 0.42; }
+  .choice .sfx { display: block; font-size: 0.44em; font-weight: 700; letter-spacing: 0.08em; color: var(--dim); margin-top: 3px; text-transform: uppercase; }
+
+  /* ------------------------------------------------------------ reteach -- */
+  #reteach {
+    display: none;
+    width: 100%; max-width: 620px; margin: 10px auto 0;
+    border-radius: 16px; border: 1px solid rgba(255,184,119,0.45);
+    background: rgba(255,184,119,0.09);
+    padding: 12px 14px; text-align: center;
+  }
+  #reteach.on { display: block; }
+  #rtitle { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); font-weight: 800; }
+  #rbody { font-size: clamp(15px, 4.2vw, 19px); line-height: 1.45; margin-top: 7px; color: var(--fg); }
+  #rbody b { color: var(--accent); }
+  #rbody .rword { display: block; font-size: clamp(34px, 11vw, 60px); font-weight: 800; color: var(--accent); margin: 6px 0 2px; letter-spacing: 0.02em; }
+
+  /* ------------------------------------------------------------ praise --- */
+  #praise {
+    position: absolute; left: 50%; top: 46%;
+    transform: translate(-50%,-50%);
+    font-size: clamp(26px, 8vw, 46px); font-weight: 800; letter-spacing: 0.06em;
+    color: var(--good); text-shadow: 0 0 30px rgba(127,227,196,0.5);
+    opacity: 0; pointer-events: none; z-index: 7;
+  }
+  #praise.on { animation: praise 900ms ease-out; }
+  @keyframes praise {
+    0%   { opacity: 0; transform: translate(-50%,-40%) scale(0.7); }
+    25%  { opacity: 1; transform: translate(-50%,-50%) scale(1.06); }
+    75%  { opacity: 1; transform: translate(-50%,-52%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%,-62%) scale(1); }
+  }
+  #fx { position: absolute; inset: 0; pointer-events: none; z-index: 6; overflow: hidden; }
+  .bit { position: absolute; width: 9px; height: 13px; border-radius: 3px; animation: fall 1500ms ease-in forwards; }
+  @keyframes fall {
+    0%   { transform: translate(0,0) rotate(0deg); opacity: 1; }
+    100% { transform: translate(var(--dx), 105vh) rotate(var(--rot)); opacity: 0; }
+  }
+
+  /* ------------------------------------------------- landscape phones ---- */
+  body.land #play { flex-direction: row; gap: 10px; padding: 54px 8px 8px; }
+  body.land #cardwrap { flex: 1 1 52%; justify-content: center; }
+  body.land #choicewrap {
+    flex: 0 0 44%; display: flex; align-items: center;
+    overflow-y: auto; min-height: 0;
+  }
+  body.land #choices { margin: 0; }
+  body.land .tile { font-size: clamp(34px, 8.6vh, 62px); border-radius: 12px; border-width: 2px; }
+  body.land #bigword { font-size: clamp(34px, 10vh, 66px); }
+  body.land #whole { font-size: clamp(30px, 8vh, 56px); }
+  body.land #text { font-size: clamp(15px, 4.4vh, 20px); line-height: 1.45; padding: 9px 11px; }
+  body.land #prompt { font-size: clamp(13px, 3.6vh, 17px); margin-bottom: 6px; }
+  body.land #question { font-size: clamp(14px, 4vh, 18px); margin-bottom: 6px; }
+  body.land .choice { min-height: 52px; font-size: clamp(17px, 5vh, 24px); }
+  body.land .choice.small { font-size: clamp(12px, 3.4vh, 16px); }
+  body.land #actions { margin: 6px 0 2px; }
+  body.land .act { min-height: 44px; padding: 0 14px; font-size: 12px; }
+  body.land #reteach { padding: 8px 10px; margin-top: 6px; }
+  body.land #rbody .rword { font-size: clamp(26px, 7vh, 42px); }
+
+  /* narrow phones: keep two columns but tighten so nothing clips at 360 */
+  @media (max-width: 379px) {
+    #play { padding-left: 8px; padding-right: 8px; }
+    #choices { gap: 7px; }
+    .choice { min-height: 58px; padding: 8px 6px; border-radius: 14px; }
+    .act { padding: 0 13px; font-size: 12px; letter-spacing: 0.07em; }
+    #text { padding: 11px 12px; }
+    :root { --tgap: 8px; }
+    .tile { border-radius: 12px; border-width: 2px; }
+  }
+
+  /* -------------------------------------------------------------- overlay */
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(15,19,34,0.86), rgba(6,8,18,0.97));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(500px, 100%);
+    background: rgba(12,16,32,0.9);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    padding: 20px 18px 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(34px, 10vw, 58px);
+    letter-spacing: 0.22em; font-weight: 800; line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 26px rgba(255,184,119,0.45);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(20px, 6vw, 28px); letter-spacing: 0.08em; font-weight: 800; }
+  .tagline { font-size: 13px; color: var(--dim); letter-spacing: 0.01em; margin-bottom: 10px; line-height: 1.5; }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 360px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(255,255,255,0.09); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+
+  /* stage ladder */
+  .ladder { display: flex; flex-direction: column; gap: 7px; margin: 12px 0 4px; text-align: left; }
+  .rung {
+    display: flex; align-items: center; gap: 10px;
+    min-height: 54px; padding: 8px 11px;
+    border-radius: 14px; border: 1px solid var(--line);
+    background: rgba(255,255,255,0.05); color: var(--fg);
+    font-family: inherit; cursor: pointer; width: 100%; text-align: left;
+  }
+  .rung:active { background: rgba(255,184,119,0.18); }
+  .rung[disabled] { opacity: 0.42; cursor: default; }
+  .rung .n {
+    flex: 0 0 auto; width: 32px; height: 32px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent-soft); color: var(--accent);
+    font-weight: 800; font-size: 15px;
+  }
+  .rung.done .n { background: var(--good-soft); color: var(--good); }
+  .rung .t { flex: 1 1 auto; min-width: 0; }
+  .rung .t b { display: block; font-size: 15px; font-weight: 800; letter-spacing: 0.02em; }
+  .rung .t i { display: block; font-style: normal; font-size: 11px; color: var(--dim); margin-top: 2px; line-height: 1.3; }
+  .rung .p { flex: 0 0 auto; font-size: 11px; font-weight: 800; color: var(--dim); letter-spacing: 0.05em; }
+  .rung.done .p { color: var(--good); }
+
+  /* parent progress panel */
+  .ptitle { font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--dim); margin: 14px 0 7px; text-align: left; }
+  .glyphs { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-start; }
+  .glyph {
+    width: 38px; height: 42px; border-radius: 9px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 19px; font-weight: 800; line-height: 1;
+    border: 1px solid var(--line); background: rgba(255,255,255,0.05); color: var(--dim);
+  }
+  .glyph i { font-style: normal; font-size: 8px; letter-spacing: 0.06em; margin-top: 3px; font-weight: 700; }
+  .glyph.solid { background: var(--good-soft); border-color: var(--good); color: var(--good); }
+  .glyph.learning { background: var(--accent-soft); border-color: rgba(255,184,119,0.5); color: var(--accent); }
+  .glyph.weak { background: rgba(255,157,138,0.16); border-color: rgba(255,157,138,0.6); color: var(--vowel); }
+  .wlist { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-start; }
+  .wchip {
+    padding: 6px 10px; border-radius: 999px; font-size: 13px; font-weight: 800;
+    background: rgba(255,157,138,0.14); border: 1px solid rgba(255,157,138,0.45); color: var(--vowel);
+  }
+  .wchip.ok { background: var(--good-soft); border-color: var(--good); color: var(--good); }
+  .legend2 { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-start; margin-top: 8px; }
+  .lg { display: flex; align-items: center; gap: 5px; font-size: 10px; letter-spacing: 0.06em; color: var(--dim); text-transform: uppercase; }
+  .dot { width: 12px; height: 12px; border-radius: 4px; }
+  .dot.s { background: var(--good); } .dot.l { background: var(--accent); } .dot.w { background: var(--vowel); } .dot.n { background: rgba(255,255,255,0.2); }
+  .none { font-size: 12px; color: var(--dim); text-align: left; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 12px 0 4px; }
+  .stat { background: rgba(255,255,255,0.045); border: 1px solid var(--line); border-radius: 12px; padding: 8px 3px; }
+  .stat .k { font-size: 8px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(16px, 5vw, 22px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .stat .v.good { color: var(--good); }
+
+  .btn {
+    margin-top: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 52px; padding: 0 24px;
+    border-radius: 15px; border: 1px solid rgba(255,184,119,0.55);
+    background: var(--accent-soft); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.13em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,184,119,0.32); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(255,255,255,0.05); }
+  .btn.go { border-color: rgba(127,227,196,0.55); background: var(--good-soft); color: var(--good); }
+  .btnrow { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(24px, 8vw, 42px); font-weight: 800; letter-spacing: 0.26em; text-transform: uppercase; color: var(--accent); }
+
+  @media (max-height: 620px) {
+    .card { padding: 13px 14px 13px; border-radius: 16px; }
+    .keys { display: none; }
+    .ladder { gap: 5px; margin: 8px 0 2px; }
+    .rung { min-height: 48px; padding: 6px 9px; }
+    .rung .t i { display: none; }
+    .stats { margin: 8px 0 2px; }
+    .btn { margin-top: 9px; min-height: 46px; }
+    .tagline { margin-bottom: 6px; }
+    .ptitle { margin: 9px 0 5px; }
+  }
+  /* the real usable height of a landscape iPhone is 342px — every card has
+     to sit inside that, and #overlay scrolls as the backstop */
+  @media (max-height: 430px) {
+    .card { padding: 10px 13px 10px; border-radius: 14px; }
+    .eyebrow { font-size: 9px; letter-spacing: 0.22em; }
+    h1 { font-size: 30px; margin: 2px 0; letter-spacing: 0.18em; }
+    h2 { font-size: 18px; margin: 0 0 3px; }
+    .tagline { font-size: 11.5px; margin-bottom: 4px; line-height: 1.4; }
+    .ladder { gap: 4px; }
+    .rung { min-height: 44px; padding: 5px 8px; border-radius: 11px; }
+    .rung .n { width: 26px; height: 26px; font-size: 13px; }
+    .rung .t b { font-size: 13px; }
+    .stats { margin: 6px 0 2px; }
+    .stat { padding: 5px 3px; }
+    .stat .v { font-size: 16px; }
+    .glyph { width: 32px; height: 36px; font-size: 16px; }
+    .btn { min-height: 44px; margin-top: 8px; padding: 0 18px; font-size: 13px; letter-spacing: 0.09em; }
+    .paused { font-size: 22px; }
+    .ptitle { margin: 8px 0 4px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="hud">
+    <div id="hudtop"><div id="stagename">Letter Sounds</div><div id="stagenum">1 / 7</div></div>
+    <div id="bar"><div id="barfill"></div></div>
+  </div>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Menu">&#10073;&#10073;</button>
+  </div>
+
+  <div id="play">
+    <div id="cardwrap">
+      <div id="prompt"></div>
+      <div id="text" hidden></div>
+      <div id="tiles"></div>
+      <div id="whole"></div>
+      <div id="bigword" hidden></div>
+      <div id="question" hidden></div>
+      <div id="actions">
+        <button class="act" id="speakBtn" type="button">&#9658; Say it</button>
+        <button class="act" id="blendBtn" type="button">Blend it</button>
+      </div>
+      <div id="reteach"><div id="rtitle">Let's look again</div><div id="rbody"></div>
+        <button class="act" id="gotitBtn" type="button" style="margin-top:10px">Got it</button>
+      </div>
+    </div>
+    <div id="choicewrap"><div id="choices"></div></div>
+  </div>
+
+  <div id="praise"></div>
+  <div id="fx"></div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   SCAN — learn to read, for the Overclock arcade.
+
+   This is a real phonics program, not a vocabulary quiz. Seven stages, each
+   unlocked by mastery and every unlocked stage freely replayable:
+
+     1 letter sounds   2 blending CVC   3 word families   4 heart words
+     5 digraphs+blends 6 sentences      7 short passages
+
+   The ordering of the letters is the one that actually works: s a t p i n
+   first, because those six letters alone spell sat, pat, tap, tip, pin, nip,
+   sit, pan, tin — a brand-new reader gets to read a REAL WORD on day one
+   instead of chanting the alphabet for a month.
+
+   Two rules run through the whole thing:
+     * Nothing is ever undecodable. Every word a stage can show is checked,
+       by machine, against the graphemes that stage has taught. The words
+       that genuinely cannot be sounded out (the, said, was, one) are quar-
+       antined in stage 4 and flagged as heart words.
+     * Nothing punishes. A wrong tap re-teaches — highlight the grapheme
+       that was missed, blend it slowly, say it out loud — and puts the item
+       back in the queue. No lives, no timer, no red X.
+
+   Speech is the browser's own speechSynthesis (an API, not an asset), and
+   the whole game stays playable with it missing: the SAY IT button hides
+   and every sound also appears as text.
+   One file, no assets, oscillator audio.
+   ========================================================================= */
+"use strict";
+
+var K_SAVE = 'scan_v1';
+var K_MUTE = 'scan_muted_v1';
+
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+
+/* ========================================================== the alphabet = */
+/* Taught in phonics-set order, not alphabetical. `ph` is the phoneme the
+   letter makes in this program (one sound per grapheme — that promise is
+   what makes every word below decodable); `say` is a spelling the speech
+   engine can pronounce; `kw` is the keyword picture-word. */
+var LETTERS = [
+  { l: 's',  ph: 's',  say: 'sss',  kw: 'sun',  set: 1 },
+  { l: 'a',  ph: 'a',  say: 'aah',  kw: 'ant',  set: 1, vowel: true },
+  { l: 't',  ph: 't',  say: 'tuh',  kw: 'tap',  set: 1 },
+  { l: 'p',  ph: 'p',  say: 'puh',  kw: 'pig',  set: 1 },
+  { l: 'i',  ph: 'i',  say: 'ih',   kw: 'in',   set: 1, vowel: true },
+  { l: 'n',  ph: 'n',  say: 'nnn',  kw: 'net',  set: 1 },
+
+  { l: 'm',  ph: 'm',  say: 'mmm',  kw: 'man',  set: 2 },
+  { l: 'd',  ph: 'd',  say: 'duh',  kw: 'dog',  set: 2 },
+  { l: 'g',  ph: 'g',  say: 'guh',  kw: 'gas',  set: 2 },
+  { l: 'o',  ph: 'o',  say: 'ohh',  kw: 'ox',   set: 2, vowel: true },
+  { l: 'c',  ph: 'k',  say: 'kuh',  kw: 'cat',  set: 2 },
+  { l: 'k',  ph: 'k',  say: 'kuh',  kw: 'kid',  set: 2 },
+
+  { l: 'e',  ph: 'e',  say: 'eh',   kw: 'egg',  set: 3, vowel: true },
+  { l: 'u',  ph: 'u',  say: 'uh',   kw: 'up',   set: 3, vowel: true },
+  { l: 'r',  ph: 'r',  say: 'rrr',  kw: 'rug',  set: 3 },
+  { l: 'h',  ph: 'h',  say: 'huh',  kw: 'hat',  set: 3 },
+  { l: 'b',  ph: 'b',  say: 'buh',  kw: 'bug',  set: 3 },
+  { l: 'f',  ph: 'f',  say: 'fff',  kw: 'fan',  set: 3 },
+  { l: 'l',  ph: 'l',  say: 'lll',  kw: 'log',  set: 3 },
+
+  { l: 'j',  ph: 'j',  say: 'juh',  kw: 'jam',  set: 4 },
+  { l: 'v',  ph: 'v',  say: 'vvv',  kw: 'van',  set: 4 },
+  { l: 'w',  ph: 'w',  say: 'wuh',  kw: 'web',  set: 4 },
+  { l: 'x',  ph: 'x',  say: 'ks',   kw: 'box',  set: 4 },
+  { l: 'y',  ph: 'y',  say: 'yuh',  kw: 'yes',  set: 4 },
+  { l: 'z',  ph: 'z',  say: 'zzz',  kw: 'zip',  set: 4 },
+  { l: 'qu', ph: 'qu', say: 'kwuh', kw: 'quit', set: 4 }
+];
+var LETTER_BY = {};
+(function () { for (var i = 0; i < LETTERS.length; i++) LETTER_BY[LETTERS[i].l] = LETTERS[i]; })();
+
+/* ============================================================ graphemes == */
+/* Longest-first so `sh` beats `s`+`h`. This is the segmenter the decodability
+   checks run on — if a word cannot be cut into graphemes this game has
+   taught, it does not belong in that stage. */
+var MULTI = ['tch', 'sh', 'ch', 'th', 'ck', 'ng', 'qu', 'wh', 'll', 'ss', 'ff', 'zz'];
+var VOWELS = { a: 1, e: 1, i: 1, o: 1, u: 1 };
+
+function segment(word) {
+  var s = String(word == null ? '' : word).toLowerCase().replace(/[^a-z]/g, '');
+  var out = [], i = 0, m, g;
+  while (i < s.length) {
+    g = null;
+    for (m = 0; m < MULTI.length; m++) {
+      if (s.substr(i, MULTI[m].length) === MULTI[m]) { g = MULTI[m]; break; }
+    }
+    if (g) { out.push(g); i += g.length; }
+    else { out.push(s.charAt(i)); i++; }
+  }
+  return out;
+}
+
+/* Naive sound-out: what the word WOULD say if every grapheme kept its one
+   taught sound. Sight words are exactly the words where this comes out
+   wrong — and that is asserted, not asserted-by-hand. */
+var PHON = { sh: 'S', ch: 'C', th: 'T', ck: 'k', ng: 'N', wh: 'w', ll: 'l', ss: 's', ff: 'f', zz: 'z', tch: 'C' };
+(function () { for (var i = 0; i < LETTERS.length; i++) PHON[LETTERS[i].l] = LETTERS[i].ph; })();
+function naiveSound(word) {
+  var g = segment(word), out = [], i;
+  for (i = 0; i < g.length; i++) out.push(PHON[g[i]] === undefined ? '?' : PHON[g[i]]);
+  return out.join('.');
+}
+
+/* The grapheme budget each stage is allowed to spend. */
+var SINGLES = 'abcdefghijklmnopqrstuvwxyz'.split('');
+function setOf(list) { var o = {}, i; for (i = 0; i < list.length; i++) o[list[i]] = 1; return o; }
+var CVC_GRAPHEMES = (function () {
+  var l = [], i;
+  for (i = 0; i < SINGLES.length; i++) if (SINGLES[i] !== 'q') l.push(SINGLES[i]);
+  return l;
+})();
+var DIG_GRAPHEMES = CVC_GRAPHEMES.concat(['sh', 'ch', 'th', 'ck']);
+var STAGE_GRAPHEMES = {
+  1: (function () { var l = [], i; for (i = 0; i < LETTERS.length; i++) l.push(LETTERS[i].l); return l; })(),
+  2: CVC_GRAPHEMES,
+  3: CVC_GRAPHEMES,
+  5: DIG_GRAPHEMES
+};
+function isDecodable(word, allowed) {
+  var ok = setOf(allowed), g = segment(word), i;
+  if (!g.length) return false;
+  for (i = 0; i < g.length; i++) if (!ok[g[i]]) return false;
+  return true;
+}
+function vowelCount(word) {
+  var g = segment(word), n = 0, i;
+  for (i = 0; i < g.length; i++) if (VOWELS[g[i]]) n++;
+  return n;
+}
+
+/* ================================================================= CVC === */
+/* Grouped by the letter set each word needs, so a learner six letters deep
+   only ever meets words spelled from those six letters. Every entry here is
+   a short-vowel, one-sound-per-letter word: no r-controlled vowels (car,
+   her, for), no silent e, no doubles, no s-saying-z (his, has, is). */
+var CVC_TIERS = [
+  /* set 1 — s a t p i n only */
+  'sat pat tap tip tin tan nap nip pin pit sip sit sap pan',
+  /* set 2 — + m d g o c k */
+  'mat map man mad dad mom dig dog got gas cat cap can cot cop dot top pot ' +
+  'tag nag gap kid kit mop dip nod pop pad pod cod gag',
+  /* set 3 — + e u r h b f l */
+  'bed bet beg big bag bug bun bus but cub cup cut fan fat fed fig fin fit ' +
+  'fun gum gun hat hen hid hit hop hot hug hum hut leg let lid lip log lot ' +
+  'mud mug net nut pet pup red rub rug run sun ten tub tug bat bit bud rat ' +
+  'rib rip rod rot lap lab lag bib fib ran pig get met set bin not dug fog ' +
+  'hop bell'.replace(' bell', ''),
+  /* set 4 — + j v w y z x */
+  'jam jet jig job jog jug van vet wag web wed wet wig win yes yet zip zap ' +
+  'box fox fix six mix wax yum yam jab'
+];
+var CVC = [];          /* [{w, tier}] */
+var CVC_BY = {};
+(function () {
+  var t, i, parts, w;
+  for (t = 0; t < CVC_TIERS.length; t++) {
+    parts = CVC_TIERS[t].split(/\s+/);
+    for (i = 0; i < parts.length; i++) {
+      w = parts[i];
+      if (!w || CVC_BY[w]) continue;
+      CVC_BY[w] = { w: w, tier: t + 1 };
+      CVC.push(CVC_BY[w]);
+    }
+  }
+})();
+
+/* ====================================================== word families ==== */
+/* Swap the onset, keep the rime. Every word here is also a CVC word above,
+   which is the property the scripted play asserts. */
+var FAMILIES = [
+  { rime: 'at', words: ['bat', 'cat', 'fat', 'hat', 'mat', 'pat', 'rat', 'sat'] },
+  { rime: 'an', words: ['can', 'fan', 'man', 'pan', 'ran', 'tan', 'van'] },
+  { rime: 'ig', words: ['big', 'dig', 'fig', 'jig', 'pig', 'wig'] },
+  { rime: 'op', words: ['cop', 'hop', 'mop', 'pop', 'top'] },
+  { rime: 'un', words: ['bun', 'fun', 'run', 'sun'] },
+  { rime: 'et', words: ['bet', 'get', 'jet', 'let', 'met', 'net', 'pet', 'set', 'vet', 'wet'] },
+  { rime: 'in', words: ['bin', 'fin', 'pin', 'tin', 'win'] },
+  { rime: 'ot', words: ['cot', 'dot', 'got', 'hot', 'lot', 'not', 'pot'] },
+  { rime: 'ug', words: ['bug', 'dug', 'hug', 'jug', 'mug', 'rug', 'tug'] }
+];
+var FAMILY_OF = {};
+(function () {
+  var f, i;
+  for (f = 0; f < FAMILIES.length; f++)
+    for (i = 0; i < FAMILIES[f].words.length; i++) FAMILY_OF[FAMILIES[f].words[i]] = FAMILIES[f];
+})();
+
+/* ======================================================== heart words ==== */
+/* The words that do NOT sound out. `truth` is how the word really sounds;
+   naiveSound() is what the taught letter-sounds would make of it. Those two
+   disagree for every entry — that disagreement IS the definition of a sight
+   word, and the playtest checks it rather than trusting the list. */
+var SIGHT = [
+  { w: 'the',   truth: 'T.u',     why: 'The e says "uh" here, not "eh".',              cloze: 'I like ___ dog.',        bad: ['said', 'was', 'come'] },
+  { w: 'was',   truth: 'w.o.z',   why: 'The a says "o" and the s says "z".',           cloze: 'It ___ a hot day.',      bad: ['the', 'you', 'come'] },
+  { w: 'said',  truth: 's.e.d',   why: 'The ai says "e". No rule will get you there.', cloze: 'Mom ___ hello.',         bad: ['the', 'of', 'two'] },
+  { w: 'come',  truth: 'k.u.m',   why: 'The o says "u" and the e is silent.',          cloze: 'Please ___ here.',       bad: ['the', 'was', 'of'] },
+  { w: 'one',   truth: 'w.u.n',   why: 'It begins with a "w" sound that is not there.', cloze: 'I have ___ red hat.',   bad: ['was', 'said', 'of'] },
+  { w: 'you',   truth: 'y.oo',    why: 'The ou says "oo".',                            cloze: 'Can ___ help me?',       bad: ['the', 'was', 'of'] },
+  { w: 'of',    truth: 'o.v',     why: 'The f says "v".',                              cloze: 'A cup ___ milk.',        bad: ['said', 'come', 'was'] },
+  { w: 'to',    truth: 't.oo',    why: 'The o says "oo".',                             cloze: 'We ran ___ the pond.',   bad: ['said', 'was', 'one'] },
+  { w: 'do',    truth: 'd.oo',    why: 'The o says "oo".',                             cloze: 'What ___ you like?',     bad: ['the', 'of', 'was'] },
+  { w: 'are',   truth: 'ar',      why: 'The whole word just says "ar".',               cloze: 'We ___ at home.',        bad: ['the', 'of', 'come'] },
+  { w: 'they',  truth: 'T.ae',    why: 'The ey says "ay".',                            cloze: '___ ran fast.',          bad: ['of', 'was', 'are'] },
+  { w: 'have',  truth: 'h.a.v',   why: 'The e on the end is silent.',                  cloze: 'I ___ a red bike.',      bad: ['the', 'of', 'are'] },
+  { w: 'were',  truth: 'w.er',    why: 'The ere says "er".',                           cloze: 'We ___ at the pond.',    bad: ['the', 'of', 'have'] },
+  { w: 'what',  truth: 'w.o.t',   why: 'The a says "o".',                              cloze: '___ is that?',           bad: ['the', 'of', 'come'] },
+  { w: 'want',  truth: 'w.o.n.t', why: 'The a says "o".',                              cloze: 'I ___ a hug.',           bad: ['the', 'of', 'are'] },
+  { w: 'there', truth: 'T.air',   why: 'The ere says "air".',                          cloze: 'Put it ___.',            bad: ['the', 'of', 'are'] },
+  { w: 'who',   truth: 'h.oo',    why: 'The wh says "h" and the o says "oo".',         cloze: '___ is at the gate?',    bad: ['the', 'of', 'are'] },
+  { w: 'some',  truth: 's.u.m',   why: 'The o says "u" and the e is silent.',          cloze: 'I want ___ milk.',       bad: ['of', 'are', 'was'] },
+  { w: 'two',   truth: 't.oo',    why: 'The w is silent.',                             cloze: 'I have ___ dogs.',       bad: ['of', 'are', 'was'] },
+  { w: 'put',   truth: 'p.uu.t',  why: 'The u says "uu", like in push, not "uh".',     cloze: '___ it on the mat.',     bad: ['of', 'are', 'was'] },
+  { w: 'from',  truth: 'f.r.u.m', why: 'The o says "u".',                              cloze: 'A note ___ Dad.',        bad: ['the', 'are', 'was'] },
+  { w: 'give',  truth: 'g.i.v',   why: 'The e on the end is silent.',                  cloze: '___ me the ball.',       bad: ['of', 'are', 'was'] },
+  { w: 'your',  truth: 'y.or',    why: 'The our says "or".',                           cloze: 'Is that ___ hat?',       bad: ['of', 'are', 'was'] },
+  { w: 'done',  truth: 'd.u.n',   why: 'The o says "u" and the e is silent.',          cloze: 'I am all ___.',          bad: ['of', 'the', 'was'] }
+];
+var SIGHT_BY = {};
+(function () { for (var i = 0; i < SIGHT.length; i++) SIGHT_BY[SIGHT[i].w] = SIGHT[i]; })();
+
+/* ================================================ digraphs and blends ==== */
+/* A digraph is two letters making ONE sound (sh ch th ck) — that is new
+   knowledge. A blend is two letters each keeping their own sound (st bl tr)
+   — no new grapheme, just a harder mouth. The tiles show the difference:
+   a digraph rides one tile, a blend rides two. */
+var DIGRAPH_GROUPS = [
+  { g: 'sh', kind: 'digraph', note: 'sh is TWO letters making ONE sound.',   words: ['ship', 'shop', 'shut', 'shed', 'fish', 'dish', 'wish', 'cash', 'dash', 'rush'] },
+  { g: 'ch', kind: 'digraph', note: 'ch is TWO letters making ONE sound.',   words: ['chip', 'chop', 'chat', 'chin', 'much', 'such'] },
+  { g: 'th', kind: 'digraph', note: 'th is TWO letters making ONE sound.',   words: ['this', 'that', 'then', 'them', 'thin', 'with', 'bath', 'path', 'moth'] },
+  { g: 'ck', kind: 'digraph', note: 'ck is TWO letters making ONE k sound.', words: ['back', 'duck', 'lock', 'sock', 'rock', 'kick', 'pick', 'sick', 'deck', 'neck', 'luck', 'pack'] },
+  { g: 'st', kind: 'blend',   note: 'st is a blend — you hear BOTH sounds.', words: ['stop', 'step', 'stem', 'stick', 'stuck'] },
+  { g: 'bl', kind: 'blend',   note: 'bl is a blend — you hear BOTH sounds.', words: ['black', 'blot', 'blob', 'bled'] },
+  { g: 'tr', kind: 'blend',   note: 'tr is a blend — you hear BOTH sounds.', words: ['trip', 'trap', 'truck', 'trot', 'trim'] }
+];
+var DIGRAPH = [], DIGRAPH_BY = {};
+(function () {
+  var i, j, gr;
+  for (i = 0; i < DIGRAPH_GROUPS.length; i++) {
+    gr = DIGRAPH_GROUPS[i];
+    for (j = 0; j < gr.words.length; j++) {
+      if (DIGRAPH_BY[gr.words[j]]) continue;
+      DIGRAPH_BY[gr.words[j]] = { w: gr.words[j], group: gr };
+      DIGRAPH.push(DIGRAPH_BY[gr.words[j]]);
+    }
+  }
+})();
+
+/* ============================================================ sentences == */
+/* Every literal answer is a substring of `ev`, and `ev` is a verbatim
+   substring of the sentence. No wrong answer appears in the sentence at all.
+   The playtest checks that whole chain rather than taking my word for it. */
+var SENTENCES = [
+  { s: 'The dog ran to the pond.',            q: 'Where did the dog run?',     ch: ['to the pond', 'up a tree', 'into the van'], c: 0, ev: 'ran to the pond' },
+  { s: 'Sam has a red bike.',                 q: 'What color is the bike?',    ch: ['red', 'blue', 'green'],                     c: 0, ev: 'a red bike' },
+  { s: 'The cat sat on the mat.',             q: 'Where did the cat sit?',     ch: ['on the mat', 'in a box', 'on a bus'],       c: 0, ev: 'sat on the mat' },
+  { s: 'Mom said we can go to the park.',     q: 'Who said we can go?',        ch: ['Mom', 'Dad', 'Nan'],                        c: 0, ev: 'Mom said we can go' },
+  { s: 'Ben put six eggs in the box.',        q: 'How many eggs?',             ch: ['six', 'ten', 'nine'],                       c: 0, ev: 'six eggs' },
+  { s: 'A big duck swam in the pond.',        q: 'What swam in the pond?',     ch: ['duck', 'fish', 'frog'],                     c: 0, ev: 'big duck swam' },
+  { s: 'The pup dug a hole in the yard.',     q: 'What did the pup dig?',      ch: ['a hole', 'a nap', 'a bug'],                 c: 0, ev: 'dug a hole in the yard' },
+  { s: 'Dad and I rode our bikes to the shop.', q: 'Where did they ride?',     ch: ['to the shop', 'to the pond', 'to school'],  c: 0, ev: 'bikes to the shop' },
+  { s: 'The hen sat on her nest all day.',    q: 'Where did the hen sit?',     ch: ['on her nest', 'on a rock', 'in the mud'],   c: 0, ev: 'sat on her nest' },
+  { s: 'Tess gave the wet dog a big hug.',    q: 'Who got a hug?',             ch: ['the wet dog', 'a cat', 'a hen'],            c: 0, ev: 'gave the wet dog a big hug' }
+];
+
+/* ============================================================= passages == */
+var PASSAGES = [
+  {
+    t: 'Rusty',
+    p: 'Tess has a big dog. The dog is named Rusty. Rusty likes to run in the yard. When Tess gets home, Rusty runs to the gate.',
+    qs: [
+      { kind: 'literal', q: 'What is the dog named?', ch: ['Rusty', 'Buddy', 'Max'], c: 0, ev: 'The dog is named Rusty' },
+      { kind: 'inferential', q: 'How does Rusty feel when Tess gets home?', ch: ['glad to see her', 'sleepy', 'cross'], c: 0, because: 'He runs all the way to the gate to meet her.' }
+    ]
+  },
+  {
+    t: 'The New Bike',
+    p: 'Ben got a new bike. It was blue and had a bell. He rode it to the pond. A duck swam up to say hello.',
+    qs: [
+      { kind: 'literal', q: 'What color was the bike?', ch: ['blue', 'green', 'gold'], c: 0, ev: 'It was blue' },
+      { kind: 'inferential', q: 'Why did the duck swim up to Ben?', ch: ['it wanted to see him', 'it was lost', 'it was cold'], c: 0, because: 'The duck came over to say hello.' }
+    ]
+  },
+  {
+    t: 'Under the Tree',
+    p: 'The sun was hot. Meg and her mom sat under a big tree. They had ham and buns for lunch. A bird sang in the tree.',
+    qs: [
+      { kind: 'literal', q: 'Where did they sit?', ch: ['under a big tree', 'on a bus', 'in a boat'], c: 0, ev: 'sat under a big tree' },
+      { kind: 'inferential', q: 'Why did they sit under the tree?', ch: ['to get out of the sun', 'to look for a bird', 'to hide'], c: 0, because: 'The sun was hot, and a tree makes shade.' }
+    ]
+  },
+  {
+    t: 'The Bike Ride',
+    p: 'Dad and Jack ride bikes on the path. They ride past a pond. Ducks swim in the pond. Jack waves at the ducks.',
+    qs: [
+      { kind: 'literal', q: 'What swims in the pond?', ch: ['ducks', 'fish', 'frogs'], c: 0, ev: 'Ducks swim in the pond' },
+      { kind: 'inferential', q: 'How do you think Jack feels on the ride?', ch: ['happy', 'sad', 'mad'], c: 0, because: 'He waves at the ducks, so he is having a good time.' }
+    ]
+  },
+  {
+    t: 'Six Eggs',
+    p: 'Nan has a red hen. The hen sits in a nest. One day the nest had six eggs. Nan was so glad she gave the hen a treat.',
+    qs: [
+      { kind: 'literal', q: 'How many eggs were in the nest?', ch: ['six', 'ten', 'nine'], c: 0, ev: 'the nest had six eggs' },
+      { kind: 'inferential', q: 'Why did Nan give the hen a treat?', ch: ['she was glad about the eggs', 'the hen was sick', 'it was cold'], c: 0, because: 'The hen laid six eggs and Nan was so glad.' }
+    ]
+  },
+  {
+    t: 'The Wet Dog',
+    p: 'Sam and his dog went for a walk. It began to rain. They ran home fast. Sam got a towel and dried the wet dog.',
+    qs: [
+      { kind: 'literal', q: 'What did Sam get?', ch: ['a towel', 'a hat', 'a cup'], c: 0, ev: 'Sam got a towel' },
+      { kind: 'inferential', q: 'Why did they run home fast?', ch: ['it was raining', 'they were late', 'the dog was lost'], c: 0, because: 'It began to rain, so they hurried home.' }
+    ]
+  }
+];
+
+/* ================================================================ stages = */
+var STAGES = [
+  null,
+  { n: 1, id: 'letters',  name: 'Letter Sounds',   blurb: 'See a letter, pick the sound it makes.',            target: 10 },
+  { n: 2, id: 'blend',    name: 'Blending Words',  blurb: 'c-a-t slides together and says cat.',               target: 10 },
+  { n: 3, id: 'family',   name: 'Word Families',   blurb: 'Keep the ending, swap the first letter.',           target: 8 },
+  { n: 4, id: 'sight',    name: 'Heart Words',     blurb: 'The words that do not sound out. Learn them whole.', target: 8 },
+  { n: 5, id: 'digraph',  name: 'sh ch th ck',     blurb: 'Two letters, one sound. Then blends: st bl tr.',    target: 8 },
+  { n: 6, id: 'sentence', name: 'Sentences',       blurb: 'Read a sentence, answer a question about it.',      target: 5 },
+  { n: 7, id: 'passage',  name: 'Short Stories',   blurb: 'A few sentences, then two questions.',              target: 4 }
+];
+var STAGE_COUNT = 7;
+
+/* ================================================== pools and item keys == */
+function fullPool(stage) {
+  var out = [], i, f, j;
+  if (stage === 1) { for (i = 0; i < LETTERS.length; i++) out.push('L:' + LETTERS[i].l); }
+  else if (stage === 2) { for (i = 0; i < CVC.length; i++) out.push('W:' + CVC[i].w); }
+  else if (stage === 3) {
+    for (f = 0; f < FAMILIES.length; f++)
+      for (j = 0; j < FAMILIES[f].words.length; j++) out.push('F:' + FAMILIES[f].words[j]);
+  }
+  else if (stage === 4) { for (i = 0; i < SIGHT.length; i++) out.push('S:' + SIGHT[i].w); }
+  else if (stage === 5) { for (i = 0; i < DIGRAPH.length; i++) out.push('D:' + DIGRAPH[i].w); }
+  else if (stage === 6) { for (i = 0; i < SENTENCES.length; i++) out.push('N:' + i); }
+  else if (stage === 7) {
+    for (i = 0; i < PASSAGES.length; i++)
+      for (j = 0; j < PASSAGES[i].qs.length; j++) out.push('P:' + i + ':' + j);
+  }
+  return out;
+}
+/* Words a stage can actually put on screen, as plain strings — this is what
+   the decodability assertions iterate. */
+function poolWords(stage) {
+  var keys = fullPool(stage), out = [], i, k;
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    if (k.charAt(0) === 'L' || k.charAt(0) === 'W' || k.charAt(0) === 'F' ||
+        k.charAt(0) === 'S' || k.charAt(0) === 'D') out.push(k.slice(2));
+  }
+  return out;
+}
+/* The progression gate inside a stage: a learner six letters in only meets
+   words built from those six letters. */
+function tierCap(stage) {
+  var n = masteredCount(stage);
+  var cap = 1 + Math.floor(n / 5);
+  return cap > 4 ? 4 : cap;
+}
+function activePool(stage) {
+  var all = fullPool(stage), out = [], i, k, cap;
+  if (stage === 1) {
+    cap = tierCap(1);
+    for (i = 0; i < all.length; i++) if (LETTER_BY[all[i].slice(2)].set <= cap) out.push(all[i]);
+    return out;
+  }
+  if (stage === 2) {
+    cap = tierCap(2);
+    for (i = 0; i < all.length; i++) { k = CVC_BY[all[i].slice(2)]; if (k && k.tier <= cap) out.push(all[i]); }
+    return out.length >= 4 ? out : all;
+  }
+  return all;
+}
+
+/* =============================================================== profile = */
+/* One learner, stored defensively. The hub peeks into this file's save, so a
+   corrupt shape has to render a fresh learner, never throw. */
+function freshProfile() {
+  return { v: 1, stage: 1, unlocked: 1, items: {}, right: 0, wrong: 0, seen: 0 };
+}
+function clampInt(x, lo, hi, d) {
+  var n = Number(x);
+  if (!isFinite(n)) return d;
+  n = Math.floor(n);
+  if (n < lo) return lo;
+  if (n > hi) return hi;
+  return n;
+}
+function isPlainObject(v) {
+  return !!v && typeof v === 'object' && Object.prototype.toString.call(v) !== '[object Array]';
+}
+function readProfile() {
+  var p = freshProfile();
+  try {
+    var raw = localStorage.getItem(K_SAVE);
+    if (!raw) return p;
+    var v = JSON.parse(raw);
+    if (!isPlainObject(v)) return freshProfile();
+    p.unlocked = clampInt(v.unlocked, 1, STAGE_COUNT, 1);
+    p.stage = clampInt(v.stage, 1, STAGE_COUNT, 1);
+    if (p.stage > p.unlocked) p.stage = p.unlocked;
+    p.right = clampInt(v.right, 0, 1e9, 0);
+    p.wrong = clampInt(v.wrong, 0, 1e9, 0);
+    p.seen = clampInt(v.seen, 0, 1e9, 0);
+    if (isPlainObject(v.items)) {
+      var known = {}, s, i, keys;
+      for (s = 1; s <= STAGE_COUNT; s++) {
+        keys = fullPool(s);
+        for (i = 0; i < keys.length; i++) known[keys[i]] = 1;
+      }
+      for (var k in v.items) {
+        if (!Object.prototype.hasOwnProperty.call(v.items, k)) continue;
+        if (!known[k]) continue;                      /* stale/garbage key */
+        var it = v.items[k];
+        if (!isPlainObject(it)) continue;
+        p.items[k] = {
+          s: clampInt(it.s, 0, 4, 0),
+          r: clampInt(it.r, 0, 1e6, 0),
+          w: clampInt(it.w, 0, 1e6, 0)
+        };
+      }
+    }
+    return p;
+  } catch (e) { return freshProfile(); }
+}
+function writeProfile() { try { localStorage.setItem(K_SAVE, JSON.stringify(PROF)); } catch (e) {} }
+var PROF = readProfile();
+
+function itemStat(key) {
+  if (!PROF.items[key]) PROF.items[key] = { s: 0, r: 0, w: 0 };
+  return PROF.items[key];
+}
+function strengthOf(key) { return PROF.items[key] ? PROF.items[key].s : -1; }  /* -1 = never seen */
+function masteredCount(stage) {
+  var keys = fullPool(stage), n = 0, i;
+  for (i = 0; i < keys.length; i++) if (strengthOf(keys[i]) >= 3) n++;
+  return n;
+}
+function stageTarget(stage) {
+  var t = STAGES[stage].target, size = fullPool(stage).length;
+  return t < size ? t : size;
+}
+function stageProgress(stage) {
+  var t = stageTarget(stage), m = masteredCount(stage);
+  return t ? Math.min(1, m / t) : 0;
+}
+function stageMastered(stage) { return masteredCount(stage) >= stageTarget(stage); }
+
+/* Spaced repetition, kept simple enough to reason about: never-seen sits in
+   the middle, freshly-wrong sits on top, mastered drips back in rarely. */
+var WEIGHTS = [8, 5, 3, 2, 1];
+function pickWeight(key) {
+  var s = strengthOf(key);
+  if (s < 0) return 4;
+  return WEIGHTS[s];
+}
+
+/* ================================================================ audio == */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') { try { actx.resume(); } catch (e) {} } return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.34;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.34;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = m ? '&#215;' : '&#9835;';
+  if (m) stopSpeech();
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  try {
+    var t = actx.currentTime + (delay || 0);
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(28, f1), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) {}
+}
+var sfx = {
+  tap:   function () { tone('triangle', 520, 460, 0.04, 0.05); },
+  step:  function (i) { tone('sine', 420 + i * 70, 460 + i * 70, 0.09, 0.05); },
+  right: function () { var i; for (i = 0; i < 4; i++) tone('triangle', 523 * Math.pow(1.26, i), 523 * Math.pow(1.26, i), 0.16, 0.07, i * 0.075); },
+  soft:  function () { tone('sine', 330, 300, 0.22, 0.06); },   /* gentle, never a buzzer */
+  unlock:function () { var i; for (i = 0; i < 6; i++) tone('triangle', 392 * Math.pow(1.2, i), 392 * Math.pow(1.2, i), 0.2, 0.08, i * 0.09); }
+};
+
+/* =============================================================== speech == */
+/* speechSynthesis is a browser API, not an asset — but it is also frequently
+   missing (headless, locked-down kiosks, some Linux builds) and it hands out
+   its voice list asynchronously. So: never assume, never throw, and hide the
+   button rather than offering something that will do nothing. */
+var SPEECH = { api: false, voices: 0, voice: null, ok: false, spoken: 0, failed: 0 };
+function speechApi() {
+  try {
+    return !!(window.speechSynthesis &&
+      typeof window.speechSynthesis.speak === 'function' &&
+      typeof window.SpeechSynthesisUtterance === 'function');
+  } catch (e) { return false; }
+}
+function refreshVoices() {
+  SPEECH.api = speechApi();
+  SPEECH.voices = 0; SPEECH.voice = null;
+  if (SPEECH.api) {
+    try {
+      var vs = window.speechSynthesis.getVoices() || [];
+      SPEECH.voices = vs.length;
+      var i;
+      for (i = 0; i < vs.length; i++) if (vs[i] && /^en[-_]US/i.test(vs[i].lang || '')) { SPEECH.voice = vs[i]; break; }
+      if (!SPEECH.voice) for (i = 0; i < vs.length; i++) if (vs[i] && /^en/i.test(vs[i].lang || '')) { SPEECH.voice = vs[i]; break; }
+      if (!SPEECH.voice && vs.length) SPEECH.voice = vs[0];
+    } catch (e) { SPEECH.voices = 0; }
+  }
+  SPEECH.ok = SPEECH.api && SPEECH.voices > 0;
+  updateSpeakUI();
+}
+function stopSpeech() {
+  if (!speechApi()) return;
+  try { window.speechSynthesis.cancel(); } catch (e) {}
+}
+/* Returns true if a sound was actually dispatched. Callers must not depend
+   on it — every spoken thing is also written on screen. */
+function say(text, rate) {
+  if (!SPEECH.ok || muted || !text) return false;
+  try {
+    window.speechSynthesis.cancel();
+    var u = new window.SpeechSynthesisUtterance(String(text));
+    u.rate = rate || 0.85;
+    u.pitch = 1.05;
+    u.lang = 'en-US';
+    if (SPEECH.voice) u.voice = SPEECH.voice;
+    window.speechSynthesis.speak(u);
+    SPEECH.spoken++;
+    return true;
+  } catch (e) {
+    SPEECH.failed++;
+    SPEECH.ok = false;
+    updateSpeakUI();
+    return false;
+  }
+}
+function updateSpeakUI() {
+  var b = document.getElementById('speakBtn');
+  if (!b) return;
+  if (SPEECH.ok) { b.hidden = false; b.disabled = false; }
+  else { b.hidden = true; b.disabled = true; }
+}
+
+/* ================================================================ state == */
+var G = {
+  state: 'title',       /* title | play | paused | menu | progress */
+  stage: 1,
+  item: null,
+  queue: [],
+  locked: false,
+  blending: false,
+  lastKey: '',
+  wrongPick: -1,
+  sel: 0,
+  reteaching: false,
+  items: 0
+};
+
+/* ================================================================= DOM === */
+var stageEl   = document.getElementById('stage');
+var playEl    = document.getElementById('play');
+var promptEl  = document.getElementById('prompt');
+var textEl    = document.getElementById('text');
+var tilesEl   = document.getElementById('tiles');
+var wholeEl   = document.getElementById('whole');
+var bigwordEl = document.getElementById('bigword');
+var questionEl= document.getElementById('question');
+var choicesEl = document.getElementById('choices');
+var reteachEl = document.getElementById('reteach');
+var rbodyEl   = document.getElementById('rbody');
+var praiseEl  = document.getElementById('praise');
+var fxEl      = document.getElementById('fx');
+var overlay   = document.getElementById('overlay');
+var speakBtn  = document.getElementById('speakBtn');
+var blendBtn  = document.getElementById('blendBtn');
+var gotitBtn  = document.getElementById('gotitBtn');
+
+/* ============================================================== helpers == */
+var timers = [];
+function later(fn, ms) { var id = setTimeout(fn, ms); timers.push(id); return id; }
+function clearTimers() { var i; for (i = 0; i < timers.length; i++) clearTimeout(timers[i]); timers = []; }
+function rand(n) { return Math.floor(Math.random() * n); }
+function pick(arr) { return arr[rand(arr.length)]; }
+function shuffle(a) {
+  var i, j, t;
+  for (i = a.length - 1; i > 0; i--) { j = rand(i + 1); t = a[i]; a[i] = a[j]; a[j] = t; }
+  return a;
+}
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function up(s) { return String(s).toUpperCase(); }
+
+/* Words one grapheme away — the whole point of the distractors. Reading
+   "cat" when the choices are cat / cap / cot / can forces every letter to
+   be looked at, which is exactly the skill. */
+function neighbors(word, pool) {
+  var g = segment(word), out = [], i, h, k, diff, j;
+  for (i = 0; i < pool.length; i++) {
+    k = pool[i];
+    if (k === word) continue;
+    h = segment(k);
+    if (h.length !== g.length) continue;
+    diff = 0;
+    for (j = 0; j < g.length; j++) if (g[j] !== h[j]) diff++;
+    if (diff === 1) out.push(k);
+  }
+  return out;
+}
+function fillChoices(correct, near, pool, n) {
+  var out = [correct], i;
+  near = shuffle(near.slice());
+  for (i = 0; i < near.length && out.length < n; i++) if (out.indexOf(near[i]) < 0) out.push(near[i]);
+  var rest = shuffle(pool.slice());
+  for (i = 0; i < rest.length && out.length < n; i++) if (out.indexOf(rest[i]) < 0) out.push(rest[i]);
+  return out;
+}
+/* Shuffle the answers and hand back where the right one landed, so tapping
+   the same button twice in a row never works. */
+function shuffled(choices, correctValue) {
+  var a = shuffle(choices.slice());
+  return { choices: a, correct: a.indexOf(correctValue) };
+}
+function firstDiff(a, b) {
+  var g = segment(a), h = segment(b), i;
+  for (i = 0; i < Math.min(g.length, h.length); i++) if (g[i] !== h[i]) return i;
+  return -1;
+}
+
+/* ============================================================ item build = */
+function makeItem(key) {
+  var kind = key.charAt(0), body = key.slice(2);
+  if (kind === 'L') return letterItem(key, body);
+  if (kind === 'W') return wordItem(key, body, 2);
+  if (kind === 'F') return familyItem(key, body);
+  if (kind === 'S') return sightItem(key, body);
+  if (kind === 'D') return wordItem(key, body, 5);
+  if (kind === 'N') return sentenceItem(key, Number(body));
+  if (kind === 'P') {
+    var bits = body.split(':');
+    return passageItem(key, Number(bits[0]), Number(bits[1]));
+  }
+  return null;
+}
+
+/* ---- stage 1: letter sounds -------------------------------------------- */
+function letterItem(key, letter) {
+  var L = LETTER_BY[letter];
+  var pool = [], i, cap = tierCap(1);
+  for (i = 0; i < LETTERS.length; i++)
+    if (LETTERS[i].l !== letter && LETTERS[i].ph !== L.ph && LETTERS[i].set <= Math.max(cap, 2)) pool.push(LETTERS[i]);
+  if (pool.length < 3) {
+    pool = [];
+    for (i = 0; i < LETTERS.length; i++) if (LETTERS[i].l !== letter && LETTERS[i].ph !== L.ph) pool.push(LETTERS[i]);
+  }
+  var others = shuffle(pool.slice()).slice(0, 3);
+  var dir = (SPEECH.ok && rand(2) === 0) ? 's2l' : 'l2s';
+
+  if (dir === 's2l') {
+    /* hear the sound, tap the letter */
+    var opts = shuffled([L].concat(others), L);
+    return {
+      key: key, stage: 1, kind: 'letter', dir: dir, letter: L,
+      prompt: 'Tap the letter that says <b>/' + esc(L.ph) + '/</b> as in <b>' + esc(L.kw) + '</b>.',
+      tiles: [], big: null,
+      choices: opts.choices.map(function (o) { return { text: up(o.l), sub: '' }; }),
+      correct: opts.correct,
+      speak: L.say + '. ' + L.kw + '.',
+      choiceStyle: 'big'
+    };
+  }
+  /* see the letter, tap the sound */
+  var opts2 = shuffled([L].concat(others), L);
+  return {
+    key: key, stage: 1, kind: 'letter', dir: dir, letter: L,
+    prompt: 'What sound does this letter make?',
+    tiles: [{ g: L.l, vowel: !!L.vowel }], big: null,
+    choices: opts2.choices.map(function (o) { return { text: '/' + o.ph + '/', sub: 'as in ' + o.kw }; }),
+    correct: opts2.correct,
+    speak: L.say + '. ' + L.kw + '.',
+    choiceStyle: 'big'
+  };
+}
+
+/* ---- stages 2 and 5: blend the graphemes, read the word ---------------- */
+function wordItem(key, word, stage) {
+  var pool, i, near;
+  if (stage === 2) {
+    var cap = tierCap(2);
+    pool = [];
+    for (i = 0; i < CVC.length; i++) if (CVC[i].tier <= cap) pool.push(CVC[i].w);
+    if (pool.length < 6) { pool = []; for (i = 0; i < CVC.length; i++) pool.push(CVC[i].w); }
+  } else {
+    pool = [];
+    for (i = 0; i < DIGRAPH.length; i++) pool.push(DIGRAPH[i].w);
+  }
+  if (pool.indexOf(word) < 0) pool.push(word);
+  near = neighbors(word, pool);
+  var opts = shuffled(fillChoices(word, near, pool, 4), word);
+  var g = segment(word);
+  var note = '';
+  if (stage === 5 && DIGRAPH_BY[word]) note = DIGRAPH_BY[word].group.note;
+  return {
+    key: key, stage: stage, kind: stage === 2 ? 'blend' : 'digraph', word: word, graphemes: g,
+    prompt: note ? '<b>' + esc(note) + '</b>' : 'Blend the sounds. What word is it?',
+    tiles: g.map(function (x) { return { g: x, vowel: !!VOWELS[x], digraph: x.length > 1 }; }),
+    big: null,
+    choices: opts.choices.map(function (w) { return { text: w, sub: '' }; }),
+    correct: opts.correct,
+    speak: word,
+    canBlend: true,
+    choiceStyle: 'big'
+  };
+}
+
+/* ---- stage 3: word families -------------------------------------------- */
+function familyItem(key, word) {
+  var fam = FAMILY_OF[word];
+  var onset = word.slice(0, word.length - fam.rime.length);
+  var others = [], i;
+  for (i = 0; i < fam.words.length; i++) if (fam.words[i] !== word) others.push(fam.words[i]);
+  var opts = shuffled(fillChoices(word, others, fam.words, 4), word);
+  return {
+    key: key, stage: 3, kind: 'family', word: word, family: fam,
+    graphemes: segment(word),
+    prompt: 'The <b>-' + esc(fam.rime) + '</b> family. Swap the first letter and read the new word.',
+    tiles: [{ g: onset, vowel: !!VOWELS[onset], onset: true }, { g: fam.rime, rime: true }],
+    big: null,
+    choices: opts.choices.map(function (w) { return { text: w, sub: '' }; }),
+    correct: opts.correct,
+    speak: word,
+    canBlend: true,
+    choiceStyle: 'big'
+  };
+}
+
+/* ---- stage 4: heart words ---------------------------------------------- */
+function sightItem(key, w) {
+  var sw = SIGHT_BY[w];
+  var opts = shuffled([sw.w].concat(sw.bad.slice(0, 3)), sw.w);
+  var teach = strengthOf(key) < 1;      /* show the word whole before asking */
+  return {
+    key: key, stage: 4, kind: 'sight', sight: sw, teach: teach,
+    prompt: 'Which heart word fits?',
+    tiles: [], big: sw.w, heart: true,
+    cloze: sw.cloze,
+    choices: opts.choices.map(function (x) { return { text: x, sub: '' }; }),
+    correct: opts.correct,
+    speak: sw.w + '. ' + sw.cloze.replace('___', sw.w),
+    choiceStyle: 'big'
+  };
+}
+
+/* ---- stages 6 and 7: comprehension ------------------------------------- */
+function sentenceItem(key, i) {
+  var S = SENTENCES[i];
+  var opts = shuffled(S.ch.slice(), S.ch[S.c]);
+  return {
+    key: key, stage: 6, kind: 'sentence', src: S,
+    prompt: 'Read the sentence.',
+    text: S.s, question: S.q, qkind: 'literal', ev: S.ev,
+    tiles: [], big: null,
+    choices: opts.choices.map(function (x) { return { text: x, sub: '' }; }),
+    correct: opts.correct,
+    speak: S.s,
+    choiceStyle: 'small'
+  };
+}
+function passageItem(key, pi, qi) {
+  var P = PASSAGES[pi], Q = P.qs[qi];
+  var opts = shuffled(Q.ch.slice(), Q.ch[Q.c]);
+  return {
+    key: key, stage: 7, kind: 'passage', src: P, q: Q,
+    prompt: esc(P.t),
+    text: P.p, question: Q.q, qkind: Q.kind, ev: Q.ev || '', because: Q.because || '',
+    tiles: [], big: null,
+    choices: opts.choices.map(function (x) { return { text: x, sub: '' }; }),
+    correct: opts.correct,
+    speak: P.p,
+    choiceStyle: 'small'
+  };
+}
+
+/* ============================================================ the queue == */
+function refillQueue() {
+  var pool = activePool(G.stage), i, n = 8;
+  if (!pool.length) return;
+  var bag = [], w, j;
+  for (i = 0; i < pool.length; i++) {
+    w = pickWeight(pool[i]);
+    for (j = 0; j < w; j++) bag.push(pool[i]);
+  }
+  var tries = 0;
+  while (G.queue.length < n && tries < 400) {
+    tries++;
+    var k = bag[rand(bag.length)];
+    if (G.queue.length && G.queue[G.queue.length - 1] === k) continue;
+    if (k === G.lastKey && G.queue.length === 0 && pool.length > 1) continue;
+    G.queue.push(k);
+  }
+}
+function nextItem() {
+  clearTimers();
+  G.locked = false;
+  G.wrongPick = -1;
+  G.reteaching = false;
+  G.blending = false;
+  reteachEl.classList.remove('on');
+  if (!G.queue.length) refillQueue();
+  var key = G.queue.shift();
+  if (!key) { key = fullPool(G.stage)[0]; }
+  G.lastKey = key;
+  G.item = makeItem(key);
+  G.items++;
+  render();
+}
+/* A miss does not vanish — it comes back a couple of items later, which is
+   the whole point of getting it wrong. */
+function requeue(key) {
+  var at = Math.min(2, G.queue.length);
+  G.queue.splice(at, 0, key);
+}
+
+/* ================================================================ render = */
+function render() {
+  var it = G.item;
+  if (!it) return;
+
+  promptEl.innerHTML = it.prompt || '';
+  promptEl.hidden = !it.prompt;
+
+  /* reading text */
+  if (it.text) {
+    textEl.hidden = false;
+    textEl.innerHTML = esc(it.text);
+  } else { textEl.hidden = true; textEl.innerHTML = ''; }
+
+  /* question */
+  if (it.question) {
+    questionEl.hidden = false;
+    questionEl.innerHTML = esc(it.question) +
+      '<span id="qkind">' + (it.qkind === 'inferential' ? 'think about it' : 'find it') + '</span>';
+  } else { questionEl.hidden = true; questionEl.innerHTML = ''; }
+
+  /* tiles */
+  tilesEl.innerHTML = '';
+  tilesEl.classList.remove('blending');
+  wholeEl.classList.remove('on');
+  wholeEl.textContent = '';
+  if (it.tiles && it.tiles.length) {
+    tilesEl.hidden = false;
+    var i, t, d;
+    for (i = 0; i < it.tiles.length; i++) {
+      t = it.tiles[i];
+      d = document.createElement('div');
+      d.className = 'tile ' + (t.vowel || t.rime ? 'v' : 'c');
+      d.setAttribute('data-g', t.g);
+      d.setAttribute('data-i', i);
+      d.textContent = t.g;
+      tilesEl.appendChild(d);
+    }
+  } else { tilesEl.hidden = true; }
+
+  /* one huge word (heart words) */
+  if (it.big) {
+    bigwordEl.hidden = false;
+    bigwordEl.className = it.heart ? 'heart' : '';
+    bigwordEl.innerHTML = (it.heart ? '<div><span id="heartflag">Heart word &mdash; just know it</span></div>' : '') +
+      esc(it.big);
+  } else { bigwordEl.hidden = true; bigwordEl.innerHTML = ''; }
+
+  /* the cloze sentence for heart words rides in the prompt slot */
+  if (it.kind === 'sight') {
+    promptEl.hidden = false;
+    promptEl.innerHTML = (it.teach
+      ? 'This one does not sound out. <b>' + esc(it.sight.why) + '</b><br>'
+      : '') + 'Which word fits? &nbsp;<b>' + esc(it.cloze) + '</b>';
+    if (!it.teach) { bigwordEl.hidden = true; bigwordEl.innerHTML = ''; }
+  }
+
+  /* choices */
+  choicesEl.innerHTML = '';
+  choicesEl.className = it.choiceStyle === 'small' ? 'wide' : '';
+  var c, b;
+  for (c = 0; c < it.choices.length; c++) {
+    b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'choice' + (it.choiceStyle === 'small' ? ' small' : '');
+    b.setAttribute('data-i', c);
+    b.innerHTML = esc(it.choices[c].text) +
+      (it.choices[c].sub ? '<span class="sfx">' + esc(it.choices[c].sub) + '</span>' : '');
+    choicesEl.appendChild(b);
+  }
+  G.sel = -1;
+
+  /* action buttons */
+  blendBtn.hidden = !it.canBlend;
+  updateSpeakUI();
+  reteachEl.classList.remove('on');
+
+  updateHud();
+
+  /* say it automatically the first time an item lands — a new reader should
+     hear the target before being asked about it */
+  if (it.kind === 'letter' && it.dir === 's2l') later(function () { say(it.speak, 0.8); }, 220);
+}
+
+function updateHud() {
+  var st = STAGES[G.stage];
+  document.getElementById('stagename').textContent = st.name;
+  document.getElementById('stagenum').textContent = G.stage + ' / ' + STAGE_COUNT;
+  document.getElementById('barfill').style.width = Math.round(stageProgress(G.stage) * 100) + '%';
+}
+
+/* ============================================================== blending = */
+/* The sounds physically slide together, lighting one at a time, and then the
+   whole word pops out. That motion IS the lesson — blending is the step
+   every stuck reader is missing. */
+function blend(slow) {
+  var it = G.item;
+  if (!it || !it.tiles || !it.tiles.length) return;
+  clearTimers();
+  G.blending = true;
+  var kids = tilesEl.children, i;
+  for (i = 0; i < kids.length; i++) kids[i].classList.remove('lit');
+  tilesEl.classList.remove('blending');
+  wholeEl.classList.remove('on');
+  var gap = slow ? 620 : 380;
+
+  function litStep(n) {
+    return function () {
+      var j;
+      for (j = 0; j < kids.length; j++) kids[j].classList.toggle('lit', j === n);
+      sfx.step(n);
+      if (it.kind === 'letter') say(it.speak, 0.75);
+      else if (it.graphemes && it.graphemes[n]) {
+        var L = LETTER_BY[it.graphemes[n]];
+        say(L ? L.say : it.graphemes[n], 0.7);
+      } else if (it.tiles[n]) {
+        say(it.tiles[n].g, 0.7);
+      }
+    };
+  }
+  for (i = 0; i < kids.length; i++) later(litStep(i), i * gap);
+
+  later(function () {
+    var j;
+    for (j = 0; j < kids.length; j++) kids[j].classList.remove('lit');
+    tilesEl.classList.add('blending');
+  }, kids.length * gap);
+
+  later(function () {
+    if (it.word) { wholeEl.textContent = it.word; wholeEl.classList.add('on'); say(it.word, 0.8); }
+    G.blending = false;
+  }, kids.length * gap + 700);
+}
+
+/* ============================================================== answering */
+function choose(i) {
+  var it = G.item;
+  if (!it || G.locked || G.state !== 'play') return;
+  initAudio();
+  var btns = choicesEl.children;
+  if (i < 0 || i >= btns.length) return;
+  G.locked = true;
+  var st = itemStat(it.key);
+  PROF.seen++;
+
+  if (i === it.correct) {
+    st.r++;
+    st.s = Math.min(4, st.s + 1);
+    PROF.right++;
+    btns[i].classList.add('ok');
+    var j;
+    for (j = 0; j < btns.length; j++) if (j !== i) btns[j].classList.add('dimmed');
+    sfx.right();
+    showPraise();
+    if (it.word) { wholeEl.textContent = it.word; wholeEl.classList.add('on'); }
+    say(it.kind === 'sentence' || it.kind === 'passage' ? it.choices[i].text : (it.word || it.choices[i].text), 0.85);
+    writeProfile();
+    updateHud();
+    later(function () {
+      if (stageMastered(G.stage) && PROF.unlocked === G.stage && G.stage < STAGE_COUNT) {
+        PROF.unlocked = G.stage + 1;
+        writeProfile();
+        sfx.unlock();
+        unlockScreen(G.stage + 1);
+      } else {
+        nextItem();
+      }
+    }, 950);
+    return;
+  }
+
+  /* --- wrong: no buzzer, no penalty, just teach it again ---------------- */
+  st.w++;
+  st.s = Math.max(0, st.s - 2);
+  PROF.wrong++;
+  G.wrongPick = i;
+  btns[i].classList.add('miss');
+  btns[it.correct].classList.add('ok');
+  sfx.soft();
+  writeProfile();
+  updateHud();
+  reteach(it, i);
+  requeue(it.key);
+}
+
+function showPraise() {
+  var words = ['Yes!', 'Nice!', 'You got it!', 'Good reading!', 'That is it!'];
+  praiseEl.textContent = pick(words);
+  praiseEl.classList.remove('on');
+  void praiseEl.offsetWidth;
+  praiseEl.classList.add('on');
+  confetti(14);
+}
+function confetti(n) {
+  var cols = ['#ffb877', '#7fe3c4', '#9ec9ff', '#ff9d8a'], i, b;
+  for (i = 0; i < n; i++) {
+    b = document.createElement('div');
+    b.className = 'bit';
+    b.style.left = (14 + Math.random() * 72) + '%';
+    b.style.top = (-8 - Math.random() * 18) + 'px';
+    b.style.background = cols[rand(cols.length)];
+    b.style.setProperty('--dx', ((Math.random() - 0.5) * 180).toFixed(0) + 'px');
+    b.style.setProperty('--rot', ((Math.random() - 0.5) * 900).toFixed(0) + 'deg');
+    b.style.animationDelay = (Math.random() * 300) + 'ms';
+    b.style.animationDuration = (1100 + Math.random() * 800) + 'ms';
+    fxEl.appendChild(b);
+  }
+  setTimeout(function () { fxEl.innerHTML = ''; }, 2400);
+}
+
+/* =============================================================== reteach = */
+function reteach(it, chosen) {
+  G.reteaching = true;
+  var html = '';
+  if (it.kind === 'letter') {
+    var L = it.letter;
+    html = 'This letter is <b>' + up(L.l) + '</b>. It says <span class="rword">/' + esc(L.ph) + '/</span>' +
+           'like the start of <b>' + esc(L.kw) + '</b>.';
+    later(function () { say(L.say + '. ' + L.kw + '. ' + L.say, 0.7); }, 200);
+  } else if (it.kind === 'sight') {
+    html = '<b>' + esc(it.sight.w) + '</b> is a heart word.<span class="rword">' + esc(it.sight.w) + '</span>' +
+           esc(it.sight.why) + ' You just have to know this one.';
+    later(function () { say(it.sight.w + '. ' + it.sight.cloze.replace('___', it.sight.w), 0.75); }, 200);
+  } else if (it.kind === 'sentence' || it.kind === 'passage') {
+    if (it.qkind === 'inferential') {
+      html = 'The story does not say it straight out &mdash; you work it out. <b>' + esc(it.because) + '</b>';
+      later(function () { say(it.because, 0.85); }, 200);
+    } else {
+      html = 'Look here in the text:<span class="rword" style="font-size:clamp(18px,5vw,26px);line-height:1.35">' +
+             esc(it.ev) + '</span>';
+      highlightEvidence(it.ev);
+      later(function () { say(it.ev, 0.8); }, 200);
+    }
+  } else {
+    /* blending / family / digraph: point at the exact grapheme that was missed */
+    var wrongWord = it.choices[chosen].text;
+    var d = firstDiff(it.word, wrongWord);
+    var g = segment(it.word);
+    if (d >= 0 && tilesEl.children.length) {
+      var idx = d;
+      if (it.kind === 'family') idx = 0;   /* the family item only ever swaps the onset */
+      if (tilesEl.children[idx]) tilesEl.children[idx].classList.add('blame');
+    }
+    var focus = d >= 0 ? g[d] : g[0];
+    var FL = LETTER_BY[focus];
+    html = 'Look at the <b>' + up(focus) + '</b>' + (FL ? ' &mdash; it says <b>/' + esc(FL.ph) + '/</b>' : '') +
+           '.<span class="rword">' + esc(it.word) + '</span>Let us blend it slowly.';
+    later(function () { blend(true); }, 260);
+  }
+  rbodyEl.innerHTML = html;
+  reteachEl.classList.add('on');
+  gotitBtn.focus && gotitBtn.focus();
+}
+function highlightEvidence(ev) {
+  if (!ev || textEl.hidden) return;
+  var raw = G.item.text, low = raw.toLowerCase(), at = low.indexOf(String(ev).toLowerCase());
+  if (at < 0) return;
+  textEl.innerHTML = esc(raw.slice(0, at)) + '<mark>' + esc(raw.slice(at, at + ev.length)) + '</mark>' +
+                     esc(raw.slice(at + ev.length));
+}
+function gotIt() {
+  if (!G.reteaching) return;
+  G.reteaching = false;
+  reteachEl.classList.remove('on');
+  var kids = tilesEl.children, i;
+  for (i = 0; i < kids.length; i++) kids[i].classList.remove('blame');
+  nextItem();
+}
+
+/* =============================================================== overlays */
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+
+function ladderHTML() {
+  var h = '<div class="ladder">', i, st, locked, done, pct;
+  for (i = 1; i <= STAGE_COUNT; i++) {
+    st = STAGES[i];
+    locked = i > PROF.unlocked;
+    done = stageMastered(i);
+    pct = Math.round(stageProgress(i) * 100);
+    h += '<button class="rung' + (done ? ' done' : '') + '" type="button" data-act="stage" data-stage="' + i + '"' +
+         (locked ? ' disabled' : '') + '>' +
+         '<span class="n">' + (locked ? '&#128274;' : (done ? '&#10003;' : i)) + '</span>' +
+         '<span class="t"><b>' + esc(st.name) + '</b><i>' + esc(st.blurb) + '</i></span>' +
+         '<span class="p">' + (locked ? 'LOCKED' : pct + '%') + '</span>' +
+         '</button>';
+  }
+  return h + '</div>';
+}
+
+function titleScreen() {
+  G.state = 'title';
+  clearTimers();
+  document.body.classList.remove('playing');
+  var acc = PROF.seen ? Math.round(PROF.right / PROF.seen * 100) : 0;
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>SCAN</h1>' +
+      '<div class="tagline">Learn to read, one sound at a time. Letter sounds, then blending, then real words, then whole stories. Nothing here can be got wrong &mdash; a miss just gets taught again.</div>' +
+      '<div class="keys">' +
+        '<div>Answer<span>Tap a card, or keys 1&ndash;4</span></div>' +
+        '<div>Say it out loud<span>The &#9658; button, or S</span></div>' +
+        '<div>Blend the sounds<span>The BLEND button, or B</span></div>' +
+        '<div>Menu<span>Esc, or the &#10073;&#10073; button</span></div>' +
+        '<div>Mute<span>The &#9835; button (M on menus)</span></div>' +
+      '</div>' +
+      (PROF.seen ? '<div class="stats">' +
+        '<div class="stat"><div class="k">Answers</div><div class="v">' + PROF.seen + '</div></div>' +
+        '<div class="stat"><div class="k">Right</div><div class="v good">' + acc + '%</div></div>' +
+        '<div class="stat"><div class="k">Stage</div><div class="v accent">' + PROF.unlocked + '</div></div>' +
+      '</div>' : '') +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="start">START READING</button>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn ghost" data-act="ladder">CHOOSE A STAGE</button>' +
+        '<button class="btn ghost" data-act="progress">PROGRESS</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function ladderScreen() {
+  G.state = 'menu';
+  document.body.classList.remove('playing');
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">The ladder</div>' +
+      '<h2>CHOOSE A STAGE</h2>' +
+      '<div class="tagline">Every stage you have unlocked stays open forever &mdash; go back and play an easy one any time.</div>' +
+      ladderHTML() +
+      '<div class="btnrow"><button class="btn ghost" data-act="title">BACK</button></div>' +
+    '</div>');
+}
+
+function glyphClass(key) {
+  var s = strengthOf(key);
+  if (s < 0) return '';
+  if (s >= 3) return 'solid';
+  if (s >= 1) return 'learning';
+  return 'weak';
+}
+function progressScreen() {
+  var back = G.state === 'paused' ? 'resume' : 'title';
+  G.state = 'progress';
+  var h = '<div class="card">' +
+    '<div class="eyebrow">For the grown-up</div>' +
+    '<h2>PROGRESS</h2>' +
+    '<div class="tagline">Green is solid. Amber is coming along. Red needs another go &mdash; those come round more often on their own.</div>';
+
+  var acc = PROF.seen ? Math.round(PROF.right / PROF.seen * 100) : 0;
+  h += '<div class="stats">' +
+    '<div class="stat"><div class="k">Answers</div><div class="v">' + PROF.seen + '</div></div>' +
+    '<div class="stat"><div class="k">Right first go</div><div class="v good">' + acc + '%</div></div>' +
+    '<div class="stat"><div class="k">Stages open</div><div class="v accent">' + PROF.unlocked + ' / 7</div></div>' +
+  '</div>';
+
+  /* letter sounds */
+  h += '<div class="ptitle">Letter sounds</div><div class="glyphs">';
+  var i, L;
+  for (i = 0; i < LETTERS.length; i++) {
+    L = LETTERS[i];
+    h += '<div class="glyph ' + glyphClass('L:' + L.l) + '">' + up(L.l) + '<i>/' + esc(L.ph) + '/</i></div>';
+  }
+  h += '</div>';
+
+  /* words that need work */
+  var weak = [], strong = 0, keys, s, k, st;
+  var wordStages = [2, 3, 5];
+  for (s = 0; s < wordStages.length; s++) {
+    keys = fullPool(wordStages[s]);
+    for (i = 0; i < keys.length; i++) {
+      k = keys[i]; st = PROF.items[k];
+      if (!st) continue;
+      if (st.s >= 3) strong++;
+      else if (st.w > 0) weak.push({ w: k.slice(2), w2: st.w });
+    }
+  }
+  weak.sort(function (a, b) { return b.w2 - a.w2; });
+  h += '<div class="ptitle">Words to practise &nbsp;<span style="color:var(--good)">(' + strong + ' solid)</span></div>';
+  if (weak.length) {
+    h += '<div class="wlist">';
+    for (i = 0; i < weak.length && i < 12; i++) h += '<span class="wchip">' + esc(weak[i].w) + '</span>';
+    h += '</div>';
+  } else h += '<div class="none">Nothing sticking out yet.</div>';
+
+  /* heart words */
+  h += '<div class="ptitle">Heart words</div><div class="wlist">';
+  var any = false;
+  for (i = 0; i < SIGHT.length; i++) {
+    var cls = glyphClass('S:' + SIGHT[i].w);
+    if (!cls) continue;
+    any = true;
+    h += '<span class="wchip' + (cls === 'solid' ? ' ok' : '') + '">' + esc(SIGHT[i].w) + '</span>';
+  }
+  h += '</div>';
+  if (!any) h += '<div class="none">Not started &mdash; heart words open at stage 4.</div>';
+
+  h += '<div class="legend2">' +
+    '<div class="lg"><span class="dot s"></span>Solid</div>' +
+    '<div class="lg"><span class="dot l"></span>Coming along</div>' +
+    '<div class="lg"><span class="dot w"></span>Needs work</div>' +
+    '<div class="lg"><span class="dot n"></span>Not met yet</div>' +
+  '</div>';
+
+  h += '<div class="btnrow">' +
+       '<button class="btn ghost" data-act="' + back + '">BACK</button>' +
+       '<button class="btn ghost" data-act="reset">START OVER</button>' +
+       '</div></div>';
+  showOverlay(h);
+}
+
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="tagline" style="margin-top:10px">' + esc(STAGES[G.stage].name) + ' &middot; ' +
+        Math.round(stageProgress(G.stage) * 100) + '% of the way through</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">KEEP READING</button>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn ghost" data-act="ladder">STAGES</button>' +
+        '<button class="btn ghost" data-act="progress">PROGRESS</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function unlockScreen(n) {
+  G.state = 'menu';
+  document.body.classList.remove('playing');
+  confetti(40);
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Stage ' + (n - 1) + ' mastered</div>' +
+      '<h2>NEW STAGE OPEN</h2>' +
+      '<h1 style="font-size:clamp(22px,7vw,36px);letter-spacing:0.1em">' + esc(up(STAGES[n].name)) + '</h1>' +
+      '<div class="tagline">' + esc(STAGES[n].blurb) + '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn go" data-act="stage" data-stage="' + n + '">GO THERE</button>' +
+        '<button class="btn ghost" data-act="stage" data-stage="' + (n - 1) + '">STAY HERE</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function resetScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Are you sure?</div>' +
+      '<h2>START OVER</h2>' +
+      '<div class="tagline">This clears every sound, word and stage this reader has learned. There is no undo.</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn ghost" data-act="progress">NO, GO BACK</button>' +
+        '<button class="btn" data-act="reset2">YES, CLEAR IT</button>' +
+      '</div>' +
+    '</div>');
+}
+
+/* ============================================================ start/stop = */
+function startStage(n) {
+  n = clampInt(n, 1, STAGE_COUNT, 1);
+  if (n > PROF.unlocked) n = PROF.unlocked;
+  G.stage = n;
+  PROF.stage = n;
+  writeProfile();
+  G.state = 'play';
+  G.queue = [];
+  G.lastKey = '';
+  document.body.classList.add('playing');
+  hideOverlay();
+  nextItem();
+}
+function togglePause() {
+  if (G.state === 'play') { G.state = 'paused'; clearTimers(); stopSpeech(); pauseScreen(); }
+  else if (G.state === 'paused') { G.state = 'play'; hideOverlay(); }
+}
+
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn || btn.disabled) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 'start') startStage(PROF.stage || PROF.unlocked);
+  else if (act === 'stage') startStage(Number(btn.getAttribute('data-stage')));
+  else if (act === 'ladder') ladderScreen();
+  else if (act === 'progress') progressScreen();
+  else if (act === 'resume') { G.state = 'paused'; togglePause(); }
+  else if (act === 'title') titleScreen();
+  else if (act === 'reset') resetScreen();
+  else if (act === 'reset2') {
+    PROF = freshProfile();
+    writeProfile();
+    titleScreen();
+  }
+});
+
+/* ================================================================= input = */
+choicesEl.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('.choice') : null;
+  if (!b) return;
+  initAudio();
+  choose(Number(b.getAttribute('data-i')));
+});
+speakBtn.addEventListener('click', function () {
+  initAudio();
+  /* pressing SAY IT while muted turns the sound back on — a child tapping
+     the speaker and getting silence learns the wrong lesson */
+  if (muted) setMuted(false);
+  var it = G.item;
+  if (!it) return;
+  if (it.kind === 'sight' && !it.teach) say(it.sight.w + '. ' + it.sight.cloze.replace('___', it.sight.w), 0.8);
+  else say(it.speak, it.kind === 'passage' || it.kind === 'sentence' ? 0.86 : 0.78);
+});
+blendBtn.addEventListener('click', function () { initAudio(); blend(false); });
+gotitBtn.addEventListener('click', function () { initAudio(); gotIt(); });
+
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () {
+  if (G.state === 'play' || G.state === 'paused') togglePause();
+});
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+window.addEventListener('keydown', function (e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  var k = e.key ? String(e.key).toLowerCase() : '';
+  initAudio();
+  if (k === 'escape') {
+    e.preventDefault();
+    if (G.state === 'play' || G.state === 'paused') togglePause();
+    else if (G.state === 'menu' || G.state === 'progress') titleScreen();
+    return;
+  }
+  if (G.state === 'play') {
+    if (k >= '1' && k <= '4') {
+      e.preventDefault();
+      if (G.reteaching) return;
+      choose(Number(k) - 1);
+      return;
+    }
+    if (k === 'enter' || k === ' ') { e.preventDefault(); if (G.reteaching) gotIt(); return; }
+    if (k === 's') { e.preventDefault(); speakBtn.click(); return; }
+    if (k === 'b') { e.preventDefault(); if (G.item && G.item.canBlend) blend(false); return; }
+    if (k === 'm') { setMuted(!muted); return; }
+    return;
+  }
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'enter' || k === ' ') {
+    if (G.state === 'title') { e.preventDefault(); startStage(PROF.stage || PROF.unlocked); }
+  }
+});
+
+window.addEventListener('blur', function () { if (G.state === 'play') togglePause(); });
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && G.state === 'play') togglePause();
+});
+
+/* ================================================================ layout = */
+function layout() {
+  var W = window.innerWidth || 360;
+  var H = window.innerHeight || 640;
+  document.body.classList.toggle('land', (W > H) && (H < 560));
+}
+
+/* --------------------------------------------------------------- gamepad - */
+var padSel = -1, padPrev = {}, padT = 0;
+function padDown(p, i) {
+  var now = !!(p.buttons[i] && p.buttons[i].pressed);
+  var was = !!padPrev[i];
+  padPrev[i] = now;
+  return now && !was;
+}
+function selChoice(n) {
+  var kids = choicesEl.children, i;
+  if (!kids.length) return;
+  for (i = 0; i < kids.length; i++) kids[i].classList.remove('sel');
+  padSel = (n + kids.length) % kids.length;
+  kids[padSel].classList.add('sel');
+  G.sel = padSel;
+}
+function pollPad(dt) {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null, i;
+  for (i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  padT -= dt;
+  var ax = (p.axes && p.axes.length > 0) ? p.axes[0] : 0;
+  var ay = (p.axes && p.axes.length > 1) ? p.axes[1] : 0;
+  var left = ax < -0.5 || padDown(p, 14), right = ax > 0.5 || padDown(p, 15);
+  var upp = ay < -0.5 || padDown(p, 12), down = ay > 0.5 || padDown(p, 13);
+  if ((left || right || upp || down) && padT <= 0) {
+    padT = 0.17;
+    if (padSel < 0) selChoice(0);
+    else if (left || upp) selChoice(padSel - 1);
+    else selChoice(padSel + 1);
+  }
+  if (padDown(p, 0)) {
+    initAudio();
+    if (G.state === 'title') startStage(PROF.stage || PROF.unlocked);
+    else if (G.reteaching) gotIt();
+    else if (G.state === 'play' && padSel >= 0) choose(padSel);
+  }
+  if (padDown(p, 2)) { if (G.item && G.item.canBlend) blend(false); }
+  if (padDown(p, 3)) speakBtn.click();
+  if (padDown(p, 9) && (G.state === 'play' || G.state === 'paused')) togglePause();
+}
+
+/* ================================================================== loop = */
+/* Nothing simulates — the loop only services the gamepad, so the game is
+   fully static between taps (staticOk in the harness). */
+var lastT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  pollPad(dt);
+}
+
+/* ================================================================== boot = */
+layout();
+window.addEventListener('resize', layout);
+window.addEventListener('orientationchange', layout);
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(layout).observe(stageEl); } catch (e) {}
+}
+setMuted(muted);
+refreshVoices();
+/* voices arrive late in most browsers; ask again rather than deciding once */
+if (speechApi()) {
+  try { window.speechSynthesis.onvoiceschanged = refreshVoices; } catch (e) {}
+  setTimeout(refreshVoices, 350);
+  setTimeout(refreshVoices, 1400);
+}
+G.stage = PROF.stage;
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>
