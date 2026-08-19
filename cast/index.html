@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Cast — Golden Hour</title>
+<meta name="theme-color" content="#2a2430">
+<meta name="description" content="One evening on the pond. Bluegill in the shallows, bass off the weedline, cats on the bottom — hold to cast, tap to set the hook, and mind your line.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cast">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #2a2430;
+    --accent: #e0a95c;
+    --fg: #f2ead9;
+    --dim: rgba(242,234,217,0.62);
+    --panel: rgba(30,26,34,0.72);
+    --line: rgba(242,234,217,0.16);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .iconbtn:active { background: rgba(224,169,92,0.28); }
+  body:not(.playing) #topbtns { display: none; }
+
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(30,24,34,0.8), rgba(14,11,16,0.94));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(540px, 100%);
+    background: rgba(34,28,38,0.92);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 22px 20px 20px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.65);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(30px, 9vw, 52px);
+    letter-spacing: 0.14em; font-weight: 700; line-height: 1;
+    color: var(--accent);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(20px, 6vw, 30px); letter-spacing: 0.08em; font-weight: 700; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.04em; margin-bottom: 12px; }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 350px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(242,234,217,0.1); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 14px 0 6px; }
+  .stat { background: rgba(242,234,217,0.05); border: 1px solid var(--line); border-radius: 10px; padding: 8px 6px; }
+  .stat .k { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(17px, 5vw, 23px); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .best { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .best b { color: var(--accent); }
+  .btn {
+    margin-top: 16px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; padding: 0 30px;
+    border-radius: 10px; border: 1px solid rgba(224,169,92,0.6);
+    background: rgba(224,169,92,0.15); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.16em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(224,169,92,0.32); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(242,234,217,0.05); }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(26px, 8vw, 46px); font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+  @media (max-height: 620px) {
+    .card { padding: 14px 16px; border-radius: 12px; }
+    .keys { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   CAST — one evening on the pond, for the Overclock arcade.
+   You cast a line; code casts a type. One button does everything: hold to
+   charge, release to cast, tap to set the hook, hold to reel — and let go
+   before the line snaps. Naturalistic like Scope: golden hour, no neon.
+   One file, no assets, oscillator audio.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'cast_v1';
+var K_MUTE = 'cast_muted_v1';
+var EVE_LEN = 180;              /* seconds of golden hour */
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function pick(a) { return a[(Math.random() * a.length) | 0]; }
+function loadJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function mix(c1, c2, t) {
+  return 'rgb(' + Math.round(lerp(c1[0], c2[0], t)) + ',' + Math.round(lerp(c1[1], c2[1], t)) + ',' + Math.round(lerp(c1[2], c2[2], t)) + ')';
+}
+function mulberry(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.45;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.45;
+  var b = document.getElementById('muteBtn');
+  b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(24, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseBurst(dur, vol, freq, delay, type) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var n = Math.floor(actx.sampleRate * dur);
+  var buf = actx.createBuffer(1, n, actx.sampleRate);
+  var ch = buf.getChannelData(0);
+  for (var i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  var src = actx.createBufferSource(); src.buffer = buf;
+  var f = actx.createBiquadFilter(); f.type = type || 'lowpass'; f.frequency.value = freq;
+  var g = actx.createGain(); g.gain.value = vol;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+}
+var sfx = {
+  whoosh: function () { noiseBurst(0.25, 0.08, 1600, 0, 'bandpass'); },
+  plop:   function () { tone('sine', 300, 90, 0.12, 0.16); noiseBurst(0.1, 0.08, 900); },
+  tick:   function () { tone('square', 1400, 1400, 0.015, 0.03); },
+  nibble: function () { tone('sine', 500, 380, 0.05, 0.09); },
+  bite:   function () { tone('sine', 400, 200, 0.14, 0.16); noiseBurst(0.08, 0.06, 1200); },
+  hookset:function () { noiseBurst(0.14, 0.14, 1000); tone('sine', 200, 120, 0.16, 0.12); },
+  splash: function () { noiseBurst(0.3, 0.16, 1400); noiseBurst(0.2, 0.1, 800, 0.08); },
+  drag:   function () { for (var i = 0; i < 5; i++) tone('square', 900 + i * 60, 900 + i * 60, 0.02, 0.05, i * 0.045); },
+  snap:   function () { tone('square', 1800, 900, 0.05, 0.16); noiseBurst(0.12, 0.1, 2400, 0.02, 'highpass'); },
+  land:   function () { tone('sine', 330, 330, 0.18, 0.1); tone('sine', 415, 415, 0.24, 0.1, 0.16); },
+  bestie: function () { tone('sine', 392, 392, 0.2, 0.1); tone('sine', 494, 494, 0.2, 0.1, 0.18); tone('sine', 587, 587, 0.32, 0.1, 0.36); },
+  cricket:function () { var f = rnd(3800, 4400); tone('sine', f, f, 0.03, 0.02); tone('sine', f, f, 0.03, 0.018, 0.06); },
+  lap:    function () { noiseBurst(0.4, 0.02, 500); }
+};
+
+/* -------------------------------------------------------------- species -- */
+var SPECIES = [
+  { id: 'bluegill', name: 'BLUEGILL',        min: 0.2, max: 1.2,  band: [0.12, 0.4],  wary: 0.12, fight: 0.32, rate: 1.0,  col: [92, 104, 62],  belly: [201, 162, 95] },
+  { id: 'crappie',  name: 'CRAPPIE',         min: 0.5, max: 2.4,  band: [0.3, 0.6],   wary: 0.28, fight: 0.42, rate: 0.75, col: [126, 126, 108],belly: [217, 213, 194] },
+  { id: 'bass',     name: 'LARGEMOUTH BASS', min: 1.0, max: 8.5,  band: [0.35, 0.75], wary: 0.5,  fight: 0.85, rate: 0.6,  col: [70, 88, 52],   belly: [184, 201, 160] },
+  { id: 'catfish',  name: 'CHANNEL CAT',     min: 2.0, max: 18,   band: [0.75, 0.97], wary: 0.36, fight: 0.7,  rate: 0.45, col: [72, 74, 86],   belly: [168, 168, 176] }
+];
+
+/* ---------------------------------------------------------------- state -- */
+var sv = loadJSON(K_SAVE, {}) || {};
+var G = {
+  state: 'title',                /* title | fish | pause | over */
+  eve: 0,
+  score: 0,                      /* total pounds, one decimal */
+  stringer: [],                  /* {name, lb} */
+  bestFish: null,                /* {name, lb} this evening */
+  banner: null, bannerT: 0,
+  high: sv.high || 0,
+  bestEver: sv.bestFish || null,
+  newPB: false
+};
+/* rod-and-line state machine: idle | charge | flight | soak | fight */
+var rod = {
+  mode: 'idle',
+  power: 0,                      /* 0..1 while charging */
+  press: false, pressT: 0
+};
+var lure = { x: 0, y: 0, vx: 0, vy: 0, depth: 0 };
+var fight = null;                /* {fish, dist, tension, stamina, runT, running, overT, jumpT} */
+var fishes = [];
+var parts = [];                  /* droplets */
+var rings = [];                  /* surface rings */
+var biteFish = null, biteT = 0;
+var soakBiteT = 0;               /* time until next interest check */
+var dragons = [];                /* dragonflies */
+
+/* -------------------------------------------------------------- geometry - */
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var view = { w: 900, h: 600, dpr: 1 };
+var scenery = null;
+function W() { return view.w; }
+function H() { return view.h; }
+function waterY() { return view.h * 0.4; }
+function rodTip() { return { x: view.w * 0.13, y: view.h * 0.22 }; }
+function bottomY() { return view.h * 0.98; }
+
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(240, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+  buildScenery();
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+function buildScenery() {
+  var rng = mulberry(20260820);
+  var trees = [];
+  for (var i = 0; i < 30; i++) {
+    trees.push({ x: rng(), w: 0.02 + rng() * 0.03, h: 0.09 + rng() * 0.13, pine: rng() < 0.45 });
+  }
+  var cattails = [];
+  for (var c = 0; c < 12; c++) {
+    cattails.push({ x: 0.02 + rng() * 0.16, h: 0.1 + rng() * 0.07, lean: (rng() - 0.5) * 0.4, ph: rng() * TAU });
+  }
+  var pads = [];
+  for (var p2 = 0; p2 < 6; p2++) {
+    pads.push({ x: 0.3 + rng() * 0.62, r: 0.014 + rng() * 0.02, ph: rng() * TAU });
+  }
+  var weeds = [];
+  for (var w2 = 0; w2 < 16; w2++) {
+    weeds.push({ x: 0.25 + rng() * 0.72, h: 0.05 + rng() * 0.12, ph: rng() * TAU });
+  }
+  scenery = { trees: trees, cattails: cattails, pads: pads, weeds: weeds };
+  dragons = [];
+  for (var d = 0; d < 3; d++) {
+    dragons.push({ x: rng(), y: 0.3 + rng() * 0.07, ph: rng() * TAU, sp: 0.5 + rng() });
+  }
+}
+
+/* dusk palette: k = 0 (golden hour) .. 1 (last light) */
+function duskK() { return clamp(G.eve / EVE_LEN, 0, 1); }
+function skyTop(k)  { return mix([116, 128, 158], [44, 42, 74], k); }
+function skyMid(k)  { return mix([214, 150, 96], [104, 70, 92], k); }
+function skyLow(k)  { return mix([238, 186, 118], [140, 88, 96], k); }
+function waterHi(k) { return mix([148, 120, 84], [66, 56, 70], k); }
+function waterLo(k) { return mix([34, 42, 32], [16, 20, 18], k); }
+
+/* ----------------------------------------------------------------- fish --- */
+function spawnFish() {
+  /* weighted species pick */
+  var total = 0, i;
+  for (i = 0; i < SPECIES.length; i++) total += SPECIES[i].rate;
+  var r = Math.random() * total, sp = SPECIES[0];
+  for (i = 0; i < SPECIES.length; i++) { r -= SPECIES[i].rate; if (r <= 0) { sp = SPECIES[i]; break; } }
+  var lb = rnd(sp.min, sp.max);
+  if (sp.id === 'bass' && Math.random() < 0.06) lb = rnd(8.5, 12);   /* the lunker */
+  var fromLeft = Math.random() < 0.5;
+  fishes.push({
+    sp: sp, lb: lb,
+    x: fromLeft ? -0.05 : 1.05,
+    y: lerp(sp.band[0], sp.band[1], Math.random()),
+    dir: fromLeft ? 1 : -1,
+    speed: rnd(0.02, 0.045) * (sp.id === 'catfish' ? 0.55 : 1),
+    ph: rnd(0, TAU),
+    state: 'swim',               /* swim | approach | inspect | flee */
+    stateT: 0, wob: rnd(0, TAU)
+  });
+}
+function fishLen(f) { return (18 + Math.pow(f.lb, 0.55) * 16); }   /* px at base scale */
+
+function stepFish(f, dt, t) {
+  var wy = waterY(), by = bottomY();
+  f.wob += dt * (2 + f.speed * 30);
+  if (f.state === 'swim') {
+    f.x += f.dir * f.speed * dt;
+    f.y += Math.sin(f.wob * 0.4 + f.ph) * 0.012 * dt * 10;
+    var bandTop = f.sp.band[0], bandBot = f.sp.band[1];
+    f.y = clamp(f.y, bandTop, bandBot);
+    if (f.x < -0.08 || f.x > 1.08) f.dead = true;
+    /* notice the lure */
+    if (rod.mode === 'soak' && !biteFish && G.state === 'fish') {
+      var lx = lure.x / W(), ly = (lure.y - wy) / (by - wy);
+      var dx = lx - f.x, dy = ly - f.y;
+      var d2 = dx * dx + dy * dy * 0.6;
+      var range = 0.028 + (lureMoving ? 0.03 : 0.008);
+      if (d2 < range && Math.random() < 0.9 - f.sp.wary) {
+        f.state = 'approach'; f.stateT = rnd(2, 4);
+      }
+    }
+  } else if (f.state === 'approach') {
+    var lx2 = lure.x / W(), ly2 = (lure.y - waterY()) / (by - wy);
+    var ax = lx2 - f.x, ay = ly2 - f.y;
+    var ad = Math.sqrt(ax * ax + ay * ay) || 0.001;
+    f.dir = ax > 0 ? 1 : -1;
+    f.x += ax / ad * f.speed * 1.6 * dt;
+    f.y += ay / ad * f.speed * 1.2 * dt;
+    f.stateT -= dt;
+    if (rod.mode !== 'soak' || biteFish) { f.state = 'swim'; }
+    else if (ad < 0.02) { f.state = 'inspect'; f.stateT = rnd(0.6, 1.6); }
+    else if (f.stateT <= 0) { f.state = 'swim'; }
+  } else if (f.state === 'inspect') {
+    f.stateT -= dt;
+    if (rod.mode !== 'soak' || biteFish) { f.state = 'swim'; }
+    else if (f.stateT <= 0) {
+      if (Math.random() < 0.72 - f.sp.wary * 0.4) {
+        /* BITE */
+        biteFish = f; biteT = 0.95;
+        sfx.bite();
+        addRing(lure.x, waterY(), 8);
+        f.state = 'bite';
+      } else {
+        f.state = 'flee'; f.stateT = 1.2;
+      }
+    }
+  } else if (f.state === 'bite') {
+    /* handled by the bite window in update() */
+  } else if (f.state === 'flee') {
+    f.x += f.dir * f.speed * 5 * dt;
+    f.stateT -= dt;
+    if (f.stateT <= 0) f.state = 'swim';
+    if (f.x < -0.08 || f.x > 1.08) f.dead = true;
+  }
+}
+
+/* --------------------------------------------------------------- effects -- */
+function addRing(x, y, maxR) { rings.push({ x: x, y: y, r: 2, maxR: maxR, life: 0.9, max: 0.9 }); }
+function addDrops(x, y, n, up) {
+  for (var i = 0; i < n && parts.length < 200; i++) {
+    parts.push({ x: x + rnd(-4, 4), y: y, vx: rnd(-40, 40), vy: -rnd(30, up ? 160 : 80), t: rnd(0.3, 0.7), max: 0.7 });
+  }
+}
+function banner(txt) { G.banner = txt; G.bannerT = 2.4; }
+
+/* ------------------------------------------------------------ input ------ */
+var lureMoving = false;
+function pressStart() {
+  initAudio();
+  if (G.state !== 'fish') return;
+  rod.press = true; rod.pressT = 0;
+  if (rod.mode === 'idle') {
+    rod.mode = 'charge'; rod.power = 0;
+  } else if (rod.mode === 'soak') {
+    if (biteFish) hookset();
+    /* otherwise the hold reels — handled in update */
+  }
+}
+function pressEnd() {
+  if (G.state !== 'fish') { rod.press = false; return; }
+  rod.press = false;
+  if (rod.mode === 'charge') {
+    /* let it fly */
+    var tip = rodTip();
+    var p = clamp(rod.power, 0.15, 1);
+    rod.mode = 'flight';
+    lure.x = tip.x; lure.y = tip.y;
+    lure.vx = lerp(0.25, 1.05, p) * W();
+    lure.vy = -lerp(0.12, 0.3, p) * H();
+    sfx.whoosh();
+  }
+}
+function hookset() {
+  if (!biteFish) return;
+  var f = biteFish;
+  biteFish = null; biteT = 0;
+  /* every so often the pond hands you a boot instead */
+  if (Math.random() < 0.07) { f.boot = true; f.sp = null; f.lb = rnd(2, 4); }
+  sfx.hookset();
+  sfx.splash();
+  addRing(lure.x, waterY(), 26);
+  addDrops(lure.x, waterY(), 10, true);
+  fight = {
+    fish: f,
+    dist: 1,                       /* 1 = far, 0 = landed */
+    tension: 0.35,
+    stamina: 1,
+    running: false, runT: rnd(0.6, 1.4),
+    overT: 0, jumpT: rnd(2, 5),
+    warned: false
+  };
+  f.state = 'hooked';
+  rod.mode = 'fight';
+}
+
+cv.addEventListener('pointerdown', function (e) { pressStart(); e.preventDefault(); });
+window.addEventListener('pointerup', function () { pressEnd(); });
+window.addEventListener('pointercancel', function () { pressEnd(); });
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ') e.preventDefault();
+  initAudio();
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'p' || k === 'escape') { if (G.state === 'fish' || G.state === 'pause') togglePause(); return; }
+  if (G.state === 'title' && (k === ' ' || k === 'enter')) { startEvening(); return; }
+  if (G.state === 'over' && (k === ' ' || k === 'enter' || k === 'r')) { startEvening(); return; }
+  if (k === ' ' && !e.repeat) pressStart();
+});
+window.addEventListener('keyup', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ') pressEnd();
+});
+var padHeld = false, padPauseHeld = false;
+function pollPad() {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null;
+  for (var i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  var a = !!(p.buttons[0] && p.buttons[0].pressed) || !!(p.buttons[7] && p.buttons[7].value > 0.4);
+  if (a && !padHeld) {
+    if (G.state === 'title' || G.state === 'over') { initAudio(); startEvening(); }
+    else pressStart();
+  }
+  if (!a && padHeld) pressEnd();
+  padHeld = a;
+  var st = p.buttons[9] && p.buttons[9].pressed;
+  if (st && !padPauseHeld && (G.state === 'fish' || G.state === 'pause')) togglePause();
+  padPauseHeld = !!st;
+}
+window.addEventListener('blur', function () { if (G.state === 'fish') togglePause(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden && G.state === 'fish') togglePause(); });
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { if (G.state === 'fish' || G.state === 'pause') togglePause(); });
+
+/* -------------------------------------------------------------- overlay -- */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+
+function titleScreen() {
+  G.state = 'title';
+  document.body.classList.remove('playing');
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>CAST</h1>' +
+      '<div class="tagline">One evening on the pond. Bluegill in the shallows, crappie over the brush, bass off the weedline, cats on the bottom. One button does it all — and the big ones will test your drag.</div>' +
+      '<div class="keys">' +
+        '<div>Cast<span>Hold to charge, release to fly</span></div>' +
+        '<div>Set the hook<span>Tap when the bobber dips</span></div>' +
+        '<div>Fight<span>Hold to reel &middot; let go before it snaps</span></div>' +
+        '<div>Pause<span>P or Esc</span></div>' +
+        '<div>Mute<span>M</span></div>' +
+      '</div>' +
+      (G.high > 0 ? '<div class="best">Best evening: <b>' + G.high.toFixed(1) + ' lb</b>' + (G.bestEver ? ' &middot; best fish <b>' + G.bestEver.name + ' ' + G.bestEver.lb.toFixed(1) + ' lb</b>' : '') + '</div>' : '') +
+      '<button class="btn" data-act="start">WET A LINE</button>' +
+    '</div>');
+}
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Stringer</div><div class="v accent">' + G.score.toFixed(1) + ' lb</div></div>' +
+        '<div class="stat"><div class="k">Fish</div><div class="v">' + G.stringer.length + '</div></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="quit">QUIT</button>' +
+      '</div>' +
+    '</div>');
+}
+function endEvening() {
+  G.state = 'over';
+  document.body.classList.remove('playing');
+  var nb = G.score > G.high;
+  if (nb) G.high = Math.round(G.score * 10) / 10;
+  if (G.bestFish && (!G.bestEver || G.bestFish.lb > G.bestEver.lb)) {
+    G.bestEver = { name: G.bestFish.name, lb: Math.round(G.bestFish.lb * 10) / 10 };
+  }
+  saveJSON(K_SAVE, { high: G.high, bestFish: G.bestEver });
+  sfx.bestie();
+  var list = '';
+  for (var i = 0; i < G.stringer.length; i++) {
+    list += G.stringer[i].name + ' ' + G.stringer[i].lb.toFixed(1) + ' lb' + (i < G.stringer.length - 1 ? '  ·  ' : '');
+  }
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Too dark to see the bobber</div>' +
+      '<h2>THE STRINGER</h2>' +
+      (nb ? '<div class="tagline" style="color:var(--accent)">BEST EVENING YET</div>' : '') +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Total</div><div class="v accent">' + G.score.toFixed(1) + ' lb</div></div>' +
+        '<div class="stat"><div class="k">Fish</div><div class="v">' + G.stringer.length + '</div></div>' +
+      '</div>' +
+      (list ? '<div class="tagline" style="margin-top:8px">' + list + '</div>' : '<div class="tagline" style="margin-top:8px">They just were not biting tonight.</div>') +
+      '<div class="best">Best evening: <b>' + G.high.toFixed(1) + ' lb</b>' + (G.bestEver ? ' &middot; best fish <b>' + G.bestEver.name + ' ' + G.bestEver.lb.toFixed(1) + ' lb</b>' : '') + '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="start">FISH AGAIN</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>');
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 'start') startEvening();
+  else if (act === 'resume') togglePause();
+  else if (act === 'quit' || act === 'title') titleScreen();
+});
+function togglePause() {
+  if (G.state === 'fish') { G.state = 'pause'; pauseScreen(); }
+  else if (G.state === 'pause') { G.state = 'fish'; hideOverlay(); }
+}
+function startEvening() {
+  initAudio();
+  hideOverlay();
+  document.body.classList.add('playing');
+  G.eve = 0; G.score = 0; G.stringer = []; G.bestFish = null; G.newPB = false;
+  G.banner = null; G.bannerT = 0;
+  rod.mode = 'idle'; rod.power = 0; rod.press = false;
+  fight = null; biteFish = null; biteT = 0;
+  fishes.length = 0; parts.length = 0; rings.length = 0;
+  for (var i = 0; i < 4; i++) { spawnFish(); fishes[i].x = rnd(0.25, 0.9); }
+  G.state = 'fish';
+}
+
+/* -------------------------------------------------------------- the catch  */
+function landFish() {
+  var f = fight.fish;
+  var isBoot = f.boot;
+  var lb = f.lb;
+  fight = null;
+  rod.mode = 'idle';
+  f.state = 'landed';
+  f.dead = true;
+  if (isBoot) {
+    banner('AN OLD BOOT.  THE POND KEEPS ITS SECRETS');
+    sfx.land();
+    return;
+  }
+  var lbR = Math.round(lb * 10) / 10;
+  G.score += lbR;
+  G.stringer.push({ name: f.sp.name, lb: lbR });
+  if (!G.bestFish || lbR > G.bestFish.lb) G.bestFish = { name: f.sp.name, lb: lbR };
+  var pb = G.bestEver && lbR > G.bestEver.lb;
+  if (!G.bestEver) pb = lbR >= 5;
+  banner(f.sp.name + '  ·  ' + lbR.toFixed(1) + ' LB' + (lb > 8.4 && f.sp.id === 'bass' ? '  ·  A LUNKER!' : '') + (pb ? '  ·  NEW PERSONAL BEST' : ''));
+  if (pb) { sfx.bestie(); G.newPB = true; } else sfx.land();
+  addRing(rodTip().x + W() * 0.06, waterY(), 20);
+  addDrops(rodTip().x + W() * 0.06, waterY(), 14, true);
+}
+
+function snapLine() {
+  var f = fight.fish;
+  fight = null;
+  rod.mode = 'idle';
+  f.state = 'flee'; f.stateT = 2;
+  banner('SNAPPED OFF.  IT WAS A BIG ONE');
+  sfx.snap();
+}
+
+/* ----------------------------------------------------------------- sim --- */
+var ambT = 2;
+function update(dt, t) {
+  var i;
+  if (G.bannerT > 0) G.bannerT -= dt;
+  for (i = rings.length - 1; i >= 0; i--) {
+    var rg = rings[i];
+    rg.life -= dt;
+    rg.r += (rg.maxR - rg.r) * 2.4 * dt;
+    if (rg.life <= 0) rings.splice(i, 1);
+  }
+  for (i = parts.length - 1; i >= 0; i--) {
+    var p = parts[i];
+    p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 380 * dt;
+    if (p.t <= 0 || p.y > waterY() + 8) {
+      if (p.y > waterY() && p.t > 0) addRing(p.x, waterY(), 4);
+      parts.splice(i, 1);
+    }
+  }
+  for (i = 0; i < dragons.length; i++) {
+    var dr = dragons[i];
+    dr.x += Math.sin(t * dr.sp * 0.4 + dr.ph) * 0.02 * dt;
+    dr.ph += dt * 0.2;
+  }
+  if (G.state !== 'fish') return;
+
+  G.eve += dt;
+  if (G.eve >= EVE_LEN) { endEvening(); return; }
+
+  /* ambient: crickets thicken at dusk, water laps */
+  ambT -= dt;
+  if (ambT <= 0) {
+    if (Math.random() < 0.4 + duskK() * 0.5) sfx.cricket(); else sfx.lap();
+    ambT = rnd(1.2, 3.2);
+  }
+
+  /* fish population */
+  var live = 0;
+  for (i = 0; i < fishes.length; i++) if (!fishes[i].dead) live++;
+  if (live < 5 && Math.random() < dt * 0.4) spawnFish();
+  for (i = fishes.length - 1; i >= 0; i--) {
+    stepFish(fishes[i], dt, t);
+    if (fishes[i].dead && fishes[i].state !== 'hooked') fishes.splice(i, 1);
+  }
+
+  /* rod state machine */
+  lureMoving = false;
+  if (rod.mode === 'charge') {
+    rod.power = Math.min(1, rod.power + dt * 0.9);
+  } else if (rod.mode === 'flight') {
+    lure.x += lure.vx * dt;
+    lure.vy += H() * 1.5 * dt;
+    lure.y += lure.vy * dt;
+    if (lure.x > W() * 0.97) { lure.x = W() * 0.97; lure.vx = 0; }
+    if (lure.y >= waterY()) {
+      lure.y = waterY();
+      rod.mode = 'soak';
+      lure.depth = 0;
+      sfx.plop();
+      addRing(lure.x, waterY(), 16);
+      addDrops(lure.x, waterY(), 6, false);
+      soakBiteT = rnd(1, 2);
+    }
+  } else if (rod.mode === 'soak') {
+    /* lure sinks; holding the button reels it home */
+    var by = bottomY();
+    if (rod.press && !biteFish) {
+      lureMoving = true;
+      lure.x -= W() * 0.07 * dt;
+      lure.y = Math.max(waterY() + 4, lure.y - H() * 0.02 * dt);
+      if (Math.random() < dt * 8) sfx.tick();
+      if (lure.x < rodTip().x + W() * 0.03) { rod.mode = 'idle'; }
+    } else if (!biteFish) {
+      lure.y = Math.min(by - 6, lure.y + H() * 0.035 * dt);
+    }
+    /* bite window */
+    if (biteFish) {
+      biteT -= dt;
+      if (biteT <= 0) {
+        /* he spits it */
+        biteFish.state = 'flee'; biteFish.stateT = 1.4;
+        biteFish = null;
+        sfx.nibble();
+      }
+    }
+  } else if (rod.mode === 'fight') {
+    var f2 = fight;
+    var fs = f2.fish.sp ? f2.fish.sp.fight : 0.3;
+    var wgt = clamp(f2.fish.lb / 10, 0.05, 1.4);
+    /* the fish decides to run now and then, harder while fresh —
+       a boot just hangs there like a boot */
+    if (f2.fish.boot) f2.running = false;
+    f2.runT -= dt;
+    if (!f2.fish.boot && f2.runT <= 0) {
+      f2.running = !f2.running;
+      f2.runT = f2.running ? rnd(0.7, 1.6) * (0.5 + f2.stamina) : rnd(0.8, 2);
+      if (f2.running && f2.stamina > 0.2) sfx.drag();
+    }
+    var pull = f2.running ? (0.5 + fs) * (0.35 + f2.stamina) : 0.12;
+    if (rod.press) {
+      f2.tension += (0.55 + pull * 0.9 + wgt * 0.25) * dt;
+      f2.dist -= (0.1 - pull * 0.045) * dt * (f2.running ? 0.4 : 1.6);
+      if (Math.random() < dt * 10) sfx.tick();
+    } else {
+      f2.tension -= 1.1 * dt;
+      f2.dist += (f2.running ? 0.07 : 0.015) * dt;
+    }
+    f2.tension = clamp(f2.tension, 0, 1.25);
+    f2.dist = clamp(f2.dist, 0, 1.15);
+    f2.stamina = clamp(f2.stamina - (f2.tension > 0.55 ? 0.09 : 0.02) * dt, 0, 1);
+    /* jumps — bass love the show */
+    f2.jumpT -= dt;
+    if (f2.jumpT <= 0 && f2.fish.sp && f2.fish.sp.id === 'bass' && f2.dist > 0.25) {
+      f2.jumpT = rnd(3, 6);
+      sfx.splash();
+      var jx = lerp(rodTip().x + W() * 0.05, W() * 0.9, f2.dist);
+      addRing(jx, waterY(), 24);
+      addDrops(jx, waterY(), 16, true);
+    }
+    /* the line has limits */
+    if (f2.tension > 1) {
+      f2.overT += dt;
+      if (!f2.warned) { f2.warned = true; sfx.drag(); }
+      if (f2.overT > 0.4) { snapLine(); return; }
+    } else { f2.overT = 0; f2.warned = false; }
+    if (f2.dist <= 0) { landFish(); return; }
+  }
+}
+
+/* -------------------------------------------------------------- render --- */
+function drawTreeline(k) {
+  var wv = W(), wy = waterY();
+  ctx.fillStyle = mix([52, 58, 44], [30, 32, 34], k);
+  ctx.fillRect(0, wy - H() * 0.09, wv, H() * 0.09);
+  for (var i = 0; i < scenery.trees.length; i++) {
+    var tr = scenery.trees[i];
+    var x = tr.x * wv, tw = tr.w * wv, th = tr.h * H();
+    ctx.fillStyle = mix([44, 52, 38], [26, 28, 30], k);
+    if (tr.pine) {
+      ctx.beginPath();
+      ctx.moveTo(x - tw / 2, wy - H() * 0.06);
+      ctx.lineTo(x, wy - H() * 0.06 - th);
+      ctx.lineTo(x + tw / 2, wy - H() * 0.06);
+      ctx.closePath(); ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(x, wy - H() * 0.07 - th * 0.4, tw * 0.72, 0, TAU);
+      ctx.arc(x - tw * 0.4, wy - H() * 0.06 - th * 0.24, tw * 0.5, 0, TAU);
+      ctx.arc(x + tw * 0.4, wy - H() * 0.06 - th * 0.24, tw * 0.5, 0, TAU);
+      ctx.fill();
+    }
+  }
+}
+
+function drawFishShape(g, f, px, py, s, k) {
+  var col = f.sp ? f.sp.col : [80, 70, 50], belly = f.sp ? f.sp.belly : [120, 110, 90];
+  var depthT = clamp((py - waterY()) / (bottomY() - waterY()), 0, 1);
+  var bodyCol = mix(col, [18, 24, 20], depthT * 0.55 + k * 0.15);
+  var bellyCol = mix(belly, [30, 36, 32], depthT * 0.5 + k * 0.15);
+  var len = fishLen(f) * s, ht = len * (f.sp && f.sp.id === 'catfish' ? 0.3 : 0.38);
+  var wag = Math.sin(f.wob) * (f.state === 'flee' || f.state === 'hooked' ? 0.5 : 0.22);
+  g.save();
+  g.translate(px, py);
+  g.scale(f.dir, 1);
+  /* tail */
+  g.fillStyle = bodyCol;
+  g.beginPath();
+  g.moveTo(-len * 0.42, 0);
+  g.lineTo(-len * 0.62, -ht * 0.5 + wag * ht);
+  g.lineTo(-len * 0.62, ht * 0.5 + wag * ht);
+  g.closePath(); g.fill();
+  /* body */
+  g.beginPath();
+  g.ellipse(0, 0, len * 0.46, ht * 0.52, 0, 0, TAU);
+  g.fill();
+  g.fillStyle = bellyCol;
+  g.beginPath();
+  g.ellipse(len * 0.04, ht * 0.14, len * 0.36, ht * 0.28, 0, 0, TAU);
+  g.fill();
+  /* dorsal fin */
+  g.fillStyle = bodyCol;
+  g.beginPath();
+  g.moveTo(-len * 0.1, -ht * 0.42);
+  g.quadraticCurveTo(len * 0.06, -ht * 0.95, len * 0.16, -ht * 0.42);
+  g.closePath(); g.fill();
+  /* whiskers on cats */
+  if (f.sp && f.sp.id === 'catfish') {
+    g.strokeStyle = bodyCol; g.lineWidth = Math.max(1, s);
+    g.beginPath();
+    g.moveTo(len * 0.4, ht * 0.05); g.lineTo(len * 0.62, -ht * 0.16);
+    g.moveTo(len * 0.4, ht * 0.16); g.lineTo(len * 0.6, ht * 0.3);
+    g.stroke();
+  }
+  /* eye */
+  g.fillStyle = 'rgba(16,18,16,0.9)';
+  g.beginPath(); g.arc(len * 0.3, -ht * 0.1, Math.max(1.2, len * 0.045), 0, TAU); g.fill();
+  g.restore();
+}
+
+function drawBoot(g, px, py, s) {
+  g.save();
+  g.translate(px, py);
+  g.fillStyle = '#3a3026';
+  g.beginPath();
+  g.moveTo(-10 * s, -16 * s); g.lineTo(4 * s, -16 * s); g.lineTo(5 * s, 2 * s);
+  g.lineTo(16 * s, 4 * s); g.lineTo(16 * s, 10 * s); g.lineTo(-10 * s, 10 * s);
+  g.closePath(); g.fill();
+  g.fillStyle = '#241c14';
+  g.fillRect(-10 * s, 6 * s, 26 * s, 4 * s);
+  g.restore();
+}
+
+function render(t) {
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  var k = duskK();
+  var wv = W(), hv = H(), wy = waterY();
+
+  /* sky */
+  var sky = ctx.createLinearGradient(0, 0, 0, wy);
+  sky.addColorStop(0, skyTop(k));
+  sky.addColorStop(0.6, skyMid(k));
+  sky.addColorStop(1, skyLow(k));
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, wv, wy);
+
+  /* setting sun + a few early stars as dusk falls */
+  var sunX = wv * 0.72, sunY = lerp(wy * 0.55, wy * 0.98, k);
+  var sg = ctx.createRadialGradient(sunX, sunY, 2, sunX, sunY, hv * 0.24);
+  sg.addColorStop(0, 'rgba(244,196,120,' + (0.6 * (1 - k * 0.6)) + ')');
+  sg.addColorStop(1, 'rgba(244,196,120,0)');
+  ctx.fillStyle = sg;
+  ctx.fillRect(sunX - hv * 0.24, sunY - hv * 0.24, hv * 0.48, hv * 0.48);
+  ctx.fillStyle = 'rgba(246,214,150,' + (0.9 - k * 0.4) + ')';
+  ctx.beginPath(); ctx.arc(sunX, sunY, hv * 0.032, 0, TAU); ctx.fill();
+  if (k > 0.45) {
+    ctx.fillStyle = 'rgba(240,238,230,' + ((k - 0.45) * 0.9) + ')';
+    for (var st = 0; st < 14; st++) {
+      ctx.fillRect(((st * 73 + 31) % wv), ((st * 37 + 13) % (wy * 0.5)), 1.4, 1.4);
+    }
+  }
+
+  drawTreeline(k);
+
+  /* water */
+  var wat = ctx.createLinearGradient(0, wy, 0, hv);
+  wat.addColorStop(0, waterHi(k));
+  wat.addColorStop(0.12, mix([54, 62, 46], [30, 34, 34], k));
+  wat.addColorStop(1, waterLo(k));
+  ctx.fillStyle = wat;
+  ctx.fillRect(0, wy, wv, hv - wy);
+
+  /* sun glitter path on the surface */
+  ctx.save();
+  ctx.globalAlpha = 0.35 * (1 - k * 0.5);
+  for (var gl = 0; gl < 14; gl++) {
+    var gy = wy + 4 + gl * 7;
+    var gw = lerp(hv * 0.05, hv * 0.012, gl / 14);
+    var gx = sunX + Math.sin(t * 1.4 + gl * 1.7) * (6 + gl * 1.4);
+    ctx.fillStyle = 'rgba(244,206,140,0.5)';
+    ctx.fillRect(gx - gw / 2, gy, gw, 2);
+  }
+  ctx.restore();
+
+  /* weeds swaying on the bottom */
+  ctx.strokeStyle = mix([44, 58, 40], [24, 30, 26], k);
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  for (var wd = 0; wd < scenery.weeds.length; wd++) {
+    var we = scenery.weeds[wd];
+    var wx = we.x * wv, wb = bottomY();
+    var wh = we.h * hv;
+    var sw = Math.sin(t * 0.5 + we.ph) * 6;
+    ctx.beginPath();
+    ctx.moveTo(wx, wb);
+    ctx.quadraticCurveTo(wx + sw * 0.4, wb - wh * 0.6, wx + sw, wb - wh);
+    ctx.stroke();
+  }
+
+  /* fish */
+  for (var fi = 0; fi < fishes.length; fi++) {
+    var f = fishes[fi];
+    if (f.state === 'hooked') continue;
+    var px = f.x * wv;
+    var py = wy + f.y * (bottomY() - wy);
+    drawFishShape(ctx, f, px, py, Math.min(wv, hv) / 500, k);
+  }
+
+  /* surface rings */
+  ctx.strokeStyle = 'rgba(230,220,190,0.35)';
+  for (var ri = 0; ri < rings.length; ri++) {
+    var rg = rings[ri];
+    ctx.globalAlpha = clamp(rg.life / rg.max, 0, 1) * 0.5;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(rg.x, rg.y, rg.r, rg.r * 0.3, 0, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  /* droplets */
+  ctx.fillStyle = 'rgba(226,216,190,0.7)';
+  for (var pi = 0; pi < parts.length; pi++) {
+    var pp = parts[pi];
+    ctx.globalAlpha = clamp(pp.t / pp.max, 0, 1);
+    ctx.fillRect(pp.x - 1, pp.y - 1, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+
+  /* lily pads */
+  for (var pd = 0; pd < scenery.pads.length; pd++) {
+    var pa = scenery.pads[pd];
+    var pax = pa.x * wv, par = pa.r * wv;
+    ctx.fillStyle = mix([58, 74, 44], [32, 38, 32], k);
+    ctx.beginPath();
+    ctx.ellipse(pax + Math.sin(t * 0.4 + pa.ph) * 2, wy + 3, par, par * 0.32, 0, 0.18, TAU - 0.18);
+    ctx.fill();
+  }
+
+  /* dock + angler silhouette */
+  var dk = mix([70, 56, 42], [40, 34, 28], k);
+  ctx.fillStyle = dk;
+  ctx.fillRect(0, wy - hv * 0.015, wv * 0.15, hv * 0.02);
+  ctx.fillRect(wv * 0.035, wy, wv * 0.012, hv * 0.09);
+  ctx.fillRect(wv * 0.11, wy, wv * 0.012, hv * 0.12);
+  /* angler: a quiet silhouette sitting on the dock edge */
+  var ang = mix([38, 32, 30], [24, 22, 24], k);
+  ctx.fillStyle = ang;
+  var axp = wv * 0.085, ayp = wy - hv * 0.015;
+  ctx.beginPath(); ctx.arc(axp, ayp - hv * 0.072, hv * 0.018, 0, TAU); ctx.fill();  /* head */
+  ctx.beginPath();                                                                   /* body */
+  ctx.moveTo(axp - hv * 0.02, ayp);
+  ctx.quadraticCurveTo(axp - hv * 0.01, ayp - hv * 0.06, axp + hv * 0.012, ayp - hv * 0.055);
+  ctx.lineTo(axp + hv * 0.02, ayp);
+  ctx.closePath(); ctx.fill();
+  ctx.fillRect(axp + hv * 0.005, ayp, hv * 0.03, hv * 0.008);                        /* legs off the edge */
+
+  /* cattails by the bank */
+  for (var ct2 = 0; ct2 < scenery.cattails.length; ct2++) {
+    var ca = scenery.cattails[ct2];
+    var cx = ca.x * wv, ch2 = ca.h * hv;
+    var lean = ca.lean + Math.sin(t * 0.6 + ca.ph) * 0.04;
+    ctx.strokeStyle = mix([64, 70, 44], [34, 36, 30], k);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, wy + 4);
+    ctx.quadraticCurveTo(cx + lean * 20, wy - ch2 * 0.6, cx + lean * 40, wy - ch2);
+    ctx.stroke();
+    ctx.fillStyle = mix([92, 62, 38], [50, 38, 30], k);
+    ctx.save();
+    ctx.translate(cx + lean * 40, wy - ch2);
+    ctx.rotate(lean);
+    ctx.fillRect(-2.4, -12, 4.8, 12);
+    ctx.restore();
+  }
+
+  /* dragonflies at dusk */
+  ctx.strokeStyle = 'rgba(200,210,190,' + (0.5 - k * 0.3) + ')';
+  ctx.lineWidth = 1;
+  for (var dg = 0; dg < dragons.length; dg++) {
+    var dr = dragons[dg];
+    var dx2 = ((dr.x + Math.sin(t * dr.sp + dr.ph) * 0.04) % 1) * wv;
+    var dy2 = dr.y * hv + Math.sin(t * dr.sp * 2.2 + dr.ph) * 8;
+    var flut = Math.sin(t * 30 + dr.ph) * 3;
+    ctx.beginPath();
+    ctx.moveTo(dx2 - 5, dy2 - flut); ctx.lineTo(dx2, dy2); ctx.lineTo(dx2 + 5, dy2 - flut);
+    ctx.moveTo(dx2, dy2); ctx.lineTo(dx2 + 4, dy2 + 1.4);
+    ctx.stroke();
+  }
+
+  /* rod, line, and whatever is on the end of it */
+  drawRodAndLine(t, k);
+
+  drawHUD(t, k);
+}
+
+function drawRodAndLine(t, k) {
+  var tip = rodTip();
+  var wy = waterY();
+  var mode = rod.mode;
+  /* the rod: from the angler's hands up to the tip, bending in a fight */
+  var bend = 0;
+  if (mode === 'fight' && fight) bend = clamp(fight.tension, 0, 1.2) * 26;
+  else if (mode === 'charge') bend = -rod.power * 14;
+  var hx = W() * 0.1, hy = wy - H() * 0.05;
+  ctx.strokeStyle = mix([54, 44, 36], [36, 30, 26], k);
+  ctx.lineWidth = 2.6;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(hx, hy);
+  ctx.quadraticCurveTo(lerp(hx, tip.x, 0.6), lerp(hy, tip.y, 0.55) + bend * 0.4, tip.x, tip.y + bend);
+  ctx.stroke();
+
+  var tipY = tip.y + bend;
+  ctx.strokeStyle = 'rgba(230,225,210,' + (0.35 - k * 0.12) + ')';
+  ctx.lineWidth = 1;
+
+  if (mode === 'charge') {
+    /* power arc preview, dotted */
+    var p = clamp(rod.power, 0.15, 1);
+    ctx.save();
+    ctx.setLineDash([3, 5]);
+    ctx.strokeStyle = 'rgba(240,230,200,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tipY);
+    var vx = lerp(0.25, 1.05, p) * W(), vy = -lerp(0.12, 0.3, p) * H();
+    var sx = tip.x, sy = tipY, svx = vx, svy = vy;
+    for (var s2 = 0; s2 < 26; s2++) {
+      var ds = 0.03;
+      sx += svx * ds; svy += H() * 1.5 * ds; sy += svy * ds;
+      if (sy > wy) break;
+      ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+    ctx.restore();
+    /* power bar by the angler */
+    ctx.fillStyle = 'rgba(20,18,16,0.5)';
+    ctx.fillRect(hx - 6, hy - 60, 8, 52);
+    ctx.fillStyle = '#e0a95c';
+    ctx.fillRect(hx - 5, hy - 9 - rod.power * 50, 6, rod.power * 50);
+  } else if (mode === 'flight') {
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tipY);
+    ctx.quadraticCurveTo((tip.x + lure.x) / 2, Math.min(tipY, lure.y) - 20, lure.x, lure.y);
+    ctx.stroke();
+    ctx.fillStyle = '#c94f38';
+    ctx.beginPath(); ctx.arc(lure.x, lure.y, 3.2, 0, TAU); ctx.fill();
+  } else if (mode === 'soak') {
+    var bobX = lure.x, bobY = waterY();
+    if (biteFish) bobY += 4 + Math.sin(t * 22) * 3;
+    else bobY += Math.sin(t * 1.8) * 1.4;
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tipY);
+    ctx.quadraticCurveTo((tip.x + bobX) / 2, tipY + Math.abs(bobX - tip.x) * 0.1, bobX, bobY - 4);
+    ctx.stroke();
+    /* line under water down to the lure */
+    ctx.strokeStyle = 'rgba(230,225,210,0.12)';
+    ctx.beginPath();
+    ctx.moveTo(bobX, bobY);
+    ctx.lineTo(lure.x, lure.y);
+    ctx.stroke();
+    /* bobber: red and white */
+    ctx.fillStyle = '#ded5c2';
+    ctx.beginPath(); ctx.arc(bobX, bobY - 3, 4.6, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#c94f38';
+    ctx.beginPath(); ctx.arc(bobX, bobY - 3, 4.6, Math.PI, 0); ctx.fill();
+    /* lure below */
+    ctx.fillStyle = '#8a7a5c';
+    ctx.beginPath(); ctx.arc(lure.x, lure.y, 2.4, 0, TAU); ctx.fill();
+  } else if (mode === 'fight' && fight) {
+    var fx = lerp(tip.x + W() * 0.05, W() * 0.9, fight.dist);
+    var fy = waterY() + (bottomY() - waterY()) * clamp(0.2 + fight.dist * 0.35, 0, 0.7);
+    /* keep the hooked fish drawn at the line's end */
+    var hkf = fight.fish;
+    hkf.x = fx / W();
+    hkf.y = (fy - waterY()) / (bottomY() - waterY());
+    hkf.dir = -1;
+    hkf.wob += 0.3;
+    ctx.strokeStyle = fight.tension > 0.85 ? 'rgba(220,120,90,0.7)' : 'rgba(230,225,210,0.4)';
+    ctx.lineWidth = fight.tension > 0.85 ? 1.6 : 1;
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tipY);
+    ctx.quadraticCurveTo((tip.x + fx) / 2, lerp(tipY, fy, 0.35), fx, fy);
+    ctx.stroke();
+    if (hkf.boot) drawBoot(ctx, fx, fy, Math.min(W(), H()) / 500);
+    else drawFishShape(ctx, hkf, fx, fy, Math.min(W(), H()) / 500, k);
+    /* tension bar under the clock */
+    var bw = Math.min(150, W() * 0.24);
+    ctx.fillStyle = 'rgba(20,18,16,0.55)';
+    ctx.fillRect(W() / 2 - bw / 2, 34, bw, 7);
+    ctx.fillStyle = fight.tension > 0.85 ? '#c95f3f' : (fight.tension > 0.6 ? '#e0a95c' : '#8a9a6a');
+    ctx.fillRect(W() / 2 - bw / 2 + 1, 35, (bw - 2) * clamp(fight.tension / 1.25, 0, 1), 5);
+    /* stamina tick */
+    ctx.fillStyle = 'rgba(242,234,217,0.6)';
+    ctx.fillRect(W() / 2 - bw / 2 + (bw - 2) * 0.8, 33, 2, 9);
+  }
+}
+
+function drawHUD(t, k) {
+  var wv = W(), hv = H();
+  ctx.textAlign = 'left';
+  ctx.font = '700 15px "Segoe UI", sans-serif';
+  ctx.fillStyle = '#ecdfc2';
+  ctx.fillText(G.score.toFixed(1) + ' lb', 14, 30);
+  ctx.font = '600 10px "Segoe UI", sans-serif';
+  ctx.fillStyle = 'rgba(236,223,194,0.65)';
+  ctx.fillText('BEST ' + Math.max(G.high, G.score).toFixed(1) + ' lb   ·   FISH ' + G.stringer.length, 14, 44);
+
+  /* evening clock: 7:00 -> 10:00 */
+  var mins = 19 * 60 + (G.eve / EVE_LEN) * 180;
+  var hh = ((mins / 60) | 0), mm = (mins % 60) | 0;
+  var h12 = hh > 12 ? hh - 12 : hh;
+  ctx.textAlign = 'center';
+  ctx.font = '700 13px "Segoe UI", sans-serif';
+  ctx.fillStyle = '#ecdfc2';
+  ctx.fillText(h12 + ':' + (mm < 10 ? '0' : '') + mm + ' PM', wv / 2, 26);
+
+  if (G.state === 'fish' && rod.mode === 'idle') {
+    ctx.font = '600 11px "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(236,223,194,' + (0.4 + 0.25 * Math.sin(t * 2.4)) + ')';
+    ctx.fillText('HOLD TO CAST', wv / 2, hv * 0.3);
+  }
+  if (biteFish) {
+    ctx.font = '700 15px "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(240,220,180,' + (0.6 + 0.4 * Math.sin(t * 14)) + ')';
+    ctx.fillText('SET THE HOOK!', wv / 2, hv * 0.3);
+  }
+
+  if (G.bannerT > 0 && G.banner) {
+    var a = clamp(G.bannerT / 0.3, 0, 1) * clamp((2.4 - G.bannerT) / 0.2, 0, 1);
+    ctx.globalAlpha = a;
+    ctx.font = '700 ' + Math.round(clamp(wv * 0.03, 14, 22)) + 'px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#ecdfc2';
+    ctx.fillText(G.banner, wv / 2, hv * 0.16);
+    ctx.globalAlpha = 1;
+  }
+  ctx.textAlign = 'left';
+}
+
+/* ----------------------------------------------------------------- loop -- */
+var lastT = 0, nowT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  nowT += dt;
+  pollPad();
+  update(dt, nowT);
+  render(nowT);
+}
+
+/* ----------------------------------------------------------------- boot -- */
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

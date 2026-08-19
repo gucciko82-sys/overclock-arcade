@@ -903,6 +903,48 @@ var GAMES = [
       x.moveTo(w * 0.62, h * 0.62 - h * 0.26); x.lineTo(w * 0.62, h * 0.62 + h * 0.26);
       x.stroke();
     }
+  },
+  {
+    id: 'cast', name: 'Cast', cat: 'action', tag: 'Fishing', isNew: true,
+    desc: 'One evening on the pond. Bluegill, crappie, bass and cats, each at their own depth — one button, a bobber, and a drag the big ones will test.',
+    best: function () { var s = lsJSON('cast_v1'); return s && s.high > 0 ? ['Best evening', s.high.toFixed(1) + ' lb'] : null; },
+    cover: function (x, w, h) {
+      /* sunset over water */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#7480a0'); g.addColorStop(0.3, '#d69660'); g.addColorStop(0.42, '#3a4234'); g.addColorStop(1, '#1c241e');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.fillStyle = 'rgba(246,214,150,0.85)';
+      x.beginPath(); x.arc(w * 0.68, h * 0.32, 7, 0, 7); x.fill();
+      /* far treeline */
+      x.fillStyle = '#2a3226';
+      for (var i2 = 0; i2 < 8; i2++) {
+        var tx = w * (i2 + 0.5) / 8;
+        x.beginPath();
+        x.moveTo(tx - 8, h * 0.4); x.lineTo(tx, h * 0.24); x.lineTo(tx + 8, h * 0.4);
+        x.closePath(); x.fill();
+      }
+      /* glitter path */
+      x.fillStyle = 'rgba(244,206,140,0.4)';
+      for (var gl = 0; gl < 6; gl++) x.fillRect(w * 0.66 - gl, h * 0.44 + gl * 5, 8 + gl * 2, 1.6);
+      /* line + bobber + fish below */
+      x.strokeStyle = 'rgba(240,230,210,0.5)'; x.lineWidth = 1;
+      x.beginPath(); x.moveTo(w * 0.06, h * 0.18); x.lineTo(w * 0.46, h * 0.42); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.46, h * 0.44); x.lineTo(w * 0.46, h * 0.62); x.stroke();
+      x.fillStyle = '#ded5c2';
+      x.beginPath(); x.arc(w * 0.46, h * 0.42, 4, 0, 7); x.fill();
+      x.fillStyle = '#c94f38';
+      x.beginPath(); x.arc(w * 0.46, h * 0.42, 4, Math.PI, 0); x.fill();
+      /* the bass eyeing it */
+      x.fillStyle = '#46583a';
+      x.save(); x.translate(w * 0.58, h * 0.72); x.scale(-1, 1);
+      x.beginPath(); x.ellipse(0, 0, 15, 6, 0, 0, 7); x.fill();
+      x.beginPath(); x.moveTo(-13, 0); x.lineTo(-20, -5); x.lineTo(-20, 5); x.closePath(); x.fill();
+      x.fillStyle = '#b8c9a0';
+      x.beginPath(); x.ellipse(1, 2, 11, 3, 0, 0, 7); x.fill();
+      x.fillStyle = '#141814';
+      x.beginPath(); x.arc(10, -1.4, 1.4, 0, 7); x.fill();
+      x.restore();
+    }
   }
 ];
 

@@ -43,6 +43,7 @@ from the Vercel dashboard whenever.
 | `quadcore/` | **Quadcore** | Top-down night-trail ATV racing. Three seeded forest loops (HOLLOW / MUDLINE / SWITCHBACK), three laps against three rubber-banded rivals, mud that eats momentum, wooden ramps, nitro cans, coins, tree collisions, headlight cones and fireflies. Per-track record times. |
 | `prom/` | **Prom** | The princess game (and the barbie game) — Princess of the ROM kingdom. A dress-up studio (5 skin tones, 4 hairstyles x 8 colours, 4 crowns, 4 gown silhouettes x 10 colours, sparkles, shoes, extras) and a royal-ball finale with a waltz, a spotlight walk, twirls, fireworks and an adoring court. No timers, no losing. Counts royal debuts. |
 | `scope/` | **Scope** | The hunting game, and the arcade's first fully naturalistic one — no neon, just first light. Deer (does and 4-to-10-point bucks) and turkey (hens and strutting toms) drift into a misty dawn meadow; five tags, a 2.5-hour morning compressed into 150 seconds, a magnified scope lens rendered by drawing the whole scene twice, and breath you hold to steady the sway. Calm animals score double — wait for the feed. Miss and the whole field bolts. Saves best morning and best buck. |
+| `cast/` | **Cast** | The fishing game — you cast a line, code casts a type. One evening on a golden-hour pond, naturalistic like Scope: bluegill, crappie, largemouth bass and channel cats, each holding its own depth band, each with real weight ranges and its own fight. One button does everything — hold to charge the cast, tap to set the hook when the bobber dips, hold to reel and let go before the tension bar snaps the line. Bass jump, cats bulldog, the pond occasionally hands you a boot. Saves best evening (total pounds) and best fish. |
 | `botnet/` | **Botnet** | Fixed shooter, Galaga school. Squads swoop in on bezier entry paths, settle into a formation that breathes and sways as one organism, then peel off in dive runs that fire aimed shots — divers are worth double. Four bot types (drone/worm/brute/harvester), kill-chain bonus, SPAM envelope bonus ship, accuracy bonus per wave, slow-mo on harvester kills, extra life every 15,000 bits. Drag-to-fly with autofire on phones. |
 
 ### Built and play-tested 2026-08-17 — Flyway
@@ -833,3 +834,27 @@ Found by playing and eyeballing, not by reading:
   filled mass (a wedge, not a stroke), the head needed to be one
   tapered skull-plus-muzzle shape, and the white tail flag belonged
   small and at the rump, not floating over the shoulder.
+
+### Built and play-tested 2026-08-19 — Cast (game 26)
+
+"A fishing game." CAST — you cast a line, code casts a type — is Scope's
+sibling: same naturalistic direction, a Carolina pond at golden hour that
+slides into dusk over three minutes, crickets thickening as the light
+goes, early stars, dragonflies, a quiet angler silhouette on the dock.
+
+One button is the whole interface, context-sensitive: hold to charge the
+cast (with a dotted arc preview), release to fly, tap inside the bite
+window when the bobber dips, then hold to reel against a live tension
+model — fish runs spike the tension, the rod bends, the line turns red,
+and holding on past the limit snaps it. Fish have species AI: bluegill
+shallow and bold, crappie over the brush, bass off the weedline (warier,
+and they jump mid-fight), cats deep and heavy. Wariness, approach,
+inspect, bite-or-drift-off. A rare hookset is just an old boot.
+
+Scripted play beat every path: charge/cast/soak/sink, a forced bite and
+hookset, tension up while reeling and line gained, tension decay on
+release, a landed catfish on the stringer, an over-tension snap-off, the
+boot scoring nothing, dusk ending the evening into the tally, and both
+saves. One rig lesson repeated from Quadcore: a bite can only exist while
+the rod is soaking — the first snap/boot tests forced bites on an idle
+rod and hookset() rightly refused.
