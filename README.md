@@ -42,6 +42,7 @@ from the Vercel dashboard whenever.
 | `overdrive/` | **Overdrive** | Crazy Taxi-style open city, built for Amber. Procedural 8x8-block neon city with 2.5D parallax rooftops and lit windows, drift handbrake physics with skid marks, traffic, riders who wave from the curb, timed fares with CRAZY/GREAT/OK ratings and tips, clock extensions per delivery, oscillator engine that pitches with speed. |
 | `quadcore/` | **Quadcore** | Top-down night-trail ATV racing. Three seeded forest loops (HOLLOW / MUDLINE / SWITCHBACK), three laps against three rubber-banded rivals, mud that eats momentum, wooden ramps, nitro cans, coins, tree collisions, headlight cones and fireflies. Per-track record times. |
 | `prom/` | **Prom** | The princess game (and the barbie game) — Princess of the ROM kingdom. A dress-up studio (5 skin tones, 4 hairstyles x 8 colours, 4 crowns, 4 gown silhouettes x 10 colours, sparkles, shoes, extras) and a royal-ball finale with a waltz, a spotlight walk, twirls, fireworks and an adoring court. No timers, no losing. Counts royal debuts. |
+| `scope/` | **Scope** | The hunting game, and the arcade's first fully naturalistic one — no neon, just first light. Deer (does and 4-to-10-point bucks) and turkey (hens and strutting toms) drift into a misty dawn meadow; five tags, a 2.5-hour morning compressed into 150 seconds, a magnified scope lens rendered by drawing the whole scene twice, and breath you hold to steady the sway. Calm animals score double — wait for the feed. Miss and the whole field bolts. Saves best morning and best buck. |
 | `botnet/` | **Botnet** | Fixed shooter, Galaga school. Squads swoop in on bezier entry paths, settle into a formation that breathes and sways as one organism, then peel off in dive runs that fire aimed shots — divers are worth double. Four bot types (drone/worm/brute/harvester), kill-chain bonus, SPAM envelope bonus ship, accuracy bonus per wave, slow-mo on harvester kills, extra life every 15,000 bits. Drag-to-fly with autofire on phones. |
 
 ### Built and play-tested 2026-08-17 — Flyway
@@ -801,3 +802,34 @@ Found by eyeballing, not by the geometry checks:
   gowns and coats who clap; chandeliers got gold frames and candle glow.
 - **Landscape ran the EXTRAS tab under the mute button** — the panel now
   reserves the icon-button zone, per the layout law.
+
+### Built and play-tested 2026-08-19 — Scope (game 25)
+
+Krystal asked for "a hunting game with deer and turkey" and, mid-build,
+"make it more realistic not neon." So SCOPE (a rifle scope; a variable's
+scope) became the arcade's first naturalistic game: muted dawn palette,
+layered pine-and-oak treelines in haze, mist bands that burn off as a
+procedural sun climbs, songbirds between shots, crows that lift off the
+treeline when you miss. Zero glow anywhere.
+
+The scope is the trick: the whole scene draws twice per frame — once
+plain, once scaled 1.7x inside a clipped lens circle around the aim
+point, under a duplex reticle. Sway is summed sines; holding breath
+calms it to a whisper while a heartbeat thumps, and running the meter
+dry forces a heaving pant. Ethics tuned for the family: no wounded
+animals ever, one shot spooks the whole field, and CLEAN HARVEST x2
+only comes from calm, feeding animals — patience is the whole game.
+
+Found by playing and eyeballing, not by reading:
+
+- **A leaked canvas save() in the deer's new skull transform ate the
+  entire scope lens, the HUD, and a doe** — everything drawn after the
+  first buck inherited his body transform and rendered off-canvas, with
+  zero console errors and a healthy RAF. The screenshots caught it;
+  nothing else could have. Count your save/restore pairs.
+- **The world outside the lens was 90% black** — realistic for an eye
+  down a scope, unplayable for finding animals. It now dims to ~42%.
+- **The first deer read as a table with an egg on it.** The neck needed
+  filled mass (a wedge, not a stroke), the head needed to be one
+  tapered skull-plus-muzzle shape, and the white tail flag belonged
+  small and at the rump, not floating over the shoulder.

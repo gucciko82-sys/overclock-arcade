@@ -866,6 +866,43 @@ var GAMES = [
       x.font = '10px sans-serif'; x.textAlign = 'center';
       x.fillText('♥', w * 0.2, h * 0.35); x.fillText('♥', w * 0.82, h * 0.5);
     }
+  },
+  {
+    id: 'scope', name: 'Scope', cat: 'action', tag: 'Hunting', isNew: true,
+    desc: 'Opening day in the pines. Deer and turkey drift into the dawn meadow — five tags, one sunrise, and a scope that only holds as steady as your breath.',
+    best: function () { var s = lsJSON('scope_v1'); return s && s.high > 0 ? ['Best morning', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      /* dawn sky into meadow, no neon here */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#3c4a5e'); g.addColorStop(0.45, '#8a7458'); g.addColorStop(0.55, '#3c4432'); g.addColorStop(1, '#2c3424');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.fillStyle = 'rgba(244,222,160,0.5)';
+      x.beginPath(); x.arc(w * 0.7, h * 0.44, 7, 0, 7); x.fill();
+      /* treeline */
+      x.fillStyle = '#242e24';
+      for (var i2 = 0; i2 < 9; i2++) {
+        var tx = w * (i2 + 0.5) / 9;
+        x.beginPath();
+        x.moveTo(tx - 7, h * 0.52); x.lineTo(tx, h * 0.3); x.lineTo(tx + 7, h * 0.52);
+        x.closePath(); x.fill();
+      }
+      /* buck silhouette in the meadow */
+      x.fillStyle = '#4a3a28';
+      x.beginPath(); x.ellipse(w * 0.36, h * 0.72, 13, 6, 0, 0, 7); x.fill();
+      x.fillRect(w * 0.36 - 10, h * 0.72, 2, 9); x.fillRect(w * 0.36 + 8, h * 0.72, 2, 9);
+      x.beginPath(); x.moveTo(w * 0.36 + 11, h * 0.72 - 4); x.lineTo(w * 0.36 + 17, h * 0.6); x.lineTo(w * 0.36 + 20, h * 0.62); x.closePath(); x.fill();
+      x.strokeStyle = '#bfae8c'; x.lineWidth = 1;
+      x.beginPath(); x.moveTo(w * 0.36 + 16, h * 0.6); x.lineTo(w * 0.36 + 13, h * 0.53);
+      x.moveTo(w * 0.36 + 17, h * 0.6); x.lineTo(w * 0.36 + 20, h * 0.53); x.stroke();
+      /* the scope ring */
+      x.strokeStyle = '#0c0e0c'; x.lineWidth = 3.4;
+      x.beginPath(); x.arc(w * 0.62, h * 0.62, h * 0.26, 0, 7); x.stroke();
+      x.strokeStyle = 'rgba(12,14,12,0.85)'; x.lineWidth = 1.4;
+      x.beginPath();
+      x.moveTo(w * 0.62 - h * 0.26, h * 0.62); x.lineTo(w * 0.62 + h * 0.26, h * 0.62);
+      x.moveTo(w * 0.62, h * 0.62 - h * 0.26); x.lineTo(w * 0.62, h * 0.62 + h * 0.26);
+      x.stroke();
+    }
   }
 ];
 
