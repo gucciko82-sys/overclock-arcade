@@ -40,6 +40,7 @@ from the Vercel dashboard whenever.
 | `tilt/` | **Tilt** | Pinball, three tables: BOOT SECTOR (bumper triangle, left target bank), HEATSINK (bumper diamond, V-baffle fins, right bank), MOTHERLODE (crown bumper, centre island vault, horizontal bank). Segment physics at five substeps, flippers that impart real rotational velocity, slingshots, ball saver, drop-target multiball per table, TILT/HEAT/RAM rollover letters for bonus multipliers, and a three-nudge tilt that kills the flippers. Per-table high scores. |
 | `solitaire/` | **Solitaire** | Klondike on neon felt, procedurally drawn cards. Draw-1 or draw-3, tap-to-auto-move or full drag-and-drop (multi-card stacks), unlimited undo via state snapshots, flip scoring, an AUTO button that plays the endgame once everything is face up, and a bouncing-card win cascade. |
 | `overdrive/` | **Overdrive** | Crazy Taxi-style open city, built for Amber. Procedural 8x8-block neon city with 2.5D parallax rooftops and lit windows, drift handbrake physics with skid marks, traffic, riders who wave from the curb, timed fares with CRAZY/GREAT/OK ratings and tips, clock extensions per delivery, oscillator engine that pitches with speed. |
+| `botnet/` | **Botnet** | Fixed shooter, Galaga school. Squads swoop in on bezier entry paths, settle into a formation that breathes and sways as one organism, then peel off in dive runs that fire aimed shots — divers are worth double. Four bot types (drone/worm/brute/harvester), kill-chain bonus, SPAM envelope bonus ship, accuracy bonus per wave, slow-mo on harvester kills, extra life every 15,000 bits. Drag-to-fly with autofire on phones. |
 
 ### Built and play-tested 2026-08-17 — Flyway
 
@@ -663,3 +664,41 @@ files, all found by the audit:
 Also new: `GAME-RULES.md` — the build law distilled from all 22 games
 (skeleton, loop, layout zones, audio, saves, feel, verification pipeline,
 and the do-not-relearn trap list). Read it before starting game 23.
+
+### Built and play-tested 2026-08-18 — Botnet (game 22)
+
+The fixed-shooter slot — Space Invaders by way of Galaga — was the last
+big classic missing from the shelf, and the name was sitting right there.
+BOTNET: the swarm found your machine, and every bot you drop is one node
+off the net.
+
+Built to GAME-RULES.md as the first game after it became law, and it held:
+skeleton copied from Downlink, fluid full-screen strategy, all three input
+paths, cards fit 342px. This one is also the graphics showcase Krystal
+asked for — drifting nebulae behind a three-layer falling starfield,
+two-frame wing-flap animation on every bot (each of the four types has its
+own silhouette: saucer drone, segmented worm, armored brute, crowned
+harvester), bezier entry choreography in alternating six-bot squads, dive
+thrusters, muzzle flash, shockwave rings, particle bursts, slow-mo on
+harvester kills, and a kill-chain readout.
+
+Scripted play beat all of it before ship: 20 assertions covering the core
+loop, a forced dive kill, the SPAM ship, wave clear into wave 2, the
+extra-life threshold, player death, respawn invulnerability, game over
+with save, restart, and pause — zero console errors, all three device
+profiles clean, ui-audit clean both orientations.
+
+Found by eyeballing the play screenshots, not by the geometry checks:
+
+- **The formation hung off both screen edges.** Column spacing was scaled
+  per-row off the row's own count, and the widest rows spanned ~1.26x the
+  screen — the outer bots clipped in half at every width. Spacing is now
+  uniform, derived from the wave's widest row, and capped so formation +
+  sway + breathe stays inside the screen with margin.
+- **The lives icons sat inside the formation's top row in landscape**
+  (row 0 lands at ~51px on a 342px-usable screen, lives drew at 58px).
+  They now draw inline after the HIGH readout on the second HUD line.
+
+(Count correction, found while listing the hub: the running "22 games"
+tally we had been carrying was off by one — at the previous commit the
+hub and this table both held 21 games. Botnet is game 22.)

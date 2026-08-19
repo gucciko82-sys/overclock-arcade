@@ -734,6 +734,50 @@ var GAMES = [
       x.fillStyle = '#ff5f9e';
       for (var hh = 0; hh < 3; hh++) { x.beginPath(); x.arc(w * 0.14 + hh * 11, h * 0.18, 3.2, 0, 7); x.fill(); }
     }
+  },
+  {
+    id: 'botnet', name: 'Botnet', cat: 'shooter', tag: 'Fixed Shooter', isNew: true,
+    desc: 'The swarm found your machine. Squads swoop into a breathing formation, then peel off in dive runs — divers are worth double.',
+    best: function () { var s = lsJSON('botnet_v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      /* the formation */
+      x.shadowBlur = 8;
+      var c;
+      x.shadowColor = '#ffcc4d'; x.strokeStyle = '#ffcc4d'; x.lineWidth = 1.6;
+      for (c = 0; c < 2; c++) {
+        x.save(); x.translate(w * (0.4 + c * 0.2), h * 0.16);
+        x.beginPath(); x.moveTo(0, -7); x.lineTo(6, -2); x.lineTo(4, 5); x.lineTo(-4, 5); x.lineTo(-6, -2); x.closePath(); x.stroke();
+        x.restore();
+      }
+      x.shadowColor = '#ff5f9e'; x.strokeStyle = '#ff5f9e';
+      for (c = 0; c < 4; c++) {
+        x.save(); x.translate(w * (0.26 + c * 0.16), h * 0.32);
+        x.beginPath(); x.moveTo(-6, -4); x.lineTo(6, -4); x.lineTo(7, 0); x.lineTo(4, 5); x.lineTo(-4, 5); x.lineTo(-7, 0); x.closePath(); x.stroke();
+        x.restore();
+      }
+      x.shadowColor = '#8effc1'; x.strokeStyle = '#8effc1';
+      for (c = 0; c < 5; c++) {
+        x.save(); x.translate(w * (0.18 + c * 0.16), h * 0.47);
+        x.beginPath(); x.ellipse(0, 0, 6, 3.6, 0, 0, 7); x.stroke();
+        x.restore();
+      }
+      /* one diver peeling off with a thruster */
+      x.shadowColor = '#7de2ff'; x.strokeStyle = '#7de2ff';
+      x.save(); x.translate(w * 0.24, h * 0.66); x.rotate(0.4);
+      x.beginPath(); x.ellipse(0, 0, 6, 3.6, 0, 0, 7); x.stroke();
+      x.fillStyle = 'rgba(255,204,77,0.7)';
+      x.beginPath(); x.moveTo(-2, -4); x.lineTo(0, -10); x.lineTo(2, -4); x.closePath(); x.fill();
+      x.restore();
+      /* the ship, returning fire */
+      x.shadowColor = '#7de2ff'; x.strokeStyle = '#7de2ff'; x.lineWidth = 1.8;
+      x.save(); x.translate(w * 0.6, h * 0.82);
+      x.beginPath(); x.moveTo(0, -9); x.lineTo(7, 5); x.lineTo(0, 2); x.lineTo(-7, 5); x.closePath(); x.stroke();
+      x.restore();
+      x.shadowBlur = 0;
+      x.fillStyle = '#eaf6ff';
+      x.fillRect(w * 0.6 - 1.2, h * 0.6, 2.4, 12);
+      x.fillRect(w * 0.6 - 1.2, h * 0.68, 2.4, 8);
+    }
   }
 ];
 
