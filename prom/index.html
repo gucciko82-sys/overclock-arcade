@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Prom — Princess of the ROM</title>
+<meta name="theme-color" content="#1a0f2e">
+<meta name="description" content="Style the Princess of the ROM kingdom — gowns, hair, crowns and slippers — then walk her into the royal ball.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Prom">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #1a0f2e;
+    --accent: #ffcc4d;
+    --pink: #ff9ed2;
+    --fg: #fdf2ff;
+    --dim: rgba(253,242,255,0.6);
+    --panel: rgba(26,15,46,0.72);
+    --line: rgba(255,255,255,0.16);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: manipulation;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .iconbtn:active { background: rgba(255,158,210,0.25); }
+  body:not(.playing) #topbtns { display: none; }
+
+  /* ------------------------------------------------ dress-up studio ---- */
+  #studio {
+    position: absolute; inset: 0; z-index: 4;
+    display: none; flex-direction: column;
+    padding-top: max(6px, env(safe-area-inset-top));
+  }
+  body.studio #studio { display: flex; }
+  #dollWrap { flex: 1 1 46%; min-height: 160px; position: relative; }
+  canvas#doll { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #panel {
+    flex: 0 0 auto; max-height: 52%;
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    display: flex; flex-direction: column;
+    padding: 8px 10px calc(max(10px, env(safe-area-inset-bottom)) + 4px);
+  }
+  #tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; }
+  .tab {
+    flex: 0 0 auto; min-height: 40px; padding: 0 14px;
+    border-radius: 12px; border: 1px solid var(--line);
+    background: rgba(255,255,255,0.05); color: var(--dim);
+    font-family: inherit; font-size: 11px; font-weight: 800; letter-spacing: 0.12em;
+    cursor: pointer;
+  }
+  .tab.on { color: #2a1440; background: var(--pink); border-color: var(--pink); }
+  #opts {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    overflow-y: auto; padding: 4px 2px;
+    align-content: flex-start;
+  }
+  .chip {
+    min-width: 44px; min-height: 44px; padding: 0 12px;
+    border-radius: 12px; border: 2px solid var(--line);
+    background: rgba(255,255,255,0.06); color: var(--fg);
+    font-family: inherit; font-size: 11.5px; font-weight: 700;
+    cursor: pointer;
+  }
+  .chip.on { border-color: var(--accent); background: rgba(255,204,77,0.18); }
+  .swatch { width: 44px; height: 44px; padding: 0; border-radius: 50%; }
+  .swatch.on { box-shadow: 0 0 0 3px var(--accent); border-color: #fff; }
+  #actions { display: flex; gap: 8px; padding-top: 8px; }
+  .act {
+    flex: 1; min-height: 48px;
+    border-radius: 14px; border: 1px solid var(--line);
+    background: rgba(255,255,255,0.07); color: var(--fg);
+    font-family: inherit; font-size: 13px; font-weight: 800; letter-spacing: 0.1em;
+    cursor: pointer;
+  }
+  .act.gold {
+    border-color: rgba(255,204,77,0.6); color: #2a1440;
+    background: linear-gradient(180deg, #ffe9a8, var(--accent));
+  }
+  .act:active { filter: brightness(1.15); }
+
+  @media (orientation: landscape) and (max-height: 620px) {
+    #studio { flex-direction: row; }
+    #dollWrap { flex: 1 1 44%; }
+    #panel {
+      flex: 0 0 56%; max-height: none; height: 100%;
+      border-top: none; border-left: 1px solid var(--line);
+      padding-top: max(8px, env(safe-area-inset-top));
+    }
+    /* the mute button floats top-right — keep the tab row out of its zone */
+    #tabs { padding-right: 60px; }
+  }
+
+  #ballBtns {
+    position: absolute; left: 0; right: 0;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    display: none; justify-content: center; gap: 10px; z-index: 6;
+  }
+  body.ball #ballBtns.show { display: flex; }
+  #ballBtns .act { flex: 0 0 auto; padding: 0 26px; background: var(--panel); }
+
+  /* ------------------------------------------------------- overlay ---- */
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(30,16,52,0.7), rgba(14,7,26,0.92));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(540px, 100%);
+    background: rgba(30,17,54,0.85);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 22px 20px 20px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(30px, 9vw, 52px);
+    letter-spacing: 0.14em; font-weight: 800; line-height: 1;
+    color: var(--pink);
+    text-shadow: 0 0 26px rgba(255,158,210,0.55);
+  }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.05em; margin-bottom: 12px; }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 350px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(255,255,255,0.09); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .best { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .best b { color: var(--accent); }
+  .btn {
+    margin-top: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; padding: 0 30px;
+    border-radius: 14px; border: 1px solid rgba(255,158,210,0.6);
+    background: rgba(255,158,210,0.16); color: var(--pink);
+    font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.16em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,158,210,0.3); }
+  @media (max-height: 620px) {
+    .card { padding: 14px 16px; border-radius: 16px; }
+    .keys { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="studio">
+    <div id="dollWrap"><canvas id="doll"></canvas></div>
+    <div id="panel">
+      <div id="tabs"></div>
+      <div id="opts"></div>
+      <div id="actions">
+        <button class="act" id="btnShuffle" type="button">&#10022; SHUFFLE</button>
+        <button class="act gold" id="btnBall" type="button">GO TO THE BALL &#9819;</button>
+      </div>
+    </div>
+  </div>
+  <div id="ballBtns"><button class="act" id="btnBack" type="button">&#10022; BACK TO THE WARDROBE</button></div>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   PROM — the Princess of the ROM kingdom, for the Overclock arcade.
+   Half dress-up studio, half royal ball. Style her gown, hair, crown and
+   slippers, then walk her into the ballroom for the waltz, the fireworks
+   and the adoring court. No timers, no losing — this one is a toy.
+   One file, no assets, oscillator audio.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'prom_v1';
+var K_MUTE = 'prom_muted_v1';
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function pick(a) { return a[(Math.random() * a.length) | 0]; }
+function loadJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function shade(hex, amt) {
+  var n = parseInt(hex.slice(1), 16);
+  var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  if (amt >= 0) { r += (255 - r) * amt; g += (255 - g) * amt; b += (255 - b) * amt; }
+  else { var k = 1 + amt; r *= k; g *= k; b *= k; }
+  return 'rgb(' + Math.round(clamp(r, 0, 255)) + ',' + Math.round(clamp(g, 0, 255)) + ',' + Math.round(clamp(b, 0, 255)) + ')';
+}
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.4;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.4;
+  var b = document.getElementById('muteBtn');
+  b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(28, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseBurst(dur, vol, freq, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var n = Math.floor(actx.sampleRate * dur);
+  var buf = actx.createBuffer(1, n, actx.sampleRate);
+  var ch = buf.getChannelData(0);
+  for (var i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  var src = actx.createBufferSource(); src.buffer = buf;
+  var f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq;
+  var g = actx.createGain(); g.gain.value = vol;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+}
+/* pentatonic chime per tap — every choice sounds pretty */
+var CHIME = [523, 587, 659, 784, 880, 1046];
+var chimeI = 0;
+var sfx = {
+  tap:   function () { var f = CHIME[chimeI++ % CHIME.length]; tone('triangle', f, f, 0.12, 0.12); },
+  swish: function () { tone('sine', 300, 900, 0.22, 0.08); noiseBurst(0.18, 0.04, 2400); },
+  star:  function () { tone('triangle', 1046, 1568, 0.25, 0.1); },
+  pop:   function () { noiseBurst(0.2, 0.14, 900); tone('sine', 300, 60, 0.3, 0.1); },
+  cheer: function () { noiseBurst(0.6, 0.1, 1600); noiseBurst(0.5, 0.08, 2400, 0.1); },
+  twirl: function () { tone('sine', 660, 1320, 0.4, 0.08); }
+};
+/* a tiny procedural waltz: I-V arpeggios in 3/4, scheduled bar by bar */
+var waltzTimer = null;
+function startWaltz() {
+  stopWaltz();
+  if (!actx) return;
+  var bar = 0;
+  var CH = [[262, 330, 392], [196, 294, 392], [220, 349, 440], [196, 294, 494]];
+  function playBar() {
+    if (muted) { bar++; return; }
+    var c = CH[bar % CH.length];
+    tone('triangle', c[0] / 2, c[0] / 2, 0.4, 0.1, 0);
+    tone('sine', c[1], c[1], 0.22, 0.07, 0.28);
+    tone('sine', c[2], c[2], 0.22, 0.07, 0.56);
+    if (bar % 2 === 1) tone('sine', c[2] * 2, c[2] * 2, 0.3, 0.045, 0.56);
+    bar++;
+  }
+  playBar();
+  waltzTimer = setInterval(playBar, 840);
+}
+function stopWaltz() { if (waltzTimer) { clearInterval(waltzTimer); waltzTimer = null; } }
+
+/* ------------------------------------------------------------- wardrobe -- */
+var SKINS = ['#ffe0c2', '#f2c49b', '#d9a06b', '#a9713f', '#6f4a2a'];
+var HAIR_COLS = ['#2b1a12', '#5b3418', '#a05c22', '#e8b04b', '#f4e6b8', '#d94f2a', '#b8bcc9', '#c77ae0'];
+var GOWN_COLS = ['#ff9ed2', '#c77ae0', '#7da8ff', '#7de2d2', '#8effc1', '#ffe27d', '#ff8a66', '#f2f2f7', '#d94f6b', '#5b6bd9'];
+var HAIR_STYLES = ['WAVES', 'BUN', 'BRAIDS', 'CURLS'];
+var CROWNS = ['TIARA', 'CROWN', 'FLOWERS', 'STARS'];
+var GOWNS = ['BALLGOWN', 'A-LINE', 'MERMAID', 'TUTU'];
+var SHOES = ['SLIPPERS', 'HEELS', 'BOOTS'];
+var EXTRAS = ['NONE', 'WAND', 'BOUQUET', 'BOW'];
+
+var sv = loadJSON(K_SAVE, {}) || {};
+var look = sv.look || {
+  skin: 1, hairStyle: 0, hairCol: 3,
+  crown: 0, gown: 0, gownCol: 0, trimCol: 5,
+  shoes: 0, extra: 1, sparkle: true
+};
+var debuts = sv.debuts || 0;
+
+function persist() { saveJSON(K_SAVE, { look: look, debuts: debuts }); }
+
+var TABS = [
+  { id: 'skin',  name: 'SKIN' },
+  { id: 'hair',  name: 'HAIR' },
+  { id: 'crown', name: 'CROWN' },
+  { id: 'gown',  name: 'GOWN' },
+  { id: 'shoes', name: 'SHOES' },
+  { id: 'extra', name: 'EXTRAS' }
+];
+var curTab = 'gown';
+
+function chipBtn(label, on, cb) {
+  var b = document.createElement('button');
+  b.className = 'chip' + (on ? ' on' : '');
+  b.type = 'button';
+  b.textContent = label;
+  b.addEventListener('click', function () { initAudio(); sfx.tap(); cb(); buildOpts(); persist(); });
+  return b;
+}
+function swatchBtn(col, on, cb) {
+  var b = document.createElement('button');
+  b.className = 'chip swatch' + (on ? ' on' : '');
+  b.type = 'button';
+  b.style.background = col;
+  b.setAttribute('aria-label', col);
+  b.addEventListener('click', function () { initAudio(); sfx.tap(); cb(); buildOpts(); persist(); });
+  return b;
+}
+
+function buildTabs() {
+  var el = document.getElementById('tabs');
+  el.innerHTML = '';
+  TABS.forEach(function (t) {
+    var b = document.createElement('button');
+    b.className = 'tab' + (curTab === t.id ? ' on' : '');
+    b.type = 'button';
+    b.textContent = t.name;
+    b.addEventListener('click', function () { initAudio(); sfx.tap(); curTab = t.id; buildTabs(); buildOpts(); });
+    el.appendChild(b);
+  });
+}
+
+function buildOpts() {
+  var el = document.getElementById('opts');
+  el.innerHTML = '';
+  var i;
+  function styles(arr, get, set) {
+    for (i = 0; i < arr.length; i++) {
+      (function (idx) { el.appendChild(chipBtn(arr[idx], get() === idx, function () { set(idx); })); })(i);
+    }
+  }
+  function colors(arr, get, set) {
+    for (i = 0; i < arr.length; i++) {
+      (function (idx) { el.appendChild(swatchBtn(arr[idx], get() === idx, function () { set(idx); })); })(i);
+    }
+  }
+  if (curTab === 'skin') colors(SKINS, function () { return look.skin; }, function (v) { look.skin = v; });
+  else if (curTab === 'hair') {
+    styles(HAIR_STYLES, function () { return look.hairStyle; }, function (v) { look.hairStyle = v; });
+    colors(HAIR_COLS, function () { return look.hairCol; }, function (v) { look.hairCol = v; });
+  } else if (curTab === 'crown') styles(CROWNS, function () { return look.crown; }, function (v) { look.crown = v; });
+  else if (curTab === 'gown') {
+    styles(GOWNS, function () { return look.gown; }, function (v) { look.gown = v; });
+    colors(GOWN_COLS, function () { return look.gownCol; }, function (v) { look.gownCol = v; });
+    el.appendChild(chipBtn(look.sparkle ? '✨ SPARKLES ON' : 'SPARKLES OFF', look.sparkle, function () { look.sparkle = !look.sparkle; }));
+  } else if (curTab === 'shoes') {
+    styles(SHOES, function () { return look.shoes; }, function (v) { look.shoes = v; });
+    colors(GOWN_COLS, function () { return look.trimCol; }, function (v) { look.trimCol = v; });
+  } else if (curTab === 'extra') styles(EXTRAS, function () { return look.extra; }, function (v) { look.extra = v; });
+}
+
+function shuffleLook() {
+  look.skin = (Math.random() * SKINS.length) | 0;
+  look.hairStyle = (Math.random() * HAIR_STYLES.length) | 0;
+  look.hairCol = (Math.random() * HAIR_COLS.length) | 0;
+  look.crown = (Math.random() * CROWNS.length) | 0;
+  look.gown = (Math.random() * GOWNS.length) | 0;
+  look.gownCol = (Math.random() * GOWN_COLS.length) | 0;
+  look.trimCol = (Math.random() * GOWN_COLS.length) | 0;
+  look.shoes = (Math.random() * SHOES.length) | 0;
+  look.extra = (Math.random() * EXTRAS.length) | 0;
+  look.sparkle = Math.random() < 0.7;
+  sfx.swish();
+  buildOpts();
+  persist();
+}
+
+/* ------------------------------------------------------- draw the doll -- */
+/* Drawn in a local space where the princess stands about 100 units tall,
+   origin at her feet. Scale to fit whatever canvas she is on. */
+function drawPrincess(g, t, opts) {
+  var L = look;
+  var skin = SKINS[L.skin];
+  var hair = HAIR_COLS[L.hairCol];
+  var gown = GOWN_COLS[L.gownCol];
+  var trim = GOWN_COLS[L.trimCol];
+  var sway = opts && opts.sway || 0;              /* gown sway while walking */
+  var twirl = opts && opts.twirl || 0;            /* 0..1 twirl squash */
+  var flare = 1 + Math.sin(twirl * Math.PI) * 0.35;
+
+  g.save();
+  g.scale(1 - Math.sin(twirl * Math.PI) * 0.6, 1);  /* she spins */
+
+  /* ---- gown skirt (behind everything) ---- */
+  var hemY = -6, waistY = -52;
+  g.fillStyle = gown;
+  g.strokeStyle = shade(gown, -0.3);
+  g.lineWidth = 1;
+  g.beginPath();
+  if (L.gown === 0) {            /* ballgown: floor-length bell */
+    hemY = -1;
+    g.moveTo(-7, waistY);
+    g.bezierCurveTo(-26 * flare + sway * 3, -30, -30 * flare + sway * 5, hemY, -28 * flare + sway * 5, hemY);
+    g.lineTo(28 * flare + sway * 5, hemY);
+    g.bezierCurveTo(30 * flare + sway * 5, hemY, 26 * flare + sway * 3, -30, 7, waistY);
+  } else if (L.gown === 1) {     /* a-line */
+    hemY = -10;
+    g.moveTo(-7, waistY);
+    g.lineTo(-19 * flare + sway * 4, hemY);
+    g.lineTo(19 * flare + sway * 4, hemY);
+    g.lineTo(7, waistY);
+  } else if (L.gown === 2) {     /* mermaid: narrow then flare */
+    hemY = -2;
+    g.moveTo(-7, waistY);
+    g.bezierCurveTo(-9, -34, -8, -22, -10 + sway * 2, -14);
+    g.bezierCurveTo(-20 * flare + sway * 4, -6, -22 * flare + sway * 4, hemY, -22 * flare + sway * 4, hemY);
+    g.lineTo(22 * flare + sway * 4, hemY);
+    g.bezierCurveTo(22 * flare + sway * 4, hemY, 20 * flare + sway * 4, -6, 10 + sway * 2, -14);
+    g.bezierCurveTo(8, -22, 9, -34, 7, waistY);
+  } else {                       /* tutu: short frill */
+    hemY = -30;
+    g.moveTo(-7, waistY);
+    for (var fr = 0; fr <= 8; fr++) {
+      var fx = lerp(-20, 20, fr / 8) * flare + sway * 3;
+      var fy = hemY + (fr % 2 ? 0 : 3);
+      g.lineTo(fx, fy);
+    }
+    g.lineTo(7, waistY);
+  }
+  g.closePath();
+  g.fill();
+  g.stroke();
+  /* hem trim */
+  g.strokeStyle = trim;
+  g.lineWidth = 2;
+  g.beginPath();
+  if (L.gown === 3) { g.moveTo(-20 * flare + sway * 3, hemY + 1); g.lineTo(20 * flare + sway * 3, hemY + 1); }
+  else { g.moveTo(-(L.gown === 1 ? 19 : 26) * flare + sway * 4, hemY - 0.5); g.lineTo((L.gown === 1 ? 19 : 26) * flare + sway * 4, hemY - 0.5); }
+  g.stroke();
+  /* sparkles on the skirt */
+  if (L.sparkle) {
+    g.fillStyle = 'rgba(255,255,255,0.9)';
+    for (var sp = 0; sp < 14; sp++) {
+      var sx2 = Math.sin(sp * 37.7) * 20 * flare;
+      var sy2 = lerp(waistY + 6, hemY - 2, (Math.sin(sp * 91.3) + 1) / 2);
+      var tw2 = Math.max(0, Math.sin(t * 3 + sp * 2.1));
+      if (tw2 > 0.4) {
+        g.globalAlpha = (tw2 - 0.4) * 1.4;
+        g.fillRect(sx2 - 0.7, sy2 - 0.7, 1.4, 1.4);
+      }
+    }
+    g.globalAlpha = 1;
+  }
+
+  /* ---- legs + shoes (visible on short gowns) ---- */
+  if (L.gown === 3 || L.gown === 1) {
+    g.strokeStyle = skin; g.lineWidth = 3.4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-4, hemY); g.lineTo(-4.5, -3); g.moveTo(4, hemY); g.lineTo(4.5, -3); g.stroke();
+  }
+  /* shoes */
+  g.fillStyle = trim;
+  if (L.shoes === 0) {            /* slippers */
+    g.beginPath(); g.ellipse(-4.5, -1.4, 3.4, 1.6, 0, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(4.5, -1.4, 3.4, 1.6, 0, 0, TAU); g.fill();
+  } else if (L.shoes === 1) {     /* heels */
+    g.beginPath(); g.moveTo(-8, 0); g.lineTo(-2, 0); g.lineTo(-2, -3.4); g.lineTo(-6.5, -2.6); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(8, 0); g.lineTo(2, 0); g.lineTo(2, -3.4); g.lineTo(6.5, -2.6); g.closePath(); g.fill();
+    g.fillRect(-7.6, -2.4, 1.4, 2.4); g.fillRect(6.2, -2.4, 1.4, 2.4);
+  } else {                        /* boots */
+    g.fillRect(-7, -8, 5, 8); g.fillRect(2, -8, 5, 8);
+    g.fillStyle = shade(trim, 0.3);
+    g.fillRect(-7, -8, 5, 1.6); g.fillRect(2, -8, 5, 1.6);
+  }
+
+  /* ---- bodice ---- */
+  g.fillStyle = shade(gown, -0.12);
+  g.beginPath();
+  g.moveTo(-7, waistY);
+  g.lineTo(-6, waistY - 16);
+  g.lineTo(6, waistY - 16);
+  g.lineTo(7, waistY);
+  g.closePath();
+  g.fill();
+  g.strokeStyle = trim; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(-6.4, waistY - 4); g.lineTo(6.4, waistY - 4); g.stroke();
+
+  /* ---- arms: puff sleeves + hands ---- */
+  g.fillStyle = shade(gown, 0.18);
+  g.beginPath(); g.arc(-7.5, waistY - 13, 3.4, 0, TAU); g.fill();
+  g.beginPath(); g.arc(7.5, waistY - 13, 3.4, 0, TAU); g.fill();
+  g.strokeStyle = skin; g.lineWidth = 2.6; g.lineCap = 'round';
+  var armSw = Math.sin(t * 1.4) * 1.4 + sway * 2;
+  g.beginPath(); g.moveTo(-8, waistY - 11); g.quadraticCurveTo(-11, waistY - 2, -9 + armSw * 0.4, waistY + 8); g.stroke();
+  g.beginPath(); g.moveTo(8, waistY - 11); g.quadraticCurveTo(11, waistY - 2, 9 + armSw * 0.4, waistY + 8); g.stroke();
+  g.fillStyle = skin;
+  g.beginPath(); g.arc(-9 + armSw * 0.4, waistY + 9, 1.8, 0, TAU); g.fill();
+  g.beginPath(); g.arc(9 + armSw * 0.4, waistY + 9, 1.8, 0, TAU); g.fill();
+
+  /* ---- extras in her hand ---- */
+  var hx = 9 + armSw * 0.4, hy = waistY + 9;
+  if (L.extra === 1) {            /* wand */
+    g.strokeStyle = '#ffe9a8'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx + 5, hy - 12); g.stroke();
+    g.fillStyle = '#ffcc4d';
+    starPath(g, hx + 5.5, hy - 14, 3, 5);
+    g.fill();
+    g.fillStyle = 'rgba(255,236,170,' + (0.4 + 0.4 * Math.sin(t * 5)) + ')';
+    starPath(g, hx + 5.5, hy - 14, 5, 5);
+    g.fill();
+  } else if (L.extra === 2) {     /* bouquet */
+    g.strokeStyle = '#3f7a4c'; g.lineWidth = 1.4;
+    g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx + 3, hy - 7); g.stroke();
+    var BQ = ['#ff9ed2', '#ffe27d', '#c77ae0', '#ff8a66'];
+    for (var bq = 0; bq < 4; bq++) {
+      g.fillStyle = BQ[bq];
+      g.beginPath(); g.arc(hx + 1.5 + Math.sin(bq * 2.4) * 3.2, hy - 8 - Math.cos(bq * 2.1) * 2.4, 1.9, 0, TAU); g.fill();
+    }
+  }
+
+  /* ---- head ---- */
+  var headY = waistY - 24;
+  /* hair behind */
+  g.fillStyle = hair;
+  if (L.hairStyle === 0) {        /* long waves */
+    g.beginPath();
+    g.moveTo(-8, headY - 5);
+    g.bezierCurveTo(-13, headY + 10, -10 - sway, headY + 26, -7 - sway, waistY - 6);
+    g.lineTo(-3, waistY - 10);
+    g.lineTo(3, waistY - 10);
+    g.lineTo(7 + sway, waistY - 6);
+    g.bezierCurveTo(10 + sway, headY + 26, 13, headY + 10, 8, headY - 5);
+    g.closePath(); g.fill();
+  } else if (L.hairStyle === 2) { /* braids */
+    g.lineWidth = 4.6; g.strokeStyle = hair; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-7, headY); g.quadraticCurveTo(-10, headY + 14, -8 - sway, waistY - 4); g.stroke();
+    g.beginPath(); g.moveTo(7, headY); g.quadraticCurveTo(10, headY + 14, 8 + sway, waistY - 4); g.stroke();
+    g.fillStyle = trim;
+    g.beginPath(); g.arc(-8 - sway, waistY - 3, 1.6, 0, TAU); g.fill();
+    g.beginPath(); g.arc(8 + sway, waistY - 3, 1.6, 0, TAU); g.fill();
+  } else if (L.hairStyle === 3) { /* big curls */
+    for (var cu = 0; cu < 7; cu++) {
+      var ca = cu / 7 * Math.PI + Math.PI;
+      g.beginPath();
+      g.arc(Math.cos(ca) * 8.6, headY + 1 + Math.sin(ca) * 7, 3.4 + (cu % 2), 0, TAU);
+      g.fill();
+    }
+    g.beginPath(); g.arc(-8.4, headY + 8, 3, 0, TAU); g.fill();
+    g.beginPath(); g.arc(8.4, headY + 8, 3, 0, TAU); g.fill();
+  }
+  /* face */
+  g.fillStyle = skin;
+  g.beginPath(); g.arc(0, headY, 8, 0, TAU); g.fill();
+  /* hair on top */
+  g.fillStyle = hair;
+  g.beginPath();
+  g.arc(0, headY - 1.4, 8.3, Math.PI * 1.02, Math.PI * 1.98);
+  g.quadraticCurveTo(5, headY - 4.5, 0, headY - 3.6);
+  g.quadraticCurveTo(-5, headY - 4.5, -8.2, headY - 0.8);
+  g.closePath(); g.fill();
+  if (L.hairStyle === 1) {        /* bun */
+    g.beginPath(); g.arc(0, headY - 10.5, 4.2, 0, TAU); g.fill();
+    g.strokeStyle = trim; g.lineWidth = 1.2;
+    g.beginPath(); g.arc(0, headY - 10.5, 4.2, 0.3, 2.8); g.stroke();
+  }
+  /* eyes, blush, smile */
+  g.fillStyle = '#2a1c33';
+  g.beginPath(); g.arc(-3, headY - 0.5, 1.05, 0, TAU); g.fill();
+  g.beginPath(); g.arc(3, headY - 0.5, 1.05, 0, TAU); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.85)';
+  g.beginPath(); g.arc(-2.6, headY - 0.9, 0.35, 0, TAU); g.fill();
+  g.beginPath(); g.arc(3.4, headY - 0.9, 0.35, 0, TAU); g.fill();
+  g.fillStyle = 'rgba(255,120,150,0.4)';
+  g.beginPath(); g.arc(-5.2, headY + 2.4, 1.5, 0, TAU); g.fill();
+  g.beginPath(); g.arc(5.2, headY + 2.4, 1.5, 0, TAU); g.fill();
+  g.strokeStyle = '#a3405c'; g.lineWidth = 0.9; g.lineCap = 'round';
+  g.beginPath(); g.arc(0, headY + 2.6, 2.3, 0.35, Math.PI - 0.35); g.stroke();
+
+  /* ---- crown ---- */
+  var cy = headY - (L.hairStyle === 1 ? 15.5 : 7.6);
+  if (L.crown === 0) {            /* tiara */
+    g.strokeStyle = '#ffe9a8'; g.lineWidth = 1.4;
+    g.beginPath(); g.arc(0, cy + 4.5, 6, Math.PI * 1.15, Math.PI * 1.85); g.stroke();
+    g.fillStyle = '#7de2ff';
+    g.beginPath(); g.arc(0, cy - 1.4, 1.5, 0, TAU); g.fill();
+  } else if (L.crown === 1) {     /* full crown */
+    g.fillStyle = '#ffcc4d';
+    g.beginPath();
+    g.moveTo(-6, cy + 3);
+    g.lineTo(-6, cy - 2); g.lineTo(-3, cy + 0.6); g.lineTo(0, cy - 3.4);
+    g.lineTo(3, cy + 0.6); g.lineTo(6, cy - 2); g.lineTo(6, cy + 3);
+    g.closePath(); g.fill();
+    g.fillStyle = '#ff5f6d';
+    g.beginPath(); g.arc(0, cy + 1, 1.1, 0, TAU); g.fill();
+  } else if (L.crown === 2) {     /* flower crown */
+    var FC = ['#ff9ed2', '#ffe27d', '#c77ae0', '#8effc1', '#ff8a66'];
+    for (var fc = 0; fc < 5; fc++) {
+      g.fillStyle = FC[fc];
+      g.beginPath(); g.arc(-6 + fc * 3, cy + 2.4 - Math.sin(fc / 4 * Math.PI) * 2.6, 1.7, 0, TAU); g.fill();
+    }
+  } else {                        /* floating stars */
+    g.fillStyle = '#ffe9a8';
+    for (var st2 = 0; st2 < 3; st2++) {
+      var sa = t * 1.2 + st2 * TAU / 3;
+      starPath(g, Math.cos(sa) * 7, cy - 0.5 + Math.sin(sa) * 2.4, 1.9, 5);
+      g.fill();
+    }
+  }
+  g.restore();
+}
+function starPath(g, x, y, r, n) {
+  g.beginPath();
+  for (var i = 0; i < n * 2; i++) {
+    var a = i / (n * 2) * TAU - Math.PI / 2;
+    var rr = i % 2 ? r * 0.45 : r;
+    if (i === 0) g.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    else g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  g.closePath();
+}
+
+/* --------------------------------------------------------- scene state -- */
+var G = {
+  state: 'title',      // title | studio | ball
+  ballT: 0,            // ball timeline clock
+  debutCounted: false
+};
+var parts = [];        // confetti / firework sparks / hearts
+var rockets = [];
+function addPart(x, y, vx, vy, life, size, col, kind) {
+  if (parts.length > 500) return;
+  parts.push({ x: x, y: y, vx: vx, vy: vy, t: life, max: life, size: size, col: col, kind: kind || 0 });
+}
+
+/* -------------------------------------------------------------- canvas -- */
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var dollCv = document.getElementById('doll');
+var dctx = dollCv.getContext('2d');
+var view = { w: 900, h: 600, dpr: 1 };
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(240, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+  var dw = dollCv.parentElement.clientWidth || 300;
+  var dh = dollCv.parentElement.clientHeight || 300;
+  dollCv.width = Math.round(dw * dpr);
+  dollCv.height = Math.round(dh * dpr);
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+/* the castle night backdrop shared by title + studio + ball */
+var STARS = [];
+(function () {
+  for (var i = 0; i < 90; i++) STARS.push({ x: Math.random(), y: Math.random() * 0.7, r: rnd(0.5, 1.6), tw: rnd(0, TAU) });
+})();
+
+function drawBackdrop(t, ball) {
+  var g = ctx.createLinearGradient(0, 0, 0, view.h);
+  if (ball) { g.addColorStop(0, '#241238'); g.addColorStop(0.6, '#2e1745'); g.addColorStop(1, '#180b28'); }
+  else { g.addColorStop(0, '#160b28'); g.addColorStop(0.55, '#241238'); g.addColorStop(1, '#341a4a'); }
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, view.w, view.h);
+
+  /* rosy nebulae — this is a princess kingdom after all */
+  var NEB = [
+    { x: 0.22 + Math.sin(t * 0.05) * 0.04, y: 0.25, r: 0.5, col: '255,120,190' },
+    { x: 0.8, y: 0.5, r: 0.46, col: '150,90,220' },
+    { x: 0.55, y: 0.08, r: 0.4, col: '90,110,220' }
+  ];
+  for (var i = 0; i < NEB.length; i++) {
+    var n = NEB[i];
+    var nr = n.r * Math.max(view.w, view.h);
+    var ng = ctx.createRadialGradient(n.x * view.w, n.y * view.h, 0, n.x * view.w, n.y * view.h, nr);
+    ng.addColorStop(0, 'rgba(' + n.col + ',0.12)');
+    ng.addColorStop(1, 'rgba(' + n.col + ',0)');
+    ctx.fillStyle = ng;
+    ctx.fillRect(n.x * view.w - nr, n.y * view.h - nr, nr * 2, nr * 2);
+  }
+  for (i = 0; i < STARS.length; i++) {
+    var s = STARS[i];
+    var a = 0.3 + 0.5 * Math.max(0, Math.sin(t * 1.6 + s.tw));
+    ctx.fillStyle = 'rgba(255,240,255,' + a.toFixed(2) + ')';
+    ctx.fillRect(s.x * view.w, s.y * view.h, s.r, s.r);
+  }
+}
+
+function drawCastle(t) {
+  /* distant silhouette castle with lit windows, for title + studio */
+  var baseY = view.h;
+  var cx = view.w * 0.5;
+  ctx.fillStyle = '#0e0620';
+  var tws = [[-0.34, 0.34, 0.05], [-0.18, 0.5, 0.06], [0, 0.62, 0.075], [0.18, 0.5, 0.06], [0.34, 0.34, 0.05]];
+  for (var i = 0; i < tws.length; i++) {
+    var tw = tws[i];
+    var x = cx + tw[0] * view.w, h = tw[1] * view.h * 0.6, w = tw[2] * view.w;
+    ctx.fillRect(x - w / 2, baseY - h, w, h);
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.7, baseY - h);
+    ctx.lineTo(x, baseY - h - w * 1.1);
+    ctx.lineTo(x + w * 0.7, baseY - h);
+    ctx.closePath(); ctx.fill();
+    /* lit windows */
+    for (var wd = 0; wd < 3; wd++) {
+      var wy = baseY - h * (0.25 + wd * 0.28);
+      var on = Math.sin(t * 0.7 + i * 3 + wd * 7) > -0.4;
+      ctx.fillStyle = on ? 'rgba(255,220,130,0.85)' : 'rgba(255,220,130,0.15)';
+      ctx.fillRect(x - 2, wy, 4, 6);
+      ctx.fillStyle = '#0e0620';
+    }
+    /* pennant */
+    ctx.strokeStyle = '#0e0620';
+    ctx.beginPath(); ctx.moveTo(x, baseY - h - w * 1.1); ctx.lineTo(x, baseY - h - w * 1.1 - 10); ctx.stroke();
+    ctx.fillStyle = '#ff9ed2';
+    ctx.beginPath();
+    ctx.moveTo(x, baseY - h - w * 1.1 - 10);
+    ctx.lineTo(x + 8 + Math.sin(t * 2 + i) * 1.6, baseY - h - w * 1.1 - 7);
+    ctx.lineTo(x, baseY - h - w * 1.1 - 4);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#0e0620';
+  }
+}
+
+/* ------------------------------------------------------------ the ball -- */
+function startBall() {
+  initAudio();
+  G.state = 'ball';
+  G.ballT = 0;
+  G.debutCounted = false;
+  parts.length = 0; rockets.length = 0;
+  document.body.classList.remove('studio');
+  document.body.classList.add('ball');
+  document.getElementById('ballBtns').classList.remove('show');
+  sfx.swish();
+  startWaltz();
+}
+function backToStudio() {
+  G.state = 'studio';
+  stopWaltz();
+  document.body.classList.remove('ball');
+  document.body.classList.add('studio');
+  document.getElementById('ballBtns').classList.remove('show');
+  resize();
+  sfx.tap();
+}
+
+function updateBall(dt, t) {
+  G.ballT += dt;
+  var bt = G.ballT;
+
+  /* confetti rains during the celebration */
+  if (bt > 4 && Math.random() < 0.5) {
+    addPart(rnd(0, view.w), -8, rnd(-12, 12), rnd(28, 70), rnd(2.5, 4.5), rnd(2, 4),
+      pick(['#ff9ed2', '#ffe27d', '#7de2d2', '#c77ae0', '#8effc1']), 1);
+  }
+  /* hearts drift up from the court */
+  if (bt > 3 && Math.random() < 0.1) {
+    addPart(rnd(view.w * 0.1, view.w * 0.9), view.h * 0.86, rnd(-6, 6), rnd(-34, -20), rnd(2, 3.4), rnd(4, 7), '#ff7ab5', 2);
+  }
+  /* fireworks on a loose schedule */
+  if (bt > 5 && Math.random() < 0.02 && rockets.length < 3) {
+    rockets.push({ x: rnd(view.w * 0.15, view.w * 0.85), y: view.h * 0.75, vy: -rnd(180, 260), fuse: rnd(0.7, 1.1), col: pick(['#ff9ed2', '#ffe27d', '#7de2ff', '#c77ae0', '#8effc1']) });
+  }
+  for (var r = rockets.length - 1; r >= 0; r--) {
+    var rk = rockets[r];
+    rk.y += rk.vy * dt; rk.fuse -= dt;
+    if (Math.random() < 0.5) addPart(rk.x, rk.y, rnd(-6, 6), rnd(10, 30), 0.3, 1.6, '#ffe9a8');
+    if (rk.fuse <= 0) {
+      rockets.splice(r, 1);
+      sfx.pop();
+      for (var b = 0; b < 26; b++) {
+        var a = b / 26 * TAU;
+        var sp = rnd(40, 90);
+        addPart(rk.x, rk.y, Math.cos(a) * sp, Math.sin(a) * sp, rnd(0.7, 1.3), rnd(1.6, 3), rk.col);
+      }
+    }
+  }
+  for (var i = parts.length - 1; i >= 0; i--) {
+    var p = parts[i];
+    p.t -= dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.kind === 1) { p.vy += 30 * dt; p.vx += Math.sin(t * 4 + i) * 8 * dt; }  /* confetti flutters */
+    else if (p.kind === 2) { p.vx = Math.sin(t * 3 + i) * 14; }                    /* hearts sway */
+    else p.vy += 60 * dt;                                                          /* sparks fall */
+    if (p.t <= 0 || p.y > view.h + 20) parts.splice(i, 1);
+  }
+
+  /* milestones */
+  if (bt > 3.4 && !G.debutCounted) {
+    G.debutCounted = true;
+    debuts++;
+    persist();
+    sfx.cheer();
+    sfx.star();
+  }
+  if (bt > 6 && !document.getElementById('ballBtns').classList.contains('show')) {
+    document.getElementById('ballBtns').classList.add('show');
+  }
+}
+
+function renderBall(t) {
+  drawBackdrop(t, true);
+  var W = view.w, H = view.h;
+  var floorY = H * 0.82;
+
+  /* ballroom: arches, chandeliers, candle glow */
+  ctx.fillStyle = 'rgba(60,32,92,0.5)';
+  for (var a2 = 0; a2 < 5; a2++) {
+    var ax = W * (0.1 + a2 * 0.2);
+    ctx.beginPath();
+    ctx.moveTo(ax - W * 0.075, floorY);
+    ctx.lineTo(ax - W * 0.075, H * 0.34);
+    ctx.arc(ax, H * 0.34, W * 0.075, Math.PI, 0);
+    ctx.lineTo(ax + W * 0.075, floorY);
+    ctx.closePath(); ctx.fill();
+  }
+  /* chandeliers — golden and proud, with real candle glow */
+  var chScale = clamp(Math.min(W, H) / 500, 0.7, 1.8);
+  for (var ch = 0; ch < 3; ch++) {
+    var chx = W * (0.25 + ch * 0.25), chy = H * 0.13 + Math.sin(t * 0.8 + ch) * 2.4;
+    ctx.strokeStyle = 'rgba(255,214,120,0.8)';
+    ctx.lineWidth = 2 * chScale;
+    ctx.beginPath(); ctx.moveTo(chx, 0); ctx.lineTo(chx, chy - 8 * chScale); ctx.stroke();
+    ctx.lineWidth = 3 * chScale;
+    ctx.beginPath(); ctx.arc(chx, chy - 8 * chScale, 22 * chScale, Math.PI * 0.12, Math.PI * 0.88); ctx.stroke();
+    ctx.lineWidth = 2 * chScale;
+    ctx.beginPath(); ctx.arc(chx, chy - 14 * chScale, 12 * chScale, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+    for (var cd = -2; cd <= 2; cd++) {
+      var cgx = chx + cd * 11 * chScale;
+      var cgy = chy + (Math.abs(cd) === 2 ? 8 : (Math.abs(cd) === 1 ? 12 : 14)) * chScale;
+      var flick = 0.6 + 0.4 * Math.sin(t * 7 + cd * 3 + ch * 5);
+      var cg = ctx.createRadialGradient(cgx, cgy, 0, cgx, cgy, 26 * chScale);
+      cg.addColorStop(0, 'rgba(255,220,140,' + (0.65 * flick).toFixed(2) + ')');
+      cg.addColorStop(1, 'rgba(255,220,140,0)');
+      ctx.fillStyle = cg;
+      ctx.fillRect(cgx - 26 * chScale, cgy - 26 * chScale, 52 * chScale, 52 * chScale);
+      ctx.fillStyle = '#fff3cf';
+      ctx.fillRect(cgx - 1.2 * chScale, cgy - 6 * chScale, 2.4 * chScale, 7 * chScale);
+    }
+  }
+  /* floor */
+  var fg = ctx.createLinearGradient(0, floorY, 0, H);
+  fg.addColorStop(0, '#3a1f56');
+  fg.addColorStop(1, '#221136');
+  ctx.fillStyle = fg;
+  ctx.fillRect(0, floorY, W, H - floorY);
+  ctx.strokeStyle = 'rgba(255,158,210,0.16)';
+  ctx.lineWidth = 1;
+  for (var fl = 0; fl < 7; fl++) {
+    var fy = floorY + (H - floorY) * fl / 7;
+    ctx.beginPath(); ctx.moveTo(0, fy); ctx.lineTo(W, fy); ctx.stroke();
+  }
+
+  /* the adoring court: proper-sized guests in gowns and coats, bobbing */
+  var guestH = Math.min(W, H) / 260 * 1.35 * 62;   /* ~60% of the princess */
+  var GCOLS = ['#4a2a66', '#31406e', '#5c2a4e', '#2a4e46'];
+  for (var gst = 0; gst < 8; gst++) {
+    var side = gst % 2 ? 1 : -1;
+    var gx = W * 0.5 + side * W * (0.26 + (gst % 4) * 0.075);
+    var bob = Math.abs(Math.sin(t * 3 + gst * 1.7)) * (G.ballT > 3 ? guestH * 0.06 : guestH * 0.02);
+    var gy = floorY - bob;
+    var gc = GCOLS[gst % GCOLS.length];
+    ctx.fillStyle = gc;
+    if (gst % 3 === 0) {
+      /* coat guest */
+      ctx.fillRect(gx - guestH * 0.11, gy - guestH * 0.62, guestH * 0.22, guestH * 0.62);
+    } else {
+      /* gown guest */
+      ctx.beginPath();
+      ctx.moveTo(gx - guestH * 0.2, gy);
+      ctx.quadraticCurveTo(gx, gy - guestH * 0.7, gx + guestH * 0.2, gy);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = shade(gc, 0.35);
+    ctx.beginPath(); ctx.arc(gx, gy - guestH * 0.72, guestH * 0.1, 0, TAU); ctx.fill();
+    /* clapping hands once the adoration starts */
+    if (G.ballT > 3) {
+      var clap = Math.sin(t * 9 + gst * 2);
+      ctx.beginPath();
+      ctx.arc(gx + (clap > 0 ? guestH * 0.06 : guestH * 0.13) * side, gy - guestH * 0.5, guestH * 0.045, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(gx + (clap > 0 ? -guestH * 0.02 : -guestH * 0.1) * side, gy - guestH * 0.5, guestH * 0.045, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  /* spotlight follows her */
+  var bt = G.ballT;
+  var px = bt < 3 ? lerp(-W * 0.12, W * 0.5, clamp(bt / 3, 0, 1)) : W * 0.5;
+  var walking = bt < 3;
+  var sway = walking ? Math.sin(bt * 9) * 0.8 : Math.sin(t * 1.8) * 0.3;
+  var twirl = 0;
+  if (!walking) {
+    var tw3 = (bt - 3.4) % 2.6;
+    twirl = tw3 > 0 && tw3 < 1 ? tw3 : 0;
+    if (twirl > 0.45 && twirl < 0.5) sfx.twirl();
+  }
+  var lg = ctx.createRadialGradient(px, floorY - 40, 6, px, floorY - 40, 130);
+  lg.addColorStop(0, 'rgba(255,240,220,0.18)');
+  lg.addColorStop(1, 'rgba(255,240,220,0)');
+  ctx.fillStyle = lg;
+  ctx.fillRect(px - 130, floorY - 170, 260, 260);
+
+  /* sparkle trail behind her */
+  if (Math.random() < (walking ? 0.7 : 0.3)) {
+    addPart(px + rnd(-14, 4), floorY - rnd(2, 42), rnd(-8, 8), rnd(-14, -2), rnd(0.5, 1), rnd(1, 2.2), '#ffe9ff');
+  }
+
+  /* the princess herself */
+  ctx.save();
+  ctx.translate(px, floorY);
+  var ps = Math.min(W, H) / 260;
+  ctx.scale(ps * 1.35, ps * 1.35);
+  drawPrincess(ctx, t, { sway: sway, twirl: twirl });
+  ctx.restore();
+
+  /* particles above everything */
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i];
+    ctx.globalAlpha = clamp(p.t / p.max, 0, 1);
+    if (p.kind === 2) {
+      ctx.fillStyle = p.col;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.scale(p.size / 8, p.size / 8);
+      ctx.beginPath();
+      ctx.moveTo(0, 3);
+      ctx.bezierCurveTo(-5, -1, -2.4, -4.4, 0, -1.8);
+      ctx.bezierCurveTo(2.4, -4.4, 5, -1, 0, 3);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.fillStyle = p.col;
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  /* rockets */
+  ctx.fillStyle = '#ffe9a8';
+  for (var r2 = 0; r2 < rockets.length; r2++) {
+    ctx.fillRect(rockets[r2].x - 1, rockets[r2].y - 3, 2, 6);
+  }
+
+  /* titles */
+  ctx.textAlign = 'center';
+  if (bt > 3.6) {
+    var ta = clamp((bt - 3.6) / 0.5, 0, 1);
+    ctx.globalAlpha = ta;
+    ctx.font = '800 ' + Math.round(clamp(W * 0.045, 17, 30)) + 'px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#ffe9a8';
+    ctx.shadowColor = '#ffcc4d'; ctx.shadowBlur = 18;
+    ctx.fillText('THE COURT ADORES HER', W / 2, H * 0.16);
+    ctx.shadowBlur = 0;
+    /* three gold stars */
+    for (var st3 = 0; st3 < 3; st3++) {
+      var sst = clamp((bt - 3.9 - st3 * 0.35) * 2.2, 0, 1);
+      if (sst <= 0) continue;
+      ctx.save();
+      ctx.translate(W / 2 + (st3 - 1) * clamp(W * 0.075, 34, 60), H * 0.24);
+      ctx.scale(sst, sst);
+      ctx.rotate((1 - sst) * 2);
+      ctx.fillStyle = '#ffcc4d';
+      ctx.shadowColor = '#ffcc4d'; ctx.shadowBlur = 14;
+      starPath(ctx, 0, 0, clamp(W * 0.026, 12, 20), 5);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    ctx.font = '700 11px "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(253,242,255,0.6)';
+    ctx.fillText('ROYAL DEBUT No. ' + debuts, W / 2, H * 0.3);
+  }
+  ctx.textAlign = 'left';
+}
+
+/* ----------------------------------------------------------- the studio -- */
+function renderStudio(t) {
+  drawBackdrop(t, false);
+  drawCastle(t);
+  /* doll canvas */
+  var dw = dollCv.width / view.dpr, dh = dollCv.height / view.dpr;
+  dctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  dctx.clearRect(0, 0, dw, dh);
+  /* soft podium glow */
+  var pg = dctx.createRadialGradient(dw / 2, dh * 0.92, 4, dw / 2, dh * 0.92, dw * 0.3);
+  pg.addColorStop(0, 'rgba(255,158,210,0.22)');
+  pg.addColorStop(1, 'rgba(255,158,210,0)');
+  dctx.fillStyle = pg;
+  dctx.fillRect(0, dh * 0.6, dw, dh * 0.4);
+  dctx.strokeStyle = 'rgba(255,204,77,0.5)';
+  dctx.lineWidth = 2;
+  dctx.beginPath();
+  dctx.ellipse(dw / 2, dh * 0.92, dw * 0.17, 7, 0, 0, TAU);
+  dctx.stroke();
+  /* ambient sparkles around her */
+  for (var i = 0; i < 10; i++) {
+    var sa = t * 0.7 + i * TAU / 10;
+    var sx = dw / 2 + Math.cos(sa) * dw * 0.24;
+    var sy = dh * 0.5 + Math.sin(sa * 1.3) * dh * 0.34;
+    var al = Math.max(0, Math.sin(t * 2.4 + i * 1.9));
+    dctx.fillStyle = 'rgba(255,236,255,' + (al * 0.7).toFixed(2) + ')';
+    starPath(dctx, sx, sy, 2.4 * al + 0.6, 4);
+    dctx.fill();
+  }
+  dctx.save();
+  dctx.translate(dw / 2, dh * 0.92);
+  var s = Math.min(dw / 130, dh / 118);
+  dctx.scale(s, s);
+  drawPrincess(dctx, t, { sway: Math.sin(t * 1.1) * 0.25, twirl: 0 });
+  dctx.restore();
+}
+
+/* -------------------------------------------------------------- overlay -- */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+
+function titleScreen() {
+  G.state = 'title';
+  stopWaltz();
+  document.body.classList.remove('playing', 'studio', 'ball');
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>PROM</h1>' +
+      '<div class="tagline">The Princess of the ROM kingdom has a ball tonight. Style her gown, her hair, her crown and her slippers — then walk her in and let the court adore her.</div>' +
+      '<div class="keys">' +
+        '<div>Style her<span>Tap anything in the wardrobe</span></div>' +
+        '<div>Feeling lucky<span>&#10022; SHUFFLE</span></div>' +
+        '<div>Showtime<span>GO TO THE BALL</span></div>' +
+        '<div>Mute<span>M</span></div>' +
+      '</div>' +
+      (debuts > 0 ? '<div class="best">Royal debuts so far: <b>' + debuts + '</b></div>' : '') +
+      '<button class="btn" data-act="play">OPEN THE WARDROBE</button>' +
+    '</div>');
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  if (btn.getAttribute('data-act') === 'play') {
+    hideOverlay();
+    G.state = 'studio';
+    document.body.classList.add('playing', 'studio');
+    resize();
+    buildTabs();
+    buildOpts();
+    sfx.swish();
+  }
+});
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  initAudio();
+  if (k === 'm') { setMuted(!muted); return; }
+  if (G.state === 'title' && (k === ' ' || k === 'enter')) {
+    var b = overlay.querySelector('[data-act="play"]');
+    if (b) b.click();
+  }
+});
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('btnShuffle').addEventListener('click', function () { initAudio(); shuffleLook(); });
+document.getElementById('btnBall').addEventListener('click', function () { startBall(); });
+document.getElementById('btnBack').addEventListener('click', function () { backToStudio(); });
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+/* ----------------------------------------------------------------- loop -- */
+var lastT = 0, timeAcc = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  timeAcc += dt;
+
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  if (G.state === 'ball') {
+    updateBall(dt, timeAcc);
+    renderBall(timeAcc);
+  } else if (G.state === 'studio') {
+    renderStudio(timeAcc);
+  } else {
+    drawBackdrop(timeAcc, false);
+    drawCastle(timeAcc);
+  }
+}
+
+/* ----------------------------------------------------------------- boot -- */
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+  try { new window.ResizeObserver(resize).observe(document.getElementById('dollWrap')); } catch (e) {}
+}
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

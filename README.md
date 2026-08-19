@@ -40,6 +40,8 @@ from the Vercel dashboard whenever.
 | `tilt/` | **Tilt** | Pinball, three tables: BOOT SECTOR (bumper triangle, left target bank), HEATSINK (bumper diamond, V-baffle fins, right bank), MOTHERLODE (crown bumper, centre island vault, horizontal bank). Segment physics at five substeps, flippers that impart real rotational velocity, slingshots, ball saver, drop-target multiball per table, TILT/HEAT/RAM rollover letters for bonus multipliers, and a three-nudge tilt that kills the flippers. Per-table high scores. |
 | `solitaire/` | **Solitaire** | Klondike on neon felt, procedurally drawn cards. Draw-1 or draw-3, tap-to-auto-move or full drag-and-drop (multi-card stacks), unlimited undo via state snapshots, flip scoring, an AUTO button that plays the endgame once everything is face up, and a bouncing-card win cascade. |
 | `overdrive/` | **Overdrive** | Crazy Taxi-style open city, built for Amber. Procedural 8x8-block neon city with 2.5D parallax rooftops and lit windows, drift handbrake physics with skid marks, traffic, riders who wave from the curb, timed fares with CRAZY/GREAT/OK ratings and tips, clock extensions per delivery, oscillator engine that pitches with speed. |
+| `quadcore/` | **Quadcore** | Top-down night-trail ATV racing. Three seeded forest loops (HOLLOW / MUDLINE / SWITCHBACK), three laps against three rubber-banded rivals, mud that eats momentum, wooden ramps, nitro cans, coins, tree collisions, headlight cones and fireflies. Per-track record times. |
+| `prom/` | **Prom** | The princess game (and the barbie game) — Princess of the ROM kingdom. A dress-up studio (5 skin tones, 4 hairstyles x 8 colours, 4 crowns, 4 gown silhouettes x 10 colours, sparkles, shoes, extras) and a royal-ball finale with a waltz, a spotlight walk, twirls, fireworks and an adoring court. No timers, no losing. Counts royal debuts. |
 | `botnet/` | **Botnet** | Fixed shooter, Galaga school. Squads swoop in on bezier entry paths, settle into a formation that breathes and sways as one organism, then peel off in dive runs that fire aimed shots — divers are worth double. Four bot types (drone/worm/brute/harvester), kill-chain bonus, SPAM envelope bonus ship, accuracy bonus per wave, slow-mo on harvester kills, extra life every 15,000 bits. Drag-to-fly with autofire on phones. |
 
 ### Built and play-tested 2026-08-17 — Flyway
@@ -764,3 +766,38 @@ not want stars.
 All five 2D games script-verified through the injected-hook rig (real
 crash, real boss kill, real duck kills asserted), full matrix + ui-audit
 clean, zero console errors everywhere.
+
+### Built and play-tested 2026-08-19 — Quadcore and Prom (games 23 and 24)
+
+Two requests from the kids' department in one evening: "a fourwheeler
+game" and "a princess game / barbie game."
+
+**Quadcore** — a four-wheeler is a quad, and four cores racing is the
+name doing itself. Top-down night-trail racing: Catmull-Rom loops built
+from seeds (same trail every time, per track), one shared physics
+function for player and AI (forward/lateral velocity split, grip model,
+mud drag, ramp ballistics), rubber-banded rivals, and a forest that is
+actually solid — trees push back. Scripted play beat the whole race:
+pickups, mud, ramps, three laps, the finish, the saved track record.
+
+**Prom** — she is the Princess of the ROM kingdom, and PROM is a memory
+chip; the pun holds. Named with care: the request said "barbie game,"
+but Mattel owns that word, so the arcade got an original princess
+instead — what she IS is the barbie game: a dress-up studio (skin, hair,
+crowns, four gown silhouettes, colours, sparkles, shoes, extras — every
+tap chimes a pentatonic note and persists), then GO TO THE BALL: a
+spotlight walk into the ballroom, a procedural 3/4 waltz, twirls, real
+fireworks, confetti, hearts, and a court that claps. No timers, no
+failing, nothing to lose — the first pure toy on the shelf, and the
+first game in the new Kids category on the hub.
+
+Found by eyeballing, not by the geometry checks:
+- **Quadcore's grass was as fast as the trail** (drag constants), trees
+  were decoration you could drive through, and the off-trail world read
+  as black void. Grass now costs real speed, trees are solid with a
+  thump, and the forest floor got mottling.
+- **Prom's court guests were mouse-sized** next to the princess and the
+  chandeliers were faint wire. Guests are now proper-sized courtiers in
+  gowns and coats who clap; chandeliers got gold frames and candle glow.
+- **Landscape ran the EXTRAS tab under the mute button** — the panel now
+  reserves the icon-button zone, per the layout law.

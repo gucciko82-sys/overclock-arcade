@@ -778,6 +778,94 @@ var GAMES = [
       x.fillRect(w * 0.6 - 1.2, h * 0.6, 2.4, 12);
       x.fillRect(w * 0.6 - 1.2, h * 0.68, 2.4, 8);
     }
+  },
+  {
+    id: 'quadcore', name: 'Quadcore', cat: 'racing', tag: 'ATV Racing', isNew: true,
+    desc: 'Four quads, three laps, one muddy night trail. Headlights, ramps, nitro, and rivals that never quite let you relax.',
+    best: function () {
+      var s = lsJSON('quadcore_v1');
+      if (!s || !s.best) return null;
+      var t = null;
+      for (var k in s.best) if (s.best[k] > 0 && (t === null || s.best[k] < t)) t = s.best[k];
+      if (!t) return null;
+      var m = Math.floor(t / 60), sec = t - m * 60;
+      return ['Best', m + ':' + (sec < 10 ? '0' : '') + sec.toFixed(1)];
+    },
+    cover: function (x, w, h) {
+      /* night trail sweeping through trees */
+      x.strokeStyle = '#332a18'; x.lineWidth = 22; x.lineCap = 'round';
+      x.beginPath(); x.moveTo(-6, h * 0.85); x.quadraticCurveTo(w * 0.42, h * 0.28, w + 6, h * 0.6); x.stroke();
+      x.strokeStyle = 'rgba(255,204,77,0.25)'; x.lineWidth = 1.4;
+      x.setLineDash([5, 4]);
+      x.beginPath(); x.moveTo(-6, h * 0.85); x.quadraticCurveTo(w * 0.42, h * 0.28, w + 6, h * 0.6); x.stroke();
+      x.setLineDash([]);
+      x.fillStyle = '#0e2418';
+      var TR = [[0.1, 0.2, 9], [0.3, 0.75, 11], [0.62, 0.16, 8], [0.85, 0.85, 10], [0.72, 0.34, 7]];
+      for (var i2 = 0; i2 < TR.length; i2++) {
+        x.beginPath(); x.arc(w * TR[i2][0], h * TR[i2][1], TR[i2][2], 0, 7); x.fill();
+      }
+      /* headlight cone + quad */
+      x.save();
+      x.translate(w * 0.42, h * 0.47); x.rotate(0.5);
+      var hg = x.createLinearGradient(0, 0, 34, 0);
+      hg.addColorStop(0, 'rgba(255,240,190,0.4)'); hg.addColorStop(1, 'rgba(255,240,190,0)');
+      x.fillStyle = hg;
+      x.beginPath(); x.moveTo(4, 0); x.lineTo(36, -12); x.lineTo(36, 12); x.closePath(); x.fill();
+      x.fillStyle = '#14181f';
+      x.fillRect(-9, -8, 5, 4); x.fillRect(-9, 4, 5, 4);
+      x.fillRect(4, -8, 5, 4); x.fillRect(4, 4, 5, 4);
+      x.shadowColor = '#ffcc4d'; x.shadowBlur = 8;
+      x.fillStyle = '#ffcc4d';
+      x.beginPath(); x.moveTo(8, 0); x.lineTo(4, -5); x.lineTo(-7, -4); x.lineTo(-7, 4); x.lineTo(4, 5); x.closePath(); x.fill();
+      x.shadowBlur = 0;
+      x.fillStyle = '#eaf2ff'; x.beginPath(); x.arc(0, 0, 2.2, 0, 7); x.fill();
+      x.restore();
+      /* fireflies */
+      x.fillStyle = 'rgba(220,255,150,0.8)';
+      x.fillRect(w * 0.2, h * 0.4, 2, 2); x.fillRect(w * 0.78, h * 0.6, 2, 2); x.fillRect(w * 0.6, h * 0.78, 2, 2);
+    }
+  },
+  {
+    id: 'prom', name: 'Prom', cat: 'kids', tag: 'Dress-Up', isNew: true,
+    desc: 'The Princess of the ROM kingdom has a ball tonight. Gowns, hair, crowns and slippers — then the waltz, the fireworks and the adoring court.',
+    best: function () { var s = lsJSON('prom_v1'); return s && s.debuts > 0 ? ['Royal debuts', fmtInt(s.debuts)] : null; },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#241238'); g.addColorStop(1, '#341a4a');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      for (var st = 0; st < 16; st++) {
+        x.fillStyle = 'rgba(255,240,255,' + (0.3 + (st % 3) * 0.2) + ')';
+        x.fillRect((st * 37 + 11) % w, (st * 23 + 5) % (h * 0.5), 1.6, 1.6);
+      }
+      /* the princess: gown, bodice, head, crown */
+      var cx = w * 0.5;
+      x.fillStyle = '#ff9ed2';
+      x.beginPath();
+      x.moveTo(cx - 4, h * 0.52);
+      x.bezierCurveTo(cx - 20, h * 0.72, cx - 24, h * 0.9, cx - 24, h * 0.9);
+      x.lineTo(cx + 24, h * 0.9);
+      x.bezierCurveTo(cx + 24, h * 0.9, cx + 20, h * 0.72, cx + 4, h * 0.52);
+      x.closePath(); x.fill();
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(cx - 23, h * 0.885); x.lineTo(cx + 23, h * 0.885); x.stroke();
+      x.fillStyle = '#e88bbf';
+      x.fillRect(cx - 4, h * 0.42, 8, h * 0.11);
+      x.fillStyle = '#ffe0c2';
+      x.beginPath(); x.arc(cx, h * 0.34, 8, 0, 7); x.fill();
+      x.fillStyle = '#a05c22';
+      x.beginPath(); x.arc(cx, h * 0.315, 8.4, Math.PI * 1.05, Math.PI * 1.95); x.fill();
+      x.fillStyle = '#ffcc4d';
+      x.beginPath();
+      x.moveTo(cx - 6, h * 0.245); x.lineTo(cx - 6, h * 0.2); x.lineTo(cx - 3, h * 0.225);
+      x.lineTo(cx, h * 0.19); x.lineTo(cx + 3, h * 0.225); x.lineTo(cx + 6, h * 0.2); x.lineTo(cx + 6, h * 0.245);
+      x.closePath(); x.fill();
+      /* sparkles + hearts */
+      x.fillStyle = '#fff';
+      x.fillRect(cx - 14, h * 0.62, 2, 2); x.fillRect(cx + 10, h * 0.72, 2, 2); x.fillRect(cx + 2, h * 0.66, 2, 2);
+      x.fillStyle = '#ff7ab5';
+      x.font = '10px sans-serif'; x.textAlign = 'center';
+      x.fillText('♥', w * 0.2, h * 0.35); x.fillText('♥', w * 0.82, h * 0.5);
+    }
   }
 ];
 
@@ -788,7 +876,8 @@ var CATS = [
   ['shooter', 'Shooters'],
   ['puzzle', 'Puzzle'],
   ['strategy', 'Strategy'],
-  ['racing', 'Racing']
+  ['racing', 'Racing'],
+  ['kids', 'Kids']
 ];
 
 var grid = document.getElementById('grid');
