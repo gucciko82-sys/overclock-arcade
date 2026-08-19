@@ -1089,6 +1089,54 @@ var GAMES = [
       x.fillStyle = '#f6f6f0';
       x.beginPath(); x.arc(bx, by, 5, 0, 7); x.fill();
     }
+  },
+  {
+    id: 'pitch', name: 'Pitch', cat: 'sports', tag: 'Home Run Derby', isNew: true,
+    desc: 'Golden hour at the ballpark. Fastballs, sliders, changeups and curves — ten outs, one button, and a wall at 375 feet.',
+    best: function () { var s = lsJSON('pitch_v1'); return s && s.hr > 0 ? ['Best round', s.hr + ' HR · ' + s.longest + ' ft'] : null; },
+    cover: function (x, w, h) {
+      /* golden-hour sky */
+      x.fillStyle = '#4a6484'; x.fillRect(0, 0, w, h);
+      var g2 = x.createLinearGradient(0, 0, 0, h * 0.62);
+      g2.addColorStop(0, '#41597a'); g2.addColorStop(0.6, '#c99a63'); g2.addColorStop(1, '#e8c98a');
+      x.fillStyle = g2; x.fillRect(0, 0, w, h * 0.62);
+      x.fillStyle = 'rgba(255,240,200,0.95)';
+      x.beginPath(); x.arc(w * 0.17, h * 0.3, 8, 0, 7); x.fill();
+      /* light towers */
+      x.strokeStyle = '#2e3138'; x.lineWidth = 1.6;
+      for (var t2 = 0; t2 < 3; t2++) {
+        var tx = w * (0.3 + t2 * 0.28);
+        x.beginPath(); x.moveTo(tx, h * 0.62); x.lineTo(tx, h * 0.4); x.stroke();
+        x.fillStyle = '#dfe2e6'; x.fillRect(tx - 6, h * 0.37, 12, 4);
+      }
+      /* crowd band */
+      x.fillStyle = '#6d6a68'; x.fillRect(0, h * 0.62, w, h * 0.12);
+      for (var c3 = 0; c3 < 60; c3++) {
+        x.fillStyle = ['rgba(230,210,180,0.5)', 'rgba(200,170,150,0.45)', 'rgba(180,190,210,0.4)'][c3 % 3];
+        x.fillRect((c3 * 37) % w, h * 0.63 + (c3 % 4) * 3, 2.6, 2.6);
+      }
+      /* outfield wall + yellow line */
+      x.fillStyle = '#2f5233'; x.fillRect(0, h * 0.74, w, h * 0.08);
+      x.fillStyle = '#e8c34a'; x.fillRect(0, h * 0.74, w, 2);
+      /* mowed outfield */
+      for (var s3 = 0; s3 < 7; s3++) {
+        x.fillStyle = s3 % 2 ? '#4e7b3f' : '#5a8a48';
+        x.fillRect(w * s3 / 7, h * 0.82, w / 7 + 1, h * 0.18);
+      }
+      /* batter silhouette + ball with trail */
+      x.fillStyle = '#22262c';
+      x.save(); x.translate(w * 0.24, h * 0.9);
+      x.beginPath(); x.arc(0, -15, 3.4, 0, 7); x.fill();
+      x.fillRect(-3, -12, 6, 10);
+      x.fillRect(-3, -2, 2.6, 6); x.fillRect(1.4, -2, 2.6, 6);
+      x.strokeStyle = '#b98a4a'; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(2, -11); x.lineTo(12, -19); x.stroke();
+      x.restore();
+      x.strokeStyle = 'rgba(255,255,255,0.5)'; x.lineWidth = 1.4;
+      x.beginPath(); x.moveTo(w * 0.32, h * 0.83); x.quadraticCurveTo(w * 0.55, h * 0.5, w * 0.78, h * 0.56); x.stroke();
+      x.fillStyle = '#f8f8f4';
+      x.beginPath(); x.arc(w * 0.78, h * 0.56, 3.4, 0, 7); x.fill();
+    }
   }
 ];
 

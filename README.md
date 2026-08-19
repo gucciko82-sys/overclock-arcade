@@ -47,6 +47,7 @@ from the Vercel dashboard whenever.
 | `smash/` | **Smash** | Monster truck freestyle ("smashing the stack" is a real term; so is smashing a minivan). Seventy-five seconds under the floodlights: two-wheel-plus-chassis physics with real suspension, eleven junk cars and a bus that crush flat in three stages each, three dirt ramps, backflip/frontflip detection off cumulative air rotation, airtime points, a combo multiplier up to x5, and a crowd that bobs harder the hotter your chain gets. Three rollovers and the show is over. |
 | `chip/` | **Chip** | Mini golf (a silicon chip; a chip shot). Nine holes, par 28: doglegs, bunkers, twin ponds with a causeway, stone bumpers, offset gates, an island green, and TAPEOUT which combines the lot. Hold to charge a ping-pong meter, release to strike; adaptive-substepped physics so the ball never tunnels a rail, sand at 4.2x friction, and a cup that lips out if you arrive too hot. Scorecard with birdies and bogeys; best round saves. Board rotates 90 degrees in landscape so the whole hole fills a phone held either way. |
 | `patch/` | **Patch** | A garden patch; a software patch. Twelve plots of warm dirt and five crops — carrot, tomato, sunflower, corn, pumpkin — each drawn distinctly through five growth stages. One tap does whatever the plot needs next: till, plant, water, harvest. Baskets sell for coins, coins buy seeds, earnings unlock the pricier ones. A sun arcs through the day, rain showers water the whole patch for free, and bees and butterflies shelter when it rains. No timer, no enemies, nothing dies — thirsty plants simply wait. The garden is saved and still there when you come back. |
+| `pitch/` | **Pitch** | Home run derby (you pitch a ball; you pitch an idea). Side-on ballpark at golden hour: the pitcher winds up and throws one of four pitches that genuinely fly differently — fastball 0.64s at 97 mph, slider, changeup off the same arm slot, and a curve that humps and falls at 0.96s and 79 mph. One button, timed against a 155ms contact window; W/S sets the swing plane. Real drag and backspin Magnus lift, so a barrel leaves at ~102 mph and 33 degrees and carries about 400 feet. Ten outs ends the round; the camera follows the ball out and reveals the 375-foot wall so you can see what it has to beat. |
 | `botnet/` | **Botnet** | Fixed shooter, Galaga school. Squads swoop in on bezier entry paths, settle into a formation that breathes and sways as one organism, then peel off in dive runs that fire aimed shots — divers are worth double. Four bot types (drone/worm/brute/harvester), kill-chain bonus, SPAM envelope bonus ship, accuracy bonus per wave, slow-mo on harvester kills, extra life every 15,000 bits. Drag-to-fly with autofire on phones. |
 
 ### Built and play-tested 2026-08-17 — Flyway
@@ -937,3 +938,41 @@ trivially passing. Re-run against the API correctly (`setHole` → `aimAt`
 holes, 8,166 frames, never once through a rail, zero NaN, zero errors.
 **A green test can be green for the wrong reason. Check that your test
 touched what you think it touched.**
+
+### Built and play-tested 2026-08-19 — Pitch (game 30)
+
+The third of the parallel build, and the one that needed the most art
+surgery. Ballistics were tuned in node before a line of render code was
+written — 105 mph at 28 degrees carries 413 ft, which is right.
+
+Bugs, nearly all of them screenshot-only:
+
+- **A dead orange void filled a third of the screen**: the backdrop was
+  drawn in screen-space fractions with nothing between it and the ground
+  line. Rebuilt as a world-anchored grandstand at its own perspective
+  scale.
+- **Infield dirt circles became tall skinny lakes on every fly ball** —
+  the ellipse radii scaled on different axes, so the shape only broke
+  once the camera pulled back. Invisible standing at the plate.
+- **The camera never showed the fence.** You watched a 430-foot homer
+  with no idea what it had to clear. The wall now reveals as the ball
+  passes 100 feet.
+- **The catcher and umpire stood bolt upright** — the crouch geometry
+  was there but knees weren't forward and hips weren't low, so they read
+  as short men in masks. Rewritten as real squats, and the umpire
+  straightens up to punch out a strike.
+- **The swing chopped wood**: interpolating the bat from up-behind to
+  down-in-front swept it through vertical. Contact got its own keyframe
+  at a flat barrel.
+- **The crowd read as a QR code** until it got aisles, empty seats and
+  jitter.
+
+Integrator verification: all four pitch types measured in flight and
+confirmed distinct (0.64s/97mph through 0.96s/79mph — a hitter feels
+that spread); a perfect swing produces BARREL at 102 mph and 33 degrees;
+a mistimed swing is an out and never leaves the yard; ten outs ends into
+the summary; the save round-trips (1 HR, longest 392 ft). Matrix and
+audit clean, zero console errors.
+
+That is **30 games**. The hub now shelves them as Action, Shooters,
+Racing, Sports, Outdoors, Puzzle, Strategy and Kids.
