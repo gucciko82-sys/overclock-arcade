@@ -392,6 +392,12 @@ for (let i = 0; i < MAX_FLOATS; i++) floats[i] = { alive: false, x: 0, y: 0, tex
 let floatCursor = 0;
 
 const shake = { x: 0, y: 0, t: 0, dur: 1, amp: 0 };
+const rings = [];              // shockwaves: {x, y, r, maxR, life, max, col}
+let slowT = 0;                 // hit-stop timer (death, shield pop)
+
+function addRing(x, y, col, maxR, dur) {
+  rings.push({ x: x, y: y, r: 4, maxR: maxR, life: dur, max: dur, col: col });
+}
 
 const gen = {
   x: 0, c: LH / 2, cv: 0, target: LH / 2, targetIn: 0,
@@ -785,6 +791,13 @@ function updateParticles(dt) {
     shake.x = (Math.random() * 2 - 1) * a;
     shake.y = (Math.random() * 2 - 1) * a;
   } else { shake.x = 0; shake.y = 0; }
+  for (let ri = rings.length - 1; ri >= 0; ri--) {
+    const rg = rings[ri];
+    rg.life -= dt;
+    if (rg.life <= 0) { rings.splice(ri, 1); continue; }
+    const rk = 1 - rg.life / rg.max;
+    rg.r = 4 + (rg.maxR - 4) * (1 - (1 - rk) * (1 - rk));
+  }
 }
 
 /* ==========================================================================
@@ -1016,6 +1029,7 @@ function startGame() {
   for (let i = 0; i < MAX_PARTS; i++) parts[i].alive = false;
   for (let i = 0; i < MAX_FLOATS; i++) floats[i].alive = false;
   shake.t = shake.dur; shake.x = 0; shake.y = 0;
+  rings.length = 0; slowT = 0;
   ensureSlices();
   const s = sampleCave(ship.x);
   ship.y = (s.top + s.bot) / 2;
@@ -1030,6 +1044,7 @@ function startGame() {
 }
 
 function killShip(reason) {
+  slowT = Math.max(slowT, 0.5);
   if (ship.dead) return;
   ship.dead = true;
   ship.deadT = 0;
@@ -1041,6 +1056,8 @@ function killShip(reason) {
     emit(ship.x, ship.y, Math.cos(a) * sp, Math.sin(a) * sp, rnd(0.4, 1.2), rnd(1.5, 5),
       pick(["#ffcc4d", "#ff8a3c", "#ffffff", "#ff5a4d", "#9fb3d9"]), 12);
   }
+  addRing(ship.x, ship.y, "#ffcc4d", 150, 0.55);
+  addRing(ship.x, ship.y, "#ffffff", 75, 0.32);
   if (run.metres > best) { best = run.metres; run.newBest = true; LS.set(KEY_BEST, Math.floor(best)); }
 }
 
@@ -1275,6 +1292,8 @@ function explode(x, y, col) {
     const a = Math.random() * 6.2832, sp = rnd(50, 260);
     emit(x, y, Math.cos(a) * sp, Math.sin(a) * sp, rnd(0.25, 0.7), rnd(1.5, 4), Math.random() < 0.4 ? "#ffffff" : col, 10);
   }
+  addRing(x, y, col, 120, 0.45);
+  addRing(x, y, "#ffffff", 60, 0.28);
   addShake(12, 0.35);
 }
 
@@ -1282,6 +1301,8 @@ function popShield() {
   ship.shield = false;
   ship.invuln = 1.15;
   SFX.shieldPop();
+  addRing(ship.x, ship.y, "#7fd8ff", 100, 0.4);
+  slowT = Math.max(slowT, 0.18);
   addShake(16, 0.5);
   for (let i = 0; i < 26; i++) {
     const a = Math.random() * 6.2832, sp = rnd(80, 300);
@@ -1319,6 +1340,7 @@ function awardNearMiss(closest) {
   const bonus = (tight ? 90 : 45) * run.mult;
   run.score += bonus;
   SFX.near();
+  if (tight) addRing(ship.x, ship.y, "#ffcc4d", 60, 0.3);
   addShake(tight ? 9 : 5, 0.24);
   addFloat(ship.x + 26, ship.y - 30, (tight ? "THREADED  x" : "NEAR MISS  x") + run.mult.toFixed(1),
     tight ? "#ffcc4d" : "#7fd8ff", tight ? 22 : 18);
@@ -1346,6 +1368,22 @@ function drawBackdrop() {
   g.addColorStop(1, "#06080f");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, view.ww, view.wh);
+
+  // drifting nebulae behind the cave — deep colour under the rock layers
+  const NEB = [
+    { x: 0.25 + Math.sin(clock * 0.05) * 0.05, y: 0.3, r: 0.6, col: "58,72,168" },
+    { x: 0.8 + Math.cos(clock * 0.045) * 0.04, y: 0.6, r: 0.52, col: "118,52,150" },
+    { x: 0.55 + Math.sin(clock * 0.03 + 2) * 0.07, y: 0.15, r: 0.45, col: "32,96,140" }
+  ];
+  for (let i = 0; i < NEB.length; i++) {
+    const n = NEB[i];
+    const nr = n.r * view.ww;
+    const ng = ctx.createRadialGradient(n.x * view.ww, n.y * view.wh, 0, n.x * view.ww, n.y * view.wh, nr);
+    ng.addColorStop(0, "rgba(" + n.col + ",0.14)");
+    ng.addColorStop(1, "rgba(" + n.col + ",0)");
+    ctx.fillStyle = ng;
+    ctx.fillRect(n.x * view.ww - nr, n.y * view.wh - nr, nr * 2, nr * 2);
+  }
 }
 
 function drawDust() {
@@ -1704,6 +1742,25 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
+function drawRings() {
+  if (!rings.length) return;
+  setWorldTransform();
+  for (let i = 0; i < rings.length; i++) {
+    const rg = rings[i];
+    const a = clamp(rg.life / rg.max, 0, 1);
+    ctx.globalAlpha = a * 0.8;
+    ctx.strokeStyle = rg.col;
+    ctx.lineWidth = 1.5 + 3 * a;
+    ctx.shadowColor = rg.col;
+    ctx.shadowBlur = 16;
+    ctx.beginPath();
+    ctx.arc(rg.x, rg.y, rg.r, 0, 6.2832);
+    ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+}
+
 function drawFloats() {
   setWorldTransform();
   ctx.textAlign = "center";
@@ -1824,6 +1881,7 @@ function render() {
   drawMines();
   drawDrones();
   drawParticles();
+  drawRings();
   if (state !== "title") drawShip();
   drawFloats();
   drawVignette();
@@ -1888,6 +1946,9 @@ function frame(now) {
   pollPad();
   if (padAEdge && (state === "title" || state === "dead")) startGame();
   gatherInput();
+
+  /* hit-stop: deaths and shield pops play out at third speed */
+  if (slowT > 0) { slowT = Math.max(0, slowT - dt); dt *= 0.35; }
 
   if (state === "paused") {
     updateThrustSound();

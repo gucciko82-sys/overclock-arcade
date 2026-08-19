@@ -427,6 +427,22 @@ function buildBackdrop() {
   c.fillStyle = g;
   c.fillRect(0, 0, PF_W, PF_H);
 
+  // nebulae — big soft colour blobs behind everything
+  var NEB = [
+    { x: 0.2, y: 0.24, r: 0.62, col: '58,72,168' },
+    { x: 0.84, y: 0.5, r: 0.55, col: '118,52,150' },
+    { x: 0.5, y: 0.85, r: 0.5, col: '32,96,140' }
+  ];
+  for (var nb = 0; nb < NEB.length; nb++) {
+    var n2 = NEB[nb];
+    var nr = n2.r * PF_W;
+    var ng = c.createRadialGradient(n2.x * PF_W, n2.y * PF_H, 0, n2.x * PF_W, n2.y * PF_H, nr);
+    ng.addColorStop(0, 'rgba(' + n2.col + ',0.15)');
+    ng.addColorStop(1, 'rgba(' + n2.col + ',0)');
+    c.fillStyle = ng;
+    c.fillRect(n2.x * PF_W - nr, n2.y * PF_H - nr, nr * 2, nr * 2);
+  }
+
   // soft gold bloom behind the brick field
   var rg = c.createRadialGradient(PF_W / 2, GRID_Y + 90, 20, PF_W / 2, GRID_Y + 90, PF_W * 0.75);
   rg.addColorStop(0, 'rgba(255,204,77,0.075)');
@@ -707,8 +723,12 @@ var G = {
   powerups: [],
   bolts: [],
   particles: [],
+  shards: [],
   rings: [],
   pops: [],
+  slowT: 0,
+  flash: 0,
+  flashCol: '255,138,61',
   boomQueue: [],
   effects: { wide: 0, sticky: 0, laser: 0, slow: 0 },
   laserCd: 0,
@@ -739,7 +759,8 @@ function makeBrick(r, c, ch) {
     r: r, c: c,
     x: GRID_X + c * CELL_W + INSET,
     y: GRID_Y + r * CELL_H + INSET,
-    type: 'normal', ci: 0, hp: 1, maxHp: 1, alive: true, flash: 0
+    type: 'normal', ci: 0, hp: 1, maxHp: 1, alive: true, flash: 0,
+    delay: r * 0.07 + c * 0.02, appear: 0
   };
   if (ch >= '1' && ch <= '5') { b.type = 'normal'; b.ci = parseInt(ch, 10) - 1; b.hp = 1; b.maxHp = 1; }
   else if (ch === 'A') { b.type = 'armor'; b.hp = 2; b.maxHp = 2; }
@@ -754,7 +775,8 @@ function loadLevel(idx) {
   var def = LEVELS[idx];
   G.bricks = []; G.grid = []; G.bricksLeft = 0;
   G.powerups = []; G.bolts = []; G.boomQueue = [];
-  G.particles = []; G.rings = []; G.pops = [];
+  G.particles = []; G.shards = []; G.rings = []; G.pops = [];
+  G.slowT = 0; G.flash = 0;
   G.effects = { wide: 0, sticky: 0, laser: 0, slow: 0 };
   G.laserCd = 0;
   G.combo = 0;
@@ -860,6 +882,21 @@ function burst(x, y, color, count, power) {
 function ring(x, y, color, maxR, life) {
   G.rings.push({ x: x, y: y, r: 4, maxR: maxR, life: life, max: life, color: color });
 }
+/* spinning debris chunks — the brick visibly breaks apart */
+function shards(x, y, color, count, power) {
+  if (G.shards.length > 160) return;
+  for (var i = 0; i < count; i++) {
+    var a = Math.random() * Math.PI * 2;
+    var sp = rnd(0.3, 1) * power;
+    G.shards.push({
+      x: x + rnd(-BRICK_W * 0.3, BRICK_W * 0.3), y: y + rnd(-BRICK_H * 0.3, BRICK_H * 0.3),
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - power * 0.35,
+      rot: rnd(0, Math.PI * 2), vr: rnd(-9, 9),
+      w: rnd(4, 11), h: rnd(3, 7),
+      life: rnd(0.45, 0.95), max: 0.95, color: color
+    });
+  }
+}
 function pop(x, y, text, color) {
   if (G.pops.length > 40) return;
   G.pops.push({ x: x, y: y, text: text, color: color, life: 0.85, max: 0.85 });
@@ -909,8 +946,11 @@ function destroyBrick(b, chained) {
     sfxBoom();
     burst(ct.x, ct.y, '#ffb347', 34, 340);
     burst(ct.x, ct.y, '#fff2c0', 14, 210);
+    shards(ct.x, ct.y, '#ff8a3d', 9, 320);
     ring(ct.x, ct.y, '#ff8a3d', 110, 0.42);
     addShake(9);
+    G.slowT = Math.max(G.slowT, 0.1);       // hit-stop: let the blast land
+    G.flash = Math.max(G.flash, 0.3); G.flashCol = '255,138,61';
     for (var dr = -1; dr <= 1; dr++) {
       for (var dc = -1; dc <= 1; dc++) {
         if (!dr && !dc) continue;
@@ -923,6 +963,7 @@ function destroyBrick(b, chained) {
   } else {
     sfxBrick(b.r);
     burst(ct.x, ct.y, col, chained ? 10 : 16, 210);
+    shards(ct.x, ct.y, col, chained ? 4 : 6, 200);
     ring(ct.x, ct.y, col, 46, 0.26);
     addShake(0.6);
   }
@@ -1146,6 +1187,8 @@ function finish(kind) {
 function loseBall() {
   G.lives--;
   G.combo = 0;
+  G.slowT = Math.max(G.slowT, 0.3);
+  G.flash = Math.max(G.flash, 0.45); G.flashCol = '255,60,90';
   G.effects = { wide: 0, sticky: 0, laser: 0, slow: 0 };
   G.powerups = [];
   G.bolts = [];
@@ -1166,6 +1209,7 @@ function update(dt) {
   G.time += dt;
   if (G.msgT > 0) G.msgT -= dt;
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 26);
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 1.8);
 
   updateParticles(dt);
 
@@ -1234,7 +1278,10 @@ function update(dt) {
   updateBolts(dt);
 
   for (i = 0; i < G.bricks.length; i++) {
-    if (G.bricks[i].flash > 0) G.bricks[i].flash = Math.max(0, G.bricks[i].flash - dt * 5);
+    var brk = G.bricks[i];
+    if (brk.flash > 0) brk.flash = Math.max(0, brk.flash - dt * 5);
+    if (brk.delay > 0) brk.delay -= dt;
+    else if (brk.appear < 1) brk.appear = Math.min(1, brk.appear + dt * 4.5);
   }
 
   if (G.bricksLeft <= 0 && G.state === 'playing') completeLevel();
@@ -1420,6 +1467,16 @@ function updateParticles(dt) {
     p.vy += 320 * dt;
     p.vx *= (1 - 1.1 * dt);
   }
+  for (i = G.shards.length - 1; i >= 0; i--) {
+    var sh = G.shards[i];
+    sh.life -= dt;
+    if (sh.life <= 0) { G.shards.splice(i, 1); continue; }
+    sh.x += sh.vx * dt;
+    sh.y += sh.vy * dt;
+    sh.vy += 620 * dt;
+    sh.rot += sh.vr * dt;
+    if (sh.y > PF_H + 20) sh.life = 0;
+  }
   for (i = G.rings.length - 1; i >= 0; i--) {
     var rg = G.rings[i];
     rg.life -= dt;
@@ -1456,10 +1513,18 @@ function render() {
   drawBolts();
   drawPaddle();
   drawBalls();
+  drawShards();
   drawParticles();
   drawPops();
 
   ctx.setTransform(S, 0, 0, S, 0, 0);
+  if (G.flash > 0.01) {
+    ctx.save();
+    ctx.globalAlpha = clamp(G.flash, 0, 1) * 0.35;
+    ctx.fillStyle = 'rgb(' + G.flashCol + ')';
+    ctx.fillRect(0, 0, PF_W, PF_H);
+    ctx.restore();
+  }
   drawHUD();
   drawEffectPills();
   drawMessage();
@@ -1529,6 +1594,16 @@ function drawBricks() {
     var b = G.bricks[i];
     if (!b.alive) continue;
     var sp = getSprite(spriteKey(b));
+    if (b.appear < 1) {
+      /* cascade in from above, row by row */
+      if (b.appear <= 0) continue;
+      var e = 1 - Math.pow(1 - b.appear, 3);
+      ctx.save();
+      ctx.globalAlpha = e;
+      ctx.drawImage(sp.cv, b.x - sp.pad, b.y - sp.pad - (1 - e) * 30, sp.w, sp.h);
+      ctx.restore();
+      continue;
+    }
     ctx.drawImage(sp.cv, b.x - sp.pad, b.y - sp.pad, sp.w, sp.h);
     if (b.type === 'boom') {
       var pl = 0.35 + 0.35 * Math.sin(G.time * 5 + b.c * 0.6 + b.r);
@@ -1568,6 +1643,22 @@ function drawRings() {
     ctx.stroke();
   }
   ctx.restore();
+}
+
+function drawShards() {
+  for (var i = 0; i < G.shards.length; i++) {
+    var s = G.shards[i];
+    var a = clamp(s.life / s.max, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.rot);
+    ctx.fillStyle = s.color;
+    ctx.shadowColor = s.color;
+    ctx.shadowBlur = 6;
+    ctx.fillRect(-s.w / 2, -s.h / 2, s.w, s.h);
+    ctx.restore();
+  }
 }
 
 function drawParticles() {
@@ -2036,6 +2127,9 @@ function frame(ts) {
   if (dt > 0.25) dt = 0.25;
 
   pollGamepad();
+
+  /* hit-stop: booms and lost balls briefly run the sim at third speed */
+  if (G.slowT > 0) { G.slowT = Math.max(0, G.slowT - dt); dt *= 0.35; }
 
   acc += dt;
   var n = 0;

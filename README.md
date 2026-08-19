@@ -702,3 +702,33 @@ Found by eyeballing the play screenshots, not by the geometry checks:
 (Count correction, found while listing the hub: the running "22 games"
 tally we had been carrying was off by one — at the previous commit the
 hub and this table both held 21 games. Botnet is game 22.)
+
+### Graphics pass 2026-08-18 — Neon Breaker, Gridlock, Deep Run
+
+Krystal asked for better graphics across the board, so the three oldest
+games got retrofitted with the juice vocabulary the newer games shipped
+with. Gameplay untouched — every change is presentation.
+
+- **All three:** drifting nebula colour fields behind the action (the
+  Botnet backdrop treatment), and hit-stop slow-mo on the biggest moments.
+- **Neon Breaker:** bricks now visibly break apart into spinning debris
+  shards with gravity; explosive bricks land a hit-stop and an orange
+  screen flash; losing a ball slows the world and flashes red; each level's
+  bricks cascade in row by row instead of just appearing.
+- **Gridlock:** an animated three-layer falling starfield behind the well;
+  line clears fire a shockwave ring per row (gold on a quad, which also
+  slows the world for a beat); hard drops kick dust off the landing edge
+  with a nudge of shake.
+- **Deep Run:** shockwave rings on every explosion, shield pop, and
+  threaded near-miss; ship deaths now fire a double ring (gold + white)
+  and play out in slow motion.
+
+Verification: all changed paths beaten by script, not read — Gridlock's
+clear path via a route-injected test hook driving a REAL single clear and
+a REAL quad (4 rings + slow-mo asserted), Deep Run's death via a 25ms
+in-page watcher that caught the transient slow-mo (a first attempt polled
+at 150ms and missed the whole 0.5s effect window — sample faster than the
+effect you are asserting). Full 3-profile matrix and ui-audit clean on all
+three, zero console errors. One design gap caught by the watcher: rock
+deaths (the common kind) had no shockwave because only explode() carried
+rings — killShip now fires its own.

@@ -439,6 +439,10 @@
   var clearRows = [], clearT = 0, collapseT = 0;
 
   var particles = [];
+  var rings = [];        // line-clear shockwaves
+  var stars = [];        // falling background starfield
+  var bgTime = 0;
+  var slowT = 0;         // quad hit-stop
   var shake = 0, shakeT = 0;
   var banner = null;     // { text, sub, t }
   var trail = null;      // hard-drop streak
@@ -513,7 +517,7 @@
     queue = []; refillQueue();
     holdType = null; canHold = true;
     score = 0; level = 1; lines = 0; combo = -1; b2b = false;
-    particles = []; shake = 0; shakeT = 0; banner = null; trail = null; flash = 0;
+    particles = []; rings = []; slowT = 0; shake = 0; shakeT = 0; banner = null; trail = null; flash = 0;
     phase = 'play'; clearRows = []; clearT = 0; collapseT = 0;
     softHeld = false; newBest = false;
     elapsed = 0; startedAt = performance.now();
@@ -591,6 +595,13 @@
     }
     piece.y = gy;
     sfx.drop();
+    /* impact: dust off the landing edge and a nudge of shake */
+    var cells = cellsOf(piece.type, piece.rot);
+    for (var ci = 0; ci < cells.length; ci++) {
+      if (!collides(piece.type, piece.rot, piece.x, piece.y + 1)) break;
+      burst(piece.x + cells[ci][0] + 0.5, piece.y + cells[ci][1] + 1, piece.type, 1);
+    }
+    if (shakeT <= 0) { shakeT = 0.14; shake = 3.5; }
     lockPiece();
   }
 
@@ -643,7 +654,12 @@
           burst(xx + 0.5, clearRows[i] + 0.5, board[clearRows[i]][xx], clearRows.length >= 4 ? 3 : 2);
         }
       }
-      if (clearRows.length >= 4) { shakeT = 0.42; shake = 12; flash = 1; sfx.quad(); }
+      /* shockwave per cleared row, from the well centre */
+      for (i = 0; i < clearRows.length; i++) {
+        rings.push({ x: COLS / 2, y: clearRows[i] + 0.5, r: 0.5, maxR: COLS * 0.85,
+                     life: 0.4, max: 0.4, color: clearRows.length >= 4 ? GOLD : '#7fd3ff' });
+      }
+      if (clearRows.length >= 4) { shakeT = 0.42; shake = 12; flash = 1; slowT = 0.28; sfx.quad(); }
       else { sfx.clear(clearRows.length); }
     } else {
       combo = -1;
@@ -990,6 +1006,20 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     computeLayout();
     clearTiles();
+    makeStars();
+  }
+
+  function makeStars() {
+    stars = [];
+    var n = Math.round(Math.max(50, Math.min(120, view.w * view.h / 11000)));
+    for (var i = 0; i < n; i++) {
+      var layer = i % 3;
+      stars.push({
+        x: Math.random(), y: Math.random(), layer: layer,
+        sp: 0.006 + layer * 0.011, sz: 0.7 + layer * 0.6,
+        a: 0.14 + layer * 0.18, tw: Math.random() * 6.28
+      });
+    }
   }
 
   function computeLayout() {
@@ -1536,9 +1566,30 @@
     var L = layoutInfo;
     ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
 
-    // page background with a soft vignette
+    // page background with drifting nebulae, falling stars, soft vignette
     ctx.fillStyle = BG;
     ctx.fillRect(0, 0, view.w, view.h);
+    var NEB = [
+      { x: 0.2 + Math.sin(bgTime * 0.05) * 0.05, y: 0.28, r: 0.55, col: '58,72,168' },
+      { x: 0.82 + Math.cos(bgTime * 0.04) * 0.04, y: 0.6, r: 0.5, col: '118,52,150' },
+      { x: 0.5 + Math.sin(bgTime * 0.03 + 2) * 0.07, y: 0.1, r: 0.42, col: '32,96,140' }
+    ];
+    for (var nb = 0; nb < NEB.length; nb++) {
+      var n2 = NEB[nb];
+      var nr = n2.r * Math.max(view.w, view.h);
+      var ng = ctx.createRadialGradient(n2.x * view.w, n2.y * view.h, 0, n2.x * view.w, n2.y * view.h, nr);
+      ng.addColorStop(0, 'rgba(' + n2.col + ',0.13)');
+      ng.addColorStop(1, 'rgba(' + n2.col + ',0)');
+      ctx.fillStyle = ng;
+      ctx.fillRect(n2.x * view.w - nr, n2.y * view.h - nr, nr * 2, nr * 2);
+    }
+    for (var st = 0; st < stars.length; st++) {
+      var s3 = stars[st];
+      var sy = (s3.y + bgTime * s3.sp) % 1.01;
+      var sa = s3.a * (0.7 + 0.3 * Math.sin(bgTime * 2 + s3.tw));
+      ctx.fillStyle = 'rgba(210,225,255,' + sa.toFixed(3) + ')';
+      ctx.fillRect(s3.x * view.w, sy * view.h, s3.sz, s3.sz + s3.layer * 1.4);
+    }
     var rg = ctx.createRadialGradient(view.w / 2, view.h / 2, Math.min(view.w, view.h) * 0.1,
                                       view.w / 2, view.h / 2, Math.max(view.w, view.h) * 0.75);
     rg.addColorStop(0, 'rgba(38,48,92,0.35)');
@@ -1564,6 +1615,20 @@
     if (state === 'playing') { drawGhost(); drawActivePiece(); }
     else if (state === 'paused') { /* hide the falling piece while paused */ }
     drawParticles();
+    for (var rgi = 0; rgi < rings.length; rgi++) {
+      var rr2 = rings[rgi];
+      var ra = Math.max(0, rr2.life / rr2.max);
+      ctx.save();
+      ctx.globalAlpha = ra * 0.75;
+      ctx.strokeStyle = rr2.color;
+      ctx.lineWidth = Math.max(1.5, L.cell * (0.06 + 0.1 * ra));
+      ctx.shadowColor = rr2.color;
+      ctx.shadowBlur = L.cell * 0.6;
+      ctx.beginPath();
+      ctx.arc(L.bx + rr2.x * L.cell, L.by + (rr2.y - BUFFER) * L.cell, rr2.r * L.cell, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
     if (flash > 0) {
       ctx.fillStyle = 'rgba(255,255,255,' + (flash * 0.35) + ')';
       ctx.fillRect(L.bx, L.by, L.bw, L.bh);
@@ -1587,11 +1652,19 @@
   function update(dt) {
     pollGamepad();
 
+    bgTime += dt;
     if (shakeT > 0) shakeT = Math.max(0, shakeT - dt);
     if (flash > 0) flash = Math.max(0, flash - dt * 3.2);
     if (trail) { trail.t -= dt; if (trail.t <= 0) trail = null; }
     if (banner) { banner.t += dt; if (banner.t > 1.6) banner = null; }
     updateParticles(dt);
+    for (var ri = rings.length - 1; ri >= 0; ri--) {
+      var rg2 = rings[ri];
+      rg2.life -= dt;
+      if (rg2.life <= 0) { rings.splice(ri, 1); continue; }
+      var rk = 1 - rg2.life / rg2.max;
+      rg2.r = 0.5 + (rg2.maxR - 0.5) * (1 - Math.pow(1 - rk, 2));
+    }
 
     if (state !== 'playing') return;
 
@@ -1652,6 +1725,8 @@
     last = now;
     if (dt > 0.1) dt = 0.1;   // a long stall must not teleport the piece
     if (dt < 0) dt = 0;
+    /* quad hit-stop: the whole well savours it at third speed */
+    if (slowT > 0) { slowT = Math.max(0, slowT - dt); dt *= 0.35; }
     try {
       update(dt);
       render();
