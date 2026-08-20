@@ -1156,3 +1156,51 @@ A count correction while integrating: the hub and the folders were
 reconciled directly and both hold **42 games**. The running tally in
 these notes had drifted by one again — reconcile against disk, not
 against the last number written down.
+
+### Built and play-tested 2026-08-20 — Char (letters and sounds, built for Lizzy)
+
+The first of three games built specifically for a four-to-five-year-old
+who is **not yet reading**, and who has a significant medical history —
+laryngomalacia, three surgeries by three months, a botched first repair
+redone around six months, and possible resulting oxygen-related damage.
+Her family's framing governs the design: bright kid, spent her life short
+of air. So: **low floor, high ceiling** — and, in her father's words,
+*"find her level, then help her grow."*
+
+What that means concretely, and what was verified:
+
+- **Nobody picks a difficulty.** Four activities (find the letter, big and
+  little, what sound, first sound) each have an explicit rung ladder. The
+  game places her invisibly by playing, promotes after four correct in a
+  row, demotes fast after two misses in five to protect confidence, and
+  silently probes one rung up every 15-20 items so she can never be
+  trapped below her ability. The found rung persists — she resumes, she
+  is never re-placed.
+- **Integrator check of exactly that**: simulated children with true
+  ability at rungs 0, 2, 4 and 6 were run 250 items each. Each settled at
+  its own rung (0→0, 2→2, 4→4, 6→6), with the tail reaching one above,
+  which is the probe working. It finds her level and holds it.
+- **Nothing is ever marked wrong.** No red, no X, no buzzer, no shake, no
+  score, no timer. Her tap is never marked; the right answer simply
+  lights up with a rising two-note cue. The source comments say it best:
+  *"the only two states: chosen-and-right, or here-is-the-one."*
+- **Everything is spoken** (rate 0.85, key word echoed after a pause) and
+  the game stays fully playable with `speechSynthesis` unavailable.
+- **Targets**: answer tiles measure 178x298 on a 390px phone, speaker
+  110x110 — far past the 90px floor, single taps only, no drag or
+  long-press anywhere.
+
+The builder's picture check is worth recording. It rendered all 22
+procedurally drawn pictures into one gallery and looked at them, which
+caught five a four-year-old would have misnamed — a moon that read as a
+"C", a nest whose eggs were buried, a washed-out igloo that read as a
+rock, a stubby octopus that read as a jellyfish, and an egg that read as
+an ice-cream cone. Then a **van that read as a bus** — a genuine trap in
+a game where /b/ is one of the sounds being taught. All redrawn.
+
+Integrator note on verification itself: **four separate times today an
+independent check failed for the wrong reason** — a helper called with
+the wrong arguments, a selector that swept in the mute buttons, a grep
+that matched code comments saying there is deliberately no wrong state,
+and an `adapt(id, right, probe)` call passed a state object as its id.
+A red result deserves exactly the same scrutiny as a green one.

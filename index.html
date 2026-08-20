@@ -1557,8 +1557,64 @@ var GAMES = [
       x.fillText('✓', w / 2, h * 0.85);
       x.textAlign = 'left'; x.textBaseline = 'alphabetic';
     }
+  },
+  {
+    id: 'char', name: 'Char', cat: 'kids', tag: 'Letters & Sounds', isNew: true,
+    desc: 'A char is one letter of code. Find the letter, match big to little, hear the sound it makes. Everything is spoken aloud — no reading needed to play.',
+    best: function () {
+      var s = lsJSON('char_v1');
+      if (!s || !s.letters) return null;
+      var solid = 0, k;
+      for (k in s.letters) { if (s.letters[k] && s.letters[k].ok >= 3) solid++; }
+      return solid > 0 ? ['Letters solid', solid] : null;
+    },
+    cover: function (x, w, h) {
+      /* warm and friendly, not the arcade's dark neon — this one is for the littlest player */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#fdf3e2'); g.addColorStop(1, '#f6e3c8');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* three big letter tiles, the middle one chosen */
+      var letters = ['s', 'a', 't'];
+      var tw = w * 0.24, th = h * 0.42, gap = w * 0.045;
+      var x0 = (w - (tw * 3 + gap * 2)) / 2, y0 = h * 0.3;
+      for (var i = 0; i < 3; i++) {
+        var tx = x0 + i * (tw + gap);
+        var hot = i === 1;
+        x.fillStyle = hot ? '#ffd77a' : '#ffffff';
+        x.beginPath(); x.roundRect(tx, y0, tw, th, 12); x.fill();
+        x.strokeStyle = hot ? '#e0952c' : '#e6d3b4';
+        x.lineWidth = hot ? 3 : 2; x.stroke();
+        x.fillStyle = hot ? '#7a4a12' : '#8a7a63';
+        x.font = '800 ' + Math.round(th * 0.62) + 'px "Segoe UI", sans-serif';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(letters[i], tx + tw / 2, y0 + th / 2 + 2);
+      }
+      /* a speaker, because everything here is spoken */
+      x.fillStyle = '#e0952c';
+      var sx = w * 0.5, sy = h * 0.16, s2 = h * 0.055;
+      x.beginPath();
+      x.moveTo(sx - s2, sy - s2 * 0.45); x.lineTo(sx - s2 * 0.35, sy - s2 * 0.45);
+      x.lineTo(sx + s2 * 0.25, sy - s2); x.lineTo(sx + s2 * 0.25, sy + s2);
+      x.lineTo(sx - s2 * 0.35, sy + s2 * 0.45); x.lineTo(sx - s2, sy + s2 * 0.45);
+      x.closePath(); x.fill();
+      x.strokeStyle = '#e0952c'; x.lineWidth = 2.4; x.lineCap = 'round';
+      x.beginPath(); x.arc(sx + s2 * 0.4, sy, s2 * 0.7, -0.9, 0.9); x.stroke();
+      x.beginPath(); x.arc(sx + s2 * 0.4, sy, s2 * 1.15, -0.9, 0.9); x.stroke();
+      /* a star for getting it right */
+      x.fillStyle = '#f0b429';
+      var stx = w * 0.5, sty = h * 0.84, r = h * 0.075;
+      x.beginPath();
+      for (var p2 = 0; p2 < 10; p2++) {
+        var a = p2 / 10 * Math.PI * 2 - Math.PI / 2, rr = p2 % 2 ? r * 0.45 : r;
+        if (p2) x.lineTo(stx + Math.cos(a) * rr, sty + Math.sin(a) * rr);
+        else x.moveTo(stx + Math.cos(a) * rr, sty + Math.sin(a) * rr);
+      }
+      x.closePath(); x.fill();
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
   }
 ];
+
 
 
 
