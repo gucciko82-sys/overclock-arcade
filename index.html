@@ -1612,6 +1612,122 @@ var GAMES = [
       x.closePath(); x.fill();
       x.textAlign = 'left'; x.textBaseline = 'alphabetic';
     }
+  },
+  {
+    id: 'trace', name: 'Trace', cat: 'kids', tag: 'Handwriting', isNew: true,
+    desc: 'Big letters on handwriting lines, with a green dot to start on and arrows to follow. Trace a letter, trace your own name, build a word. Very forgiving — a wobbly line still counts.',
+    best: function () {
+      var s = lsJSON('trace_v1'), n = 0, k;
+      if (!s || !s.letters || typeof s.letters !== 'object') return null;
+      for (k in s.letters) { if (Object.prototype.hasOwnProperty.call(s.letters, k) && s.letters[k]) n++; }
+      return n > 0 ? ['Letters written', n] : null;
+    },
+    cover: function (x, w, h) {
+      /* warm paper, not the arcade's dark neon — this one is for the littlest player */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#fdf3e2'); g.addColorStop(1, '#f5e6cf');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* the three handwriting lines she writes between */
+      var top = h * 0.26, mid = h * 0.55, base = h * 0.82;
+      x.strokeStyle = '#9dc4dd'; x.lineWidth = 1.6;
+      x.beginPath(); x.moveTo(w * 0.08, top); x.lineTo(w * 0.92, top); x.stroke();
+      x.strokeStyle = '#c9ad86'; x.setLineDash([6, 6]);
+      x.beginPath(); x.moveTo(w * 0.08, mid); x.lineTo(w * 0.92, mid); x.stroke();
+      x.setLineDash([]);
+      x.strokeStyle = '#8a5a2b'; x.lineWidth = 2.2;
+      x.beginPath(); x.moveTo(w * 0.08, base); x.lineTo(w * 0.92, base); x.stroke();
+      /* a fat letter L, the shape of the path she follows */
+      var lx = w * 0.34, thick = h * 0.13;
+      x.strokeStyle = '#e2d3bb'; x.lineWidth = thick;
+      x.lineCap = 'round'; x.lineJoin = 'round';
+      x.beginPath(); x.moveTo(lx, top); x.lineTo(lx, base); x.lineTo(w * 0.63, base); x.stroke();
+      /* the arrows that tell her which way to go */
+      x.fillStyle = '#e2762b';
+      var ay = [top + (base - top) * 0.36, top + (base - top) * 0.68], ai;
+      for (ai = 0; ai < ay.length; ai++) {
+        var a = ay[ai], s2 = h * 0.055;
+        x.beginPath();
+        x.moveTo(lx - s2 * 0.72, a - s2 * 0.5); x.lineTo(lx + s2 * 0.72, a - s2 * 0.5);
+        x.lineTo(lx, a + s2 * 0.62); x.closePath(); x.fill();
+      }
+      /* and the green dot she starts on */
+      x.fillStyle = 'rgba(95,177,78,0.28)';
+      x.beginPath(); x.arc(lx, top, h * 0.115, 0, TAU); x.fill();
+      x.fillStyle = '#3f9b34';
+      x.beginPath(); x.arc(lx, top, h * 0.072, 0, TAU); x.fill();
+      x.fillStyle = '#ffffff';
+      x.font = '800 ' + Math.round(h * 0.085) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText('1', lx, top + 1);
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'echo', name: 'Echo', cat: 'kids', tag: 'Listening', isNew: true,
+    desc: 'Short stories read aloud with a picture for every line, then a question about what happened. No reading needed — she listens, then taps a picture. Stories get longer as she grows.',
+    best: function () {
+      var s = lsJSON('echo_v1'), n = 0, k;
+      if (!s || !s.heard || typeof s.heard !== 'object') return null;
+      for (k in s.heard) { if (Object.prototype.hasOwnProperty.call(s.heard, k) && s.heard[k]) n++; }
+      return n > 0 ? ['Stories heard', n] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#fdf3e2'); g.addColorStop(1, '#f6e6cd');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* the story panel, with a little scene in it */
+      var pw = w * 0.62, ph = h * 0.36, px = (w - pw) / 2, py = h * 0.11;
+      x.fillStyle = '#ffe9c2';
+      x.beginPath(); x.roundRect(px, py, pw, ph, 10); x.fill();
+      x.strokeStyle = '#9dc4dd'; x.lineWidth = 2; x.stroke();
+      var gy = py + ph * 0.68;
+      x.fillStyle = '#b6803f';
+      x.fillRect(px + 2, gy, pw - 4, py + ph - gy - 2);
+      x.fillStyle = '#f2c53d';                       /* a low sun */
+      x.beginPath(); x.arc(px + pw * 0.76, py + ph * 0.28, ph * 0.13, 0, TAU); x.fill();
+      x.fillStyle = '#7f9f5e';                       /* a small mound on the ground line */
+      x.beginPath(); x.arc(px + pw * 0.34, gy, ph * 0.24, Math.PI, TAU); x.fill();
+      /* the two pictures she chooses between, one already picked */
+      var tw = w * 0.3, th = h * 0.27, ty = h * 0.58, gap = w * 0.06;
+      var tx0 = (w - (tw * 2 + gap)) / 2, i;
+      for (i = 0; i < 2; i++) {
+        var tx = tx0 + i * (tw + gap), hot = i === 1;
+        x.fillStyle = hot ? '#fff6e2' : '#f7ecd8';
+        x.beginPath(); x.roundRect(tx, ty, tw, th, 9); x.fill();
+        x.strokeStyle = hot ? '#5fb14e' : '#e0d0b4';
+        x.lineWidth = hot ? 3 : 1.8; x.stroke();
+        /* these tiles are far wider than they are tall, so every shape is sized
+           off the SHORT side or it grows straight out through the top and bottom */
+        var u = Math.min(tw, th), cx = tx + tw / 2;
+        if (hot) {                                    /* a duck */
+          x.fillStyle = '#f2c53d';
+          x.beginPath(); x.ellipse(cx - u * 0.06, ty + th * 0.64, u * 0.27, u * 0.19, 0, 0, TAU); x.fill();
+          x.beginPath(); x.arc(cx + u * 0.2, ty + th * 0.4, u * 0.155, 0, TAU); x.fill();
+          x.fillStyle = '#e2762b';
+          x.beginPath();
+          x.moveTo(cx + u * 0.32, ty + th * 0.36); x.lineTo(cx + u * 0.5, ty + th * 0.41);
+          x.lineTo(cx + u * 0.32, ty + th * 0.46); x.closePath(); x.fill();
+          x.fillStyle = '#4a3421';
+          x.beginPath(); x.arc(cx + u * 0.24, ty + th * 0.37, u * 0.03, 0, TAU); x.fill();
+        } else {                                      /* a tree */
+          x.fillStyle = '#a9773f';
+          x.fillRect(cx - u * 0.055, ty + th * 0.5, u * 0.11, th * 0.36);
+          x.fillStyle = '#7fae5c';
+          x.beginPath(); x.arc(cx, ty + th * 0.42, u * 0.24, 0, TAU); x.fill();
+        }
+      }
+      /* the speaker, because every word here is spoken */
+      x.fillStyle = '#e0952c';
+      var sx = w * 0.5, sy = h * 0.05, s2 = h * 0.042;
+      x.beginPath();
+      x.moveTo(sx - s2, sy - s2 * 0.45); x.lineTo(sx - s2 * 0.35, sy - s2 * 0.45);
+      x.lineTo(sx + s2 * 0.25, sy - s2); x.lineTo(sx + s2 * 0.25, sy + s2);
+      x.lineTo(sx - s2 * 0.35, sy + s2 * 0.45); x.lineTo(sx - s2, sy + s2 * 0.45);
+      x.closePath(); x.fill();
+      x.strokeStyle = '#e0952c'; x.lineWidth = 2.2; x.lineCap = 'round';
+      x.beginPath(); x.arc(sx + s2 * 0.4, sy, s2 * 0.8, -0.9, 0.9); x.stroke();
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
   }
 ];
 

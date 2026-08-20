@@ -1204,3 +1204,93 @@ the wrong arguments, a selector that swept in the mute buttons, a grep
 that matched code comments saying there is deliberately no wrong state,
 and an `adapt(id, right, probe)` call passed a state object as its id.
 A red result deserves exactly the same scrutiny as a green one.
+
+### Built and play-tested 2026-08-20 — Trace and Echo (games 44 and 45, built for Lizzy)
+
+Two more for the same brief as Char: *find her level, then help her grow.*
+Neither asks her to read anything, and neither asks her to pick a difficulty.
+
+**Trace — letter formation.** Big letters on real handwriting lines, a green
+numbered dot to start on and orange arrows for direction. Three activities:
+trace a letter, trace her own name (defaults to LIZZY, changeable in the
+grown-ups panel), and build a word from big letter tiles with exactly one
+distractor. Seven rungs, from *One straight line* through *Slanty lines* and
+*Round letters* to *Every letter* — named in her language, never "Level 4".
+
+The property that mattered most was **forgiveness**, since her motor control
+may be affected. Measured directly rather than assumed: at the most forgiving
+tolerance (35% of letter height) an exact trace, a 10% offset, a **25% offset**
+and an 18% wobble all complete, while a drag somewhere else entirely correctly
+does not. Direction is deliberately *not* enforced down there — the priority is
+that she can succeed at all. It tightens as she climbs: at the tightest
+tolerance a backwards trace correctly fails while a forward trace 10% off
+centre still passes. Forgiving where it should be, strict where it must be.
+
+**Echo — listening comprehension.** Sixteen short stories read aloud with a
+drawn scene per line, then a question answered by tapping a picture. Six rungs:
+two sentences with the question asked straight after its own sentence, up
+through holding it in mind to the end, three pictures, longer stories with no
+re-read, and finally a thinking question asked *before* the story is told. A
+wrong tap fades that picture, re-reads the sentence, shows the right one and
+moves on — no red, no X, no buzzer, no shake anywhere in the game.
+
+The builder validated all 32 questions against the story text in-page: every
+answer word must appear on a word boundary, every distractor's keyword must be
+absent. That caught the classic bug at design time — the "who ran to the pond"
+distractor could not be *bird*, because the story already has a duck in it.
+
+#### The adaptive ladders were wrong in a way the tests were not asking about
+
+Both games ship an explicit rung ladder, and both passed their own checks. But
+simulating a learner of fixed ability through Echo's real `record()` showed her
+settling **a rung above her true level at about 60% correct**, with the level
+changing on a quarter of all items. Three causes, all of them arithmetic rather
+than opinion:
+
+- **Two pictures means a pure guess is right half the time**, so "three correct
+  in a row" arrives by luck roughly every eighth item. A streak alone cannot
+  tell learning from luck at the low rungs.
+- **Demoting on two misses in four fires about 18% of the time even when she is
+  placed correctly** at 80%. The rule meant to protect her confidence was the
+  main thing making the level bounce.
+- **A probe promoted her on a single correct answer.** The mechanism that keeps
+  her from being stuck below her level was handing her a whole rung on one
+  lucky tap, every sixteen items.
+
+Fixed: promotion now needs a good run *and* a good recent window, the window
+gate sits at 0.85 rather than 0.75 (at the right rung two pictures already put
+her near 75%, so a 0.75 gate promoted her straight out of the level that fit),
+demotion needs three misses in five, and **a probe must confirm itself** — the
+next item probes again and only a second hit moves her. Placement went from
+2.27 to 1.56 for a true-ability-1 learner and 3.5 to 2.89 for ability 3, churn
+roughly halved, and the longest run of wrong answers at the floor dropped from
+eight to five.
+
+**Char had the same probe bug** and was already shipped, so it was fixed there
+too. Char's own numbers: placement 1.12 / 2.96 / 4.40 against true abilities of
+1 / 3 / 5. Three further changes were tried there — a settle-in lock, a slower
+demote, clearing the recent window on a move — and **all three were reverted**.
+The window clear was a measured no-op (`promote()` and `demote()` already did
+it), and the other two made placement and accuracy worse while buying little.
+The probe fix alone was best on every metric, so that is all that shipped.
+
+Worth stating plainly: those numbers come from a *simulated* learner, and the
+first model used was itself wrong — it had a sharp cliff between rungs (95%
+at her level, 67% one above), which put the 75-85% target band between rungs
+where no adaptive system could ever land. Swapping to a graded ability curve
+changed the conclusions. The real proof is Lizzy playing it.
+
+**Verification.** Syntax gate on both (Echo 1,862 script lines, Trace 1,697,
+zero external references). Device matrix PASS on all three profiles with zero
+console errors. `ui-audit` clean in both orientations. Echo additionally: eight
+corrupt or hostile saves all render fresh rather than throwing or dropping her
+at the hard end, the stored rung is resumed rather than re-earned, and the game
+still starts and plays with `speechSynthesis` deleted. Hub reconciled against
+disk — **45 cards, 45 game folders, all 45 links resolve**.
+
+Two small things caught by looking at screenshots rather than by any check:
+Trace captioned a new letter with the previous letter's toast ("Letter I —
+done" printed under a letter L), and Echo's hub cover sized its shapes off the
+tile's width while positioning them off its height — on tiles far wider than
+they are tall, the tree's canopy swallowed its own trunk and grew out through
+the bottom of the tile. Both fixed.

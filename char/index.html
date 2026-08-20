@@ -757,6 +757,7 @@ function freshState() {
     streak: blankPerAct(0),
     recent: blankPerAct(function () { return []; }),
     since: blankPerAct(0),             /* items since the last probe */
+    probeHit: blankPerAct(0),          /* a probe came back right and is awaiting confirmation */
     played: blankPerAct(0),
     hist: blankPerAct(function () { return [[0, 0]]; }),
     stars: 0, rounds: 0,
@@ -971,8 +972,11 @@ function buildItem(actId, lvlIn, isProbe) {
    the rung above. She never sees that it was a test. */
 function nextItemSpec() {
   var id = state.act;
-  if (state.lvl[id] < maxRung(id) && state.since[id] >= PROBE_EVERY + Math.floor(Math.random() * 6)) {
-    state.since[id] = 0;
+  var due = state.since[id] >= PROBE_EVERY + Math.floor(Math.random() * 6);
+  /* A probe that came back right is asked once more before it counts. Two tiles
+     means a single lucky tap would otherwise hand her a whole rung, which parks
+     her above her real level and turns play into guessing. */
+  if (state.lvl[id] < maxRung(id) && (due || state.probeHit[id])) {
     return buildItem(id, state.lvl[id] + 1, true);
   }
   return buildItem(id, state.lvl[id], false);
@@ -1009,9 +1013,18 @@ function adapt(id, wasRight, wasProbe) {
   state.played[id]++;
   state.since[id]++;
   if (wasProbe) {
-    /* A probe never costs her anything. Right: she moves up. Wrong: nothing. */
-    if (wasRight && promote(id)) moved = 'up';
-    state.streak[id] = wasRight ? state.streak[id] : 0;
+    /* A probe never costs her anything. Right twice running: she moves up.
+       Wrong: nothing lost, and the probe clock starts again. */
+    if (wasRight) {
+      if (state.probeHit[id]) {
+        state.probeHit[id] = 0; state.since[id] = 0;
+        if (promote(id)) moved = 'up';
+      } else {
+        state.probeHit[id] = 1;          /* ask the same rung again next item */
+      }
+    } else {
+      state.probeHit[id] = 0; state.since[id] = 0; state.streak[id] = 0;
+    }
     return moved;
   }
   var r = state.recent[id];
