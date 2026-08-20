@@ -1,0 +1,1795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Sum — Learn the Numbers</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="A patient maths tutor for the Overclock arcade. Ten-frames, number lines, dot arrays and fraction bars — seven skills, adaptive practice, and a model worked through every time you slip.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sum">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eaf0ff;
+    --dim: rgba(234,240,255,0.62);
+    --panel: rgba(18,24,44,0.78);
+    --line: rgba(234,240,255,0.14);
+    --good: #63e2a8;
+    --cool: #6fd8ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: manipulation;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(38,52,102,0.55), rgba(11,15,30,0)) ,
+      var(--bg); }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 8;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0;
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.22); }
+  body:not(.playing) #topbtns { display: none; }
+
+  /* ------------------------------------------------------------ play UI -- */
+  #play {
+    position: absolute; inset: 0; display: none; flex-direction: column;
+    padding: max(7px, env(safe-area-inset-top)) max(9px, env(safe-area-inset-right))
+             max(9px, env(safe-area-inset-bottom)) max(9px, env(safe-area-inset-left));
+    z-index: 2;
+  }
+  body.playing #play { display: flex; }
+
+  #head { flex: none; display: flex; align-items: center; gap: 9px;
+          height: 46px; padding-right: 104px; }
+  .hbtn { height: 40px; min-width: 66px; padding: 0 11px; border-radius: 10px;
+    background: rgba(255,204,77,0.10); border: 1px solid rgba(255,204,77,0.42);
+    color: var(--accent); font-family: inherit; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.16em; cursor: pointer; }
+  .hbtn:active { background: rgba(255,204,77,0.26); }
+  #hinfo { flex: 1; min-width: 0; }
+  #hname { display: flex; justify-content: space-between; gap: 8px;
+    font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--dim); white-space: nowrap; overflow: hidden; }
+  #hname i { font-style: normal; overflow: hidden; text-overflow: ellipsis; }
+  #hname b { color: var(--accent); flex: none; }
+  #hbar { height: 6px; border-radius: 3px; background: rgba(234,240,255,0.10);
+    margin-top: 6px; overflow: hidden; }
+  #hbar i { display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--cool), var(--accent)); }
+  #tbar { display: none; height: 4px; border-radius: 2px;
+    background: rgba(234,240,255,0.08); margin-top: 3px; overflow: hidden; }
+  body.timed #tbar { display: block; }
+  #tbar i { display: block; height: 100%; width: 100%; background: var(--cool); }
+
+  #body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px;
+    width: 100%; max-width: 940px; margin: 0 auto; }
+  #work { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  #qline { flex: none; text-align: center; line-height: 1.12;
+    font-size: clamp(25px, 7.2vw, 42px); font-weight: 700; letter-spacing: 0.03em;
+    padding: 2px 0 4px; font-variant-numeric: tabular-nums; }
+  #slot { color: var(--accent); display: inline-block; min-width: 1.5em;
+    border-bottom: 3px solid rgba(255,204,77,0.45); margin: 0 0.1em; }
+  #slot.hide { display: none; }
+  #modelwrap { flex: 1; min-height: 56px; position: relative; }
+  canvas#model { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #fb { flex: none; min-height: 32px; text-align: center; padding: 3px 6px;
+    font-size: 13px; line-height: 1.3; color: var(--dim); }
+  #fb.good { color: var(--good); }
+  #fb.teach { color: var(--accent); }
+
+  #entry { flex: none; width: 100%; max-width: 430px; margin: 0 auto; }
+  #pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .key { height: 54px; min-height: 44px; border-radius: 11px;
+    background: rgba(234,240,255,0.055); border: 1px solid var(--line);
+    color: var(--fg); font-family: inherit; font-size: 23px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    font-variant-numeric: tabular-nums; padding: 0; }
+  .key:active { background: rgba(255,204,77,0.20); }
+  .key.act { background: rgba(255,204,77,0.13); border-color: rgba(255,204,77,0.45);
+    color: var(--accent); font-size: 19px; }
+  .key.sel { box-shadow: 0 0 0 2px var(--accent) inset; }
+  #choices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .ch { min-height: 56px; border-radius: 11px; background: rgba(234,240,255,0.055);
+    border: 1px solid var(--line); color: var(--fg); font-family: inherit;
+    font-size: 21px; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px; padding: 4px; }
+  .ch:active { background: rgba(255,204,77,0.20); }
+  .ch small { color: var(--dim); font-size: 10px; font-weight: 700; }
+  #teachbtns { display: flex; gap: 8px; justify-content: center; }
+  #pad.off, #choices.off, #teachbtns.off { display: none; }
+
+  /* stacked fraction glyph */
+  .fr { display: inline-flex; flex-direction: column; align-items: center;
+    vertical-align: middle; line-height: 1; margin: 0 0.12em; }
+  .fr i { font-style: normal; }
+  .fr u { text-decoration: none; border-top: 2px solid currentColor;
+    margin-top: 2px; padding-top: 2px; }
+
+  /* ------------------------------------------------------------ overlay -- */
+  #overlay {
+    position: absolute; inset: 0; z-index: 10; display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(20,28,58,0.86), rgba(6,9,18,0.96));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card { width: min(560px, 100%); background: rgba(16,21,40,0.94);
+    border: 1px solid var(--line); border-radius: 16px; padding: 20px 18px 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.65); text-align: center; }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 5px 0 2px; font-size: clamp(30px, 9vw, 50px); letter-spacing: 0.16em;
+    font-weight: 700; line-height: 1; color: var(--accent);
+    text-shadow: 0 0 22px rgba(255,204,77,0.35); }
+  h2 { margin: 2px 0 6px; font-size: clamp(18px, 5.4vw, 26px); letter-spacing: 0.09em; font-weight: 700; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.02em; margin-bottom: 10px; line-height: 1.4; }
+  .keys { display: grid; grid-template-columns: 1fr; gap: 5px; font-size: 12.5px;
+    color: var(--dim); margin: 10px auto 4px; max-width: 360px; text-align: left; }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(234,240,255,0.10); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .btn { margin-top: 14px; display: inline-flex; align-items: center; justify-content: center;
+    min-height: 48px; padding: 0 24px; border-radius: 10px;
+    border: 1px solid rgba(255,204,77,0.55); background: rgba(255,204,77,0.14);
+    color: var(--accent); font-family: inherit; font-size: 13px; font-weight: 700;
+    letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; }
+  .btn:active { background: rgba(255,204,77,0.3); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(234,240,255,0.05); }
+  .btnrow { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(24px, 7vw, 40px); font-weight: 700; letter-spacing: 0.3em;
+    text-transform: uppercase; color: var(--accent); }
+
+  .slist { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 10px; text-align: left; }
+  .srow { display: flex; align-items: center; gap: 8px; min-height: 46px;
+    padding: 5px 10px; border-radius: 10px; border: 1px solid var(--line);
+    background: rgba(234,240,255,0.045); color: var(--fg); font-family: inherit;
+    width: 100%; cursor: pointer; text-align: left; }
+  .srow:active { background: rgba(255,204,77,0.16); }
+  .srow.lock { opacity: 0.42; cursor: default; }
+  .srow.cur { border-color: rgba(255,204,77,0.6); background: rgba(255,204,77,0.10); }
+  .srow .sn { flex: 1; min-width: 0; font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; }
+  .srow .sn em { display: block; font-style: normal; font-size: 9.5px; font-weight: 400;
+    color: var(--dim); letter-spacing: 0.04em; margin-top: 2px; }
+  .srow .sp { flex: none; font-size: 11px; font-weight: 700; color: var(--accent);
+    font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
+  .mini { height: 5px; border-radius: 3px; background: rgba(234,240,255,0.10);
+    overflow: hidden; margin-top: 4px; }
+  .mini i { display: block; height: 100%; background: linear-gradient(90deg, var(--cool), var(--accent)); }
+  .weak { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-top: 8px; }
+  .weak b { font-weight: 700; font-size: 12px; padding: 5px 9px; border-radius: 8px;
+    background: rgba(255,159,110,0.14); border: 1px solid rgba(255,159,110,0.36);
+    color: #ffb08a; font-variant-numeric: tabular-nums; }
+  .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+  .chip { min-height: 44px; border-radius: 10px; border: 1px solid var(--line);
+    background: rgba(234,240,255,0.05); color: var(--fg); font-family: inherit;
+    font-size: 16px; font-weight: 700; cursor: pointer; font-variant-numeric: tabular-nums; }
+  .chip.on { border-color: rgba(255,204,77,0.6); background: rgba(255,204,77,0.16); color: var(--accent); }
+  .note { font-size: 11px; color: var(--dim); margin-top: 9px; line-height: 1.4; }
+
+  @media (max-height: 620px) {
+    .card { padding: 12px 14px 12px; border-radius: 12px; }
+    .keys { display: none; }
+    .slist { grid-template-columns: repeat(2, 1fr); }
+    .srow { min-height: 44px; }
+    .tagline { margin-bottom: 6px; font-size: 11.5px; }
+    .btn { margin-top: 10px; min-height: 44px; }
+    .chips { grid-template-columns: repeat(6, 1fr); }
+  }
+  @media (max-height: 460px) {
+    .slist { grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .card .eyebrow { display: none; }
+    h1 { font-size: clamp(26px, 7vw, 36px); }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    .tagline { font-size: 11px; margin-bottom: 5px; }
+    .srow .sn em { display: none; }
+    .srow .mini { display: none; }
+    .srow.ro { min-height: 34px; }
+    .btn { min-height: 42px; }
+    .card { padding: 10px 12px 12px; }
+    .srow .sn { font-size: 10.5px; }
+    .srow { min-height: 44px; padding: 4px 8px; }
+    .note { font-size: 10px; margin-top: 5px; }
+    .weak b { font-size: 11px; padding: 3px 7px; }
+    .weak { margin-top: 5px; gap: 4px; }
+    .btn { margin-top: 8px; }
+    .btnrow { gap: 7px; }
+    .chips { grid-template-columns: repeat(6, 1fr); gap: 5px; }
+  }
+  @media (max-height: 560px) {
+    #head { height: 40px; }
+    #body { flex-direction: row; gap: 10px; align-items: stretch; }
+    #work { flex: 1; min-width: 0; }
+    #entry { width: 214px; max-width: 214px; flex: none; margin: 0; align-self: center; }
+    .key { height: 44px; font-size: 20px; }
+    .key.act { font-size: 17px; }
+    .ch { min-height: 48px; font-size: 18px; }
+    #qline { font-size: clamp(21px, 4.6vw, 32px); }
+    #fb { min-height: 24px; font-size: 11.5px; }
+  }
+  @media (max-width: 372px) {
+    #head { padding-right: 100px; gap: 7px; }
+    .hbtn { min-width: 60px; padding: 0 8px; letter-spacing: 0.1em; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="play">
+    <div id="head">
+      <button class="hbtn" id="menuBtn" type="button">SKILLS</button>
+      <div id="hinfo">
+        <div id="hname"><i id="hlabel">&nbsp;</i><b id="hstreak"></b></div>
+        <div id="hbar"><i id="hfill"></i></div>
+        <div id="tbar"><i id="tfill"></i></div>
+      </div>
+    </div>
+    <div id="body">
+      <div id="work">
+        <div id="qline"><span id="qpre"></span><span id="slot"></span><span id="qpost"></span></div>
+        <div id="modelwrap"><canvas id="model"></canvas></div>
+        <div id="fb"></div>
+      </div>
+      <div id="entry">
+        <div id="pad"></div>
+        <div id="choices" class="off"></div>
+        <div id="teachbtns" class="off"></div>
+      </div>
+    </div>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   SUM — the Overclock arcade's maths tutor.  sum-overclock-v1-marker
+   Seven skills on a ladder, each with a real visual model drawn on canvas:
+   ten-frames, a number line you hop along, dot arrays you can count, place
+   value columns that show the regroup, and shaded fraction bars.
+   Practice is adaptive: every individual FACT ("7x8") carries its own
+   Leitner box and due counter, so shaky facts come back fast and solid
+   ones fade out.  Getting one wrong is never a bare X — the model is
+   walked through step by step and the fact is re-queued.
+   No death, no timer (unless you ask for one).  One file, no assets.
+   ========================================================================= */
+"use strict";
+
+var SUM_MARKER = 'sum-overclock-v1-marker';
+var K_SAVE = 'sum_v1';
+var K_MUTE = 'sum_muted_v1';
+var UNLOCK_AT = 0.5;        /* fraction of a skill's facts at box>=4 to unlock the next */
+var MASTER_BOX = 4;
+var BOX_MAX = 5;
+var INTERVAL = [1, 2, 4, 8, 16, 30];   /* how many questions until a fact is due again */
+var ACTIVE_CAP = 7;
+var WORKING_SET = 14;       /* how many candidates compete for each question */         /* how many shaky facts may be in play before new ones appear */
+var TIMER_SECS = 20;
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function pick(a) { return a[(Math.random() * a.length) | 0]; }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function mulberry(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function isNum(v) { return typeof v === 'number' && isFinite(v); }
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') { try { actx.resume(); } catch (e) {} } return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.34;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = !!m; saveStr(K_MUTE, muted ? '1' : '0');
+  if (master) master.gain.value = muted ? 0 : 0.34;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = muted ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  try {
+    var t = actx.currentTime + (delay || 0);
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(24, f1), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) {}
+}
+var sfx = {
+  tap:    function () { tone('sine', 660, 620, 0.05, 0.10); },
+  del:    function () { tone('sine', 340, 260, 0.06, 0.08); },
+  right:  function () { tone('sine', 523, 523, 0.14, 0.14); tone('sine', 784, 784, 0.26, 0.12, 0.11); },
+  gentle: function () { tone('sine', 300, 250, 0.20, 0.10); tone('sine', 236, 220, 0.26, 0.07, 0.14); },
+  step:   function () { tone('sine', 470, 470, 0.07, 0.08); },
+  unlock: function () {
+    tone('sine', 523, 523, 0.16, 0.12); tone('sine', 659, 659, 0.16, 0.12, 0.13);
+    tone('sine', 784, 784, 0.34, 0.13, 0.26);
+  }
+};
+
+/* ================================================================ SKILLS == */
+var SKILLS = [
+  { id: 'bonds',  name: 'Number bonds to 10',  short: 'BONDS TO 10',   blurb: 'Count dots and fill the ten-frame.' },
+  { id: 'add20',  name: 'Addition within 20',  short: 'ADD TO 20',     blurb: 'Hop forward along the number line.' },
+  { id: 'sub20',  name: 'Subtraction within 20', short: 'TAKE AWAY',   blurb: 'Hop back along the number line.' },
+  { id: 'cb100',  name: 'Carry & borrow to 100', short: 'CARRY & BORROW', blurb: 'Two-digit sums that need a regroup.' },
+  { id: 'times',  name: 'Times tables',        short: 'TIMES TABLES',  blurb: 'See the rows and columns of an array.' },
+  { id: 'divide', name: 'Division facts',      short: 'DIVISION',      blurb: 'Share the dots into equal groups.' },
+  { id: 'frac',   name: 'Simple fractions',    short: 'FRACTIONS',     blurb: 'Compare and add with shaded bars.' }
+];
+var SKILL_BY_ID = {};
+for (var si = 0; si < SKILLS.length; si++) SKILL_BY_ID[SKILLS[si].id] = SKILLS[si];
+
+/* -------------------------------------------------------------- the pool -- */
+/* Every practisable item is a FACT with a stable key.  FACT[key] holds the
+   operands; POOL[skill] is the ordered list of keys (easiest first). */
+var FACT = {};
+var POOL = {};
+function addFact(skill, key, data) {
+  if (FACT[key]) return;
+  data.skill = skill; data.key = key;
+  FACT[key] = data;
+  POOL[skill].push(key);
+}
+
+/* 1. bonds ---------------------------------------------------------------- */
+POOL.bonds = [];
+for (var n1 = 1; n1 <= 10; n1++) addFact('bonds', 'c:' + n1, { kind: 'count', n: n1 });
+for (var a1 = 0; a1 <= 10; a1++) addFact('bonds', 'b:' + a1, { kind: 'bond', a: a1 });
+
+/* 2. addition within 20 --------------------------------------------------- */
+POOL.add20 = [];
+(function () {
+  var list = [];
+  for (var a = 0; a <= 10; a++) for (var b = a; b <= 10; b++) list.push([a, b]);
+  list.sort(function (p, q) { return (p[0] + p[1]) - (q[0] + q[1]); });
+  for (var i = 0; i < list.length; i++) addFact('add20', 'a:' + list[i][0] + '+' + list[i][1], { kind: 'add', a: list[i][0], b: list[i][1] });
+})();
+
+/* 3. subtraction within 20 ------------------------------------------------- */
+POOL.sub20 = [];
+(function () {
+  var list = [];
+  for (var s = 1; s <= 10; s++) for (var r = 0; r <= 10; r++) {
+    var m = s + r;
+    if (m <= 20) list.push([m, s]);
+  }
+  list.sort(function (p, q) { return p[0] - q[0]; });
+  for (var i = 0; i < list.length; i++) addFact('sub20', 's:' + list[i][0] + '-' + list[i][1], { kind: 'sub', a: list[i][0], b: list[i][1] });
+})();
+
+/* 4. carry & borrow to 100 ------------------------------------------------- */
+/* Enumerated from a fixed seed so the fact keys are stable across sessions. */
+POOL.cb100 = [];
+(function () {
+  var rng = mulberry(29082026), guard = 0;
+  var wantAdd = 54, wantSub = 54, gotAdd = 0, gotSub = 0;
+  while ((gotAdd < wantAdd || gotSub < wantSub) && guard++ < 20000) {
+    if (gotAdd < wantAdd) {
+      var oa = 1 + ((rng() * 9) | 0);                       /* 1..9 */
+      var ob = (10 - oa) + ((rng() * (oa)) | 0);            /* >= 10-oa, <= 9 */
+      if (ob > 9) ob = 9;
+      if (oa + ob < 10) ob = 10 - oa;
+      var ta = 1 + ((rng() * 7) | 0);                       /* 1..7 */
+      var tb = 1 + ((rng() * (8 - ta)) | 0);                /* 1..8-ta */
+      var A = ta * 10 + oa, B = tb * 10 + ob;
+      if (A + B <= 99 && (A % 10) + (B % 10) >= 10) {
+        var k1 = 'p:' + A + '+' + B;
+        if (!FACT[k1]) { addFact('cb100', k1, { kind: 'cadd', a: A, b: B }); gotAdd++; }
+      }
+    }
+    if (gotSub < wantSub) {
+      var ob2 = 1 + ((rng() * 9) | 0);                      /* 1..9 */
+      var oa2 = (rng() * ob2) | 0;                          /* 0..ob2-1 */
+      var tb2 = 1 + ((rng() * 7) | 0);                      /* 1..7 */
+      var ta2 = tb2 + 1 + ((rng() * (9 - tb2)) | 0);        /* tb2+1..9 */
+      var A2 = ta2 * 10 + oa2, B2 = tb2 * 10 + ob2;
+      if (A2 <= 99 && A2 - B2 > 0 && (A2 % 10) < (B2 % 10)) {
+        var k2 = 'm:' + A2 + '-' + B2;
+        if (!FACT[k2]) { addFact('cb100', k2, { kind: 'csub', a: A2, b: B2 }); gotSub++; }
+      }
+    }
+  }
+  POOL.cb100.sort(function (p, q) { return (FACT[p].a + FACT[p].b) - (FACT[q].a + FACT[q].b); });
+})();
+
+/* 5. times tables ---------------------------------------------------------- */
+POOL.times = [];
+(function () {
+  var order = [2, 5, 10, 3, 4, 11, 6, 9, 7, 8, 12];
+  for (var i = 0; i < order.length; i++) for (var n = 1; n <= 12; n++) {
+    addFact('times', 'x:' + order[i] + '*' + n, { kind: 'mul', a: order[i], b: n, table: order[i] });
+  }
+})();
+
+/* 6. division facts -------------------------------------------------------- */
+POOL.divide = [];
+(function () {
+  var order = [2, 5, 10, 3, 4, 11, 6, 9, 7, 8, 12];
+  for (var i = 0; i < order.length; i++) for (var q = 1; q <= 12; q++) {
+    var d = order[i];
+    addFact('divide', 'd:' + (d * q) + '/' + d, { kind: 'div', a: d * q, b: d, q: q, table: d });
+  }
+})();
+
+/* 7. simple fractions ------------------------------------------------------ */
+POOL.frac = [];
+var FRACS = [[1, 2], [1, 3], [2, 3], [1, 4], [3, 4]];
+(function () {
+  for (var i = 0; i < FRACS.length; i++) for (var j = i + 1; j < FRACS.length; j++) {
+    addFact('frac', 'fc:' + i + '|' + j, { kind: 'fcmp', i: i, j: j });
+  }
+  for (var d = 2; d <= 4; d++) for (var a = 1; a < d; a++) for (var b = 1; a + b <= d; b++) {
+    addFact('frac', 'fa:' + d + ':' + a + '+' + b, { kind: 'fadd', d: d, a: a, b: b });
+  }
+})();
+
+/* ================================================================== save == */
+function freshSave() {
+  return { v: 1, facts: {}, skills: {}, unlocked: ['bonds'], skill: 'bonds',
+           mulTable: 0, divTable: 0, timer: false, streak: 0, bestStreak: 0, total: 0 };
+}
+function sanitize(raw) {
+  var s = freshSave();
+  if (!raw || typeof raw !== 'object' || Object.prototype.toString.call(raw) === '[object Array]') return s;
+  /* facts */
+  if (raw.facts && typeof raw.facts === 'object' && Object.prototype.toString.call(raw.facts) !== '[object Array]') {
+    for (var k in raw.facts) {
+      if (!Object.prototype.hasOwnProperty.call(raw.facts, k)) continue;
+      if (!FACT[k]) continue;                       /* drop keys we don't know */
+      var f = raw.facts[k];
+      if (!f || typeof f !== 'object') continue;
+      s.facts[k] = {
+        n: isNum(f.n) ? clamp(Math.floor(f.n), 0, 99999) : 0,
+        c: isNum(f.c) ? clamp(Math.floor(f.c), 0, 99999) : 0,
+        box: isNum(f.box) ? clamp(Math.floor(f.box), -1, BOX_MAX) : -1,
+        due: isNum(f.due) ? clamp(Math.floor(f.due), 0, 9999999) : 0,
+        ms: isNum(f.ms) ? clamp(f.ms, 0, 600000) : 0
+      };
+      if (s.facts[k].c > s.facts[k].n) s.facts[k].c = s.facts[k].n;
+    }
+  }
+  /* per-skill counters */
+  if (raw.skills && typeof raw.skills === 'object' && Object.prototype.toString.call(raw.skills) !== '[object Array]') {
+    for (var id in raw.skills) {
+      if (!Object.prototype.hasOwnProperty.call(raw.skills, id)) continue;
+      if (!SKILL_BY_ID[id]) continue;
+      var sk = raw.skills[id];
+      s.skills[id] = { seen: (sk && isNum(sk.seen)) ? clamp(Math.floor(sk.seen), 0, 9999999) : 0 };
+    }
+  }
+  /* unlocks */
+  if (Object.prototype.toString.call(raw.unlocked) === '[object Array]') {
+    for (var u = 0; u < raw.unlocked.length; u++) {
+      var uid = raw.unlocked[u];
+      if (typeof uid === 'string' && SKILL_BY_ID[uid] && s.unlocked.indexOf(uid) < 0) s.unlocked.push(uid);
+    }
+  }
+  if (typeof raw.skill === 'string' && SKILL_BY_ID[raw.skill] && s.unlocked.indexOf(raw.skill) >= 0) s.skill = raw.skill;
+  if (isNum(raw.mulTable) && raw.mulTable >= 2 && raw.mulTable <= 12) s.mulTable = Math.floor(raw.mulTable);
+  if (isNum(raw.divTable) && raw.divTable >= 2 && raw.divTable <= 12) s.divTable = Math.floor(raw.divTable);
+  s.timer = raw.timer === true;
+  if (isNum(raw.streak)) s.streak = clamp(Math.floor(raw.streak), 0, 999999);
+  if (isNum(raw.bestStreak)) s.bestStreak = clamp(Math.floor(raw.bestStreak), 0, 999999);
+  if (isNum(raw.total)) s.total = clamp(Math.floor(raw.total), 0, 9999999);
+  if (s.streak > s.bestStreak) s.bestStreak = s.streak;
+  return s;
+}
+function loadSave() {
+  var raw = null;
+  try { raw = JSON.parse(localStorage.getItem(K_SAVE) || 'null'); } catch (e) { raw = null; }
+  return sanitize(raw);
+}
+var S = loadSave();
+function saveNow() { try { localStorage.setItem(K_SAVE, JSON.stringify(S)); } catch (e) {} }
+
+function factStat(key) {
+  var f = S.facts[key];
+  if (!f) { f = { n: 0, c: 0, box: -1, due: 0, ms: 0 }; S.facts[key] = f; }
+  return f;
+}
+function skillSeen(id) {
+  if (!S.skills[id]) S.skills[id] = { seen: 0 };
+  return S.skills[id].seen;
+}
+
+/* ------------------------------------------------------- mastery/unlocks -- */
+function masteryOf(id) {
+  var pool = POOL[id] || [], done = 0;
+  for (var i = 0; i < pool.length; i++) {
+    var f = S.facts[pool[i]];
+    if (f && f.box >= MASTER_BOX) done++;
+  }
+  return pool.length ? done / pool.length : 0;
+}
+function masteredCount(id) {
+  var pool = POOL[id] || [], done = 0;
+  for (var i = 0; i < pool.length; i++) { var f = S.facts[pool[i]]; if (f && f.box >= MASTER_BOX) done++; }
+  return done;
+}
+function isUnlocked(id) { return S.unlocked.indexOf(id) >= 0; }
+function refreshUnlocks() {
+  var gained = [];
+  for (var i = 1; i < SKILLS.length; i++) {
+    var prev = SKILLS[i - 1].id, cur = SKILLS[i].id;
+    if (isUnlocked(cur)) continue;
+    if (!isUnlocked(prev)) continue;
+    if (masteryOf(prev) >= UNLOCK_AT) { S.unlocked.push(cur); gained.push(cur); }
+  }
+  return gained;
+}
+
+/* --------------------------------------------------------- fact selection -- */
+function activePool(id) {
+  var pool = POOL[id] || [];
+  if (id === 'times' && S.mulTable) {
+    var out = [];
+    for (var i = 0; i < pool.length; i++) if (FACT[pool[i]].table === S.mulTable) out.push(pool[i]);
+    if (out.length) return out;
+  }
+  if (id === 'divide' && S.divTable) {
+    var o2 = [];
+    for (var j = 0; j < pool.length; j++) if (FACT[pool[j]].table === S.divTable) o2.push(pool[j]);
+    if (o2.length) return o2;
+  }
+  return pool;
+}
+var BOX_WEIGHT = [6, 4, 3, 2, 1, 0.35];
+/* Leitner + due-counter scheduling.  Facts you miss drop to box 0 and come
+   back on the very next question; each success pushes them further out. */
+function pickNext(id, lastKey) {
+  var pool = activePool(id);
+  if (!pool.length) return null;
+  var counter = skillSeen(id);
+  var seen = [], unseen = [], i, f;
+  for (i = 0; i < pool.length; i++) {
+    f = S.facts[pool[i]];
+    if (!f || f.box < 0) unseen.push(pool[i]); else seen.push(pool[i]);
+  }
+  /* a fact you just missed jumps the queue — but never as the very next item,
+     so the child answers something else in between instead of parroting */
+  var relearn = [];
+  for (i = 0; i < seen.length; i++) {
+    f = S.facts[seen[i]];
+    if (f.box === 0 && f.due <= counter + 1 && seen[i] !== lastKey) relearn.push(seen[i]);
+  }
+  if (relearn.length) return relearn[(Math.random() * relearn.length) | 0];
+
+  /* introduce new material only while the shaky pile is small */
+  var shaky = 0;
+  for (i = 0; i < seen.length; i++) if (S.facts[seen[i]].box < 3) shaky++;
+  if (unseen.length && (seen.length === 0 || shaky < ACTIVE_CAP)) return unseen[0];
+
+  var cand = [];
+  for (i = 0; i < seen.length; i++) if (S.facts[seen[i]].due <= counter) cand.push(seen[i]);
+  if (!cand.length) {
+    var minDue = Infinity;
+    for (i = 0; i < seen.length; i++) minDue = Math.min(minDue, S.facts[seen[i]].due);
+    for (i = 0; i < seen.length; i++) if (S.facts[seen[i]].due <= minDue + 1) cand.push(seen[i]);
+  }
+  if (!cand.length) return unseen.length ? unseen[0] : pool[0];
+  if (cand.length > 1 && lastKey) {
+    var trimmed = [];
+    for (i = 0; i < cand.length; i++) if (cand[i] !== lastKey) trimmed.push(cand[i]);
+    if (trimmed.length) cand = trimmed;
+  }
+  var scored = [];
+  for (i = 0; i < cand.length; i++) {
+    f = S.facts[cand[i]];
+    var wt = BOX_WEIGHT[clamp(f.box, 0, BOX_MAX)] * (1 + Math.max(0, counter - f.due) * 0.25);
+    if (f.n > 0 && f.c / f.n < 0.6) wt *= 1.6;
+    wt *= 0.85 + Math.random() * 0.3;      /* jitter, so equal facts take turns */
+    scored.push({ k: cand[i], w: wt });
+  }
+  /* keep the session focused on a small working set: the neediest facts first */
+  if (scored.length > WORKING_SET) {
+    scored.sort(function (p2, q2) { return q2.w - p2.w; });
+    scored = scored.slice(0, WORKING_SET);
+  }
+  var tot = 0;
+  for (i = 0; i < scored.length; i++) tot += scored[i].w;
+  var r = Math.random() * tot;
+  for (i = 0; i < scored.length; i++) { r -= scored[i].w; if (r <= 0) return scored[i].k; }
+  return scored[scored.length - 1].k;
+}
+function weakest(id, count) {
+  var pool = POOL[id] || [], list = [], i;
+  for (i = 0; i < pool.length; i++) {
+    var f = S.facts[pool[i]];
+    if (!f || f.n < 2) continue;
+    if (f.box >= MASTER_BOX) continue;
+    list.push({ k: pool[i], acc: f.c / f.n, box: f.box, n: f.n });
+  }
+  list.sort(function (p, q) { return (p.acc - q.acc) || (p.box - q.box) || (q.n - p.n); });
+  return list.slice(0, count || 5);
+}
+
+/* ============================================================== questions == */
+function fracTxt(n, d) { return n + '/' + d; }
+function fracHTML(n, d) { return '<span class="fr"><i>' + n + '</i><u>' + d + '</u></span>'; }
+function seq(from, to, step) {
+  var out = [], v = from;
+  while ((step > 0 && v <= to) || (step < 0 && v >= to)) { out.push(v); v += step; }
+  return out.join(', ');
+}
+function factLabel(key) {
+  var d = FACT[key];
+  if (!d) return key;
+  switch (d.kind) {
+    case 'count': return 'count ' + d.n;
+    case 'bond':  return d.a + '+?=10';
+    case 'add':   return d.a + '+' + d.b;
+    case 'sub':   return d.a + '−' + d.b;
+    case 'cadd':  return d.a + '+' + d.b;
+    case 'csub':  return d.a + '−' + d.b;
+    case 'mul':   return d.a + '×' + d.b;
+    case 'div':   return d.a + '÷' + d.b;
+    case 'fcmp':  return fracTxt(FRACS[d.i][0], FRACS[d.i][1]) + ' vs ' + fracTxt(FRACS[d.j][0], FRACS[d.j][1]);
+    case 'fadd':  return fracTxt(d.a, d.d) + '+' + fracTxt(d.b, d.d);
+  }
+  return key;
+}
+function shuffle(arr) {
+  for (var i = arr.length - 1; i > 0; i--) {
+    var j = (Math.random() * (i + 1)) | 0, t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+  }
+  return arr;
+}
+
+/* makeQuestion(key) -> a fully specified, self-checking question. */
+function makeQuestion(key) {
+  var d = FACT[key];
+  if (!d) return null;
+  var q = { key: key, skill: d.skill, kind: d.kind, pre: '', post: '', answer: 0,
+            choices: null, model: '', md: {}, teach: [] };
+  var a, b, i, j, fa, fb, big, small, sum, ans, opts, cands, s, t;
+  switch (d.kind) {
+
+    case 'count':
+      q.answer = d.n;
+      q.pre = 'How many dots?'; q.post = '';
+      q.model = 'tenframe'; q.md = { filled: d.n, total: 10 };
+      q.teach = [
+        { t: 'Touch one dot at a time and say the number.', r: 1 },
+        { t: 'Count them: ' + seq(1, d.n, 1) + '.', r: 2 },
+        { t: 'There are ' + d.n + ' dots.', r: 3 }
+      ];
+      break;
+
+    case 'bond':
+      a = d.a; q.answer = 10 - a;
+      q.pre = a + ' + '; q.post = ' = 10';
+      q.model = 'tenframe'; q.md = { filled: a, total: 10, bond: true };
+      q.teach = [
+        { t: 'A ten-frame holds 10. We already have ' + a + '.', r: 0 },
+        { t: 'Count the empty boxes: ' + (a === 10 ? 'none left' : seq(1, 10 - a, 1)) + '.', r: 1 },
+        { t: a + ' + ' + (10 - a) + ' = 10.', r: 2 }
+      ];
+      break;
+
+    case 'add':
+      a = d.a; b = d.b;
+      if (Math.random() < 0.5) { t = a; a = b; b = t; }
+      q.answer = a + b;
+      q.pre = a + ' + ' + b + ' = '; q.post = '';
+      q.model = 'line'; q.md = { max: 20, start: a, delta: b };
+      q.teach = [
+        { t: 'Start at ' + a + ' on the number line.', r: 0 },
+        { t: 'Hop forward ' + b + (b === 1 ? ' step: ' : ' steps: ') + seq(a + 1, a + b, 1) + '.', r: 1 },
+        { t: 'You land on ' + (a + b) + '. So ' + a + ' + ' + b + ' = ' + (a + b) + '.', r: 2 }
+      ];
+      break;
+
+    case 'sub':
+      a = d.a; b = d.b; q.answer = a - b;
+      q.pre = a + ' − ' + b + ' = '; q.post = '';
+      q.model = 'line'; q.md = { max: 20, start: a, delta: -b };
+      q.teach = [
+        { t: 'Start at ' + a + ' on the number line.', r: 0 },
+        { t: 'Hop back ' + b + (b === 1 ? ' step: ' : ' steps: ') + seq(a - 1, a - b, -1) + '.', r: 1 },
+        { t: 'You land on ' + (a - b) + '. So ' + a + ' − ' + b + ' = ' + (a - b) + '.', r: 2 }
+      ];
+      break;
+
+    case 'cadd':
+      a = d.a; b = d.b; sum = a + b;
+      q.answer = sum;
+      q.pre = a + ' + ' + b + ' = '; q.post = '';
+      q.model = 'columns'; q.md = { a: a, b: b, op: '+', ans: sum };
+      q.teach = [
+        { t: 'Line them up. Ones under ones, tens under tens.', r: 0 },
+        { t: 'Ones: ' + (a % 10) + ' + ' + (b % 10) + ' = ' + ((a % 10) + (b % 10)) +
+             '. That is more than 9, so 10 of them become 1 ten.', r: 1 },
+        { t: 'Write ' + (sum % 10) + ' in the ones and carry the 1 over to the tens.', r: 2 },
+        { t: 'Tens: ' + ((a / 10) | 0) + ' + ' + ((b / 10) | 0) + ' + 1 carried = ' + ((sum / 10) | 0) +
+             '. So ' + a + ' + ' + b + ' = ' + sum + '.', r: 3 }
+      ];
+      break;
+
+    case 'csub':
+      a = d.a; b = d.b; ans = a - b;
+      q.answer = ans;
+      q.pre = a + ' − ' + b + ' = '; q.post = '';
+      q.model = 'columns'; q.md = { a: a, b: b, op: '−', ans: ans };
+      q.teach = [
+        { t: 'Line them up. Ones under ones, tens under tens.', r: 0 },
+        { t: 'Ones: ' + (a % 10) + ' − ' + (b % 10) + ' will not go. Borrow 1 ten and break it into 10 ones.', r: 1 },
+        { t: 'Now the ones are ' + (10 + (a % 10)) + '. ' + (10 + (a % 10)) + ' − ' + (b % 10) + ' = ' + (ans % 10) + '.', r: 2 },
+        { t: 'Tens: ' + (((a / 10) | 0) - 1) + ' − ' + ((b / 10) | 0) + ' = ' + ((ans / 10) | 0) +
+             '. So ' + a + ' − ' + b + ' = ' + ans + '.', r: 3 }
+      ];
+      break;
+
+    case 'mul':
+      a = d.a; b = d.b;
+      if (Math.random() < 0.5) { t = a; a = b; b = t; }
+      q.answer = a * b;
+      q.pre = a + ' × ' + b + ' = '; q.post = '';
+      q.model = 'array'; q.md = { rows: a, cols: b };
+      q.teach = [
+        { t: a + ' rows with ' + b + ' in each row.', r: 0 },
+        { t: 'Count row by row: ' + seq(b, a * b, b) + '.', r: 1 },
+        { t: a + ' × ' + b + ' = ' + (a * b) + '.', r: 2 }
+      ];
+      break;
+
+    case 'div':
+      a = d.a; b = d.b;
+      q.answer = d.q;
+      q.pre = a + ' ÷ ' + b + ' = '; q.post = '';
+      q.model = 'groups'; q.md = { total: a, groups: b, per: d.q };
+      q.teach = [
+        { t: 'Share ' + a + ' dots fairly into ' + b + ' groups.', r: 0 },
+        { t: 'Deal one to each group, round and round, until they are gone.', r: 1 },
+        { t: 'Each group ends up with ' + d.q + '. So ' + a + ' ÷ ' + b + ' = ' + d.q + '.', r: 2 }
+      ];
+      break;
+
+    case 'fcmp':
+      fa = FRACS[d.i]; fb = FRACS[d.j];
+      big = (fa[0] / fa[1] > fb[0] / fb[1]) ? fa : fb;
+      small = (big === fa) ? fb : fa;
+      q.answer = fracTxt(big[0], big[1]);
+      q.pre = 'Which is bigger?'; q.post = '';
+      q.model = 'fracpair'; q.md = { list: [fa, fb] };
+      q.choices = shuffle([
+        { val: fracTxt(fa[0], fa[1]), html: fracHTML(fa[0], fa[1]) },
+        { val: fracTxt(fb[0], fb[1]), html: fracHTML(fb[0], fb[1]) }
+      ]);
+      q.teach = [
+        { t: 'Both bars are the same length — only the pieces differ.', r: 1 },
+        { t: 'More pieces means each piece is smaller.', r: 2 },
+        { t: fracTxt(big[0], big[1]) + ' covers more of the bar, so it is bigger.', r: 3 }
+      ];
+      break;
+
+    case 'fadd':
+      a = d.a; b = d.b; s = d.d;
+      q.answer = fracTxt(a + b, s);
+      q.pre = fracHTML(a, s) + ' + ' + fracHTML(b, s) + ' = '; q.post = '';
+      q.model = 'fracadd'; q.md = { d: s, a: a, b: b };
+      cands = [[a + b, 2 * s], [a, s], [b, s], [a + b - 1, s], [a + b, s + 1], [a + b + 1, s], [a * b, s]];
+      opts = [{ val: q.answer, html: fracHTML(a + b, s) }];
+      for (i = 0; i < cands.length && opts.length < 4; i++) {
+        var cn = cands[i][0], cd = cands[i][1];
+        if (cn < 1 || cd < 2) continue;
+        var lbl = fracTxt(cn, cd), dup = false;
+        for (j = 0; j < opts.length; j++) if (opts[j].val === lbl) dup = true;
+        if (dup) continue;
+        opts.push({ val: lbl, html: fracHTML(cn, cd) });
+      }
+      q.choices = shuffle(opts);
+      q.teach = [
+        { t: 'The pieces are all the same size: ' + s + 'ths.', r: 1 },
+        { t: 'So just add how many pieces: ' + a + ' + ' + b + ' = ' + (a + b) + '.', r: 2 },
+        { t: 'The bottom number stays ' + s + '. The answer is ' + fracTxt(a + b, s) + '.', r: 3 }
+      ];
+      break;
+  }
+  return q;
+}
+
+/* ================================================================= state == */
+var G = {
+  state: 'title',       /* title | ask | right | teach | pause | menu */
+  q: null,
+  entry: '',
+  reveal: -1,           /* teach reveal level fed to the model renderer */
+  teachI: 0,
+  lastKey: null,
+  askT: 0,              /* seconds spent on this question */
+  holdT: 0,             /* countdown before the next question after a correct one */
+  tLeft: 0,
+  padSel: -1,
+  pendingNext: false,
+  teachPrev: null,
+  gained: []
+};
+
+var stage = document.getElementById('stage');
+var cv = document.getElementById('model');
+var ctx = cv.getContext('2d');
+var overlay = document.getElementById('overlay');
+var elPre = document.getElementById('qpre');
+var elSlot = document.getElementById('slot');
+var elPost = document.getElementById('qpost');
+var elFb = document.getElementById('fb');
+var elPad = document.getElementById('pad');
+var elCh = document.getElementById('choices');
+var elTb = document.getElementById('teachbtns');
+var elLabel = document.getElementById('hlabel');
+var elStreak = document.getElementById('hstreak');
+var elFill = document.getElementById('hfill');
+var elTfill = document.getElementById('tfill');
+var view = { w: 600, h: 320, dpr: 1 };
+
+function resize() {
+  var w = Math.max(80, cv.clientWidth || 300);
+  var h = Math.max(60, cv.clientHeight || 200);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  renderModel();
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 140); });
+
+/* ============================================================== the pad === */
+var PAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'];
+(function buildPad() {
+  var html = '';
+  for (var i = 0; i < PAD_KEYS.length; i++) {
+    var k = PAD_KEYS[i];
+    var lbl = k === 'del' ? '⌫' : (k === 'ok' ? 'ENTER' : k);
+    html += '<button class="key' + (k === 'del' || k === 'ok' ? ' act' : '') +
+            '" type="button" data-k="' + k + '">' + lbl + '</button>';
+  }
+  elPad.innerHTML = html;
+})();
+elPad.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('[data-k]') : null;
+  if (!b) return;
+  initAudio();
+  pressKey(b.getAttribute('data-k'));
+});
+elCh.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('[data-v]') : null;
+  if (!b) return;
+  initAudio();
+  if (G.state !== 'ask') return;
+  submitAnswer(b.getAttribute('data-v'));
+});
+elTb.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('[data-t]') : null;
+  if (!b) return;
+  initAudio();
+  teachNext();
+});
+
+function pressKey(k) {
+  if (G.state === 'right') { nextQuestion(); return; }
+  if (G.state === 'teach') { teachNext(); return; }
+  if (G.state !== 'ask' || !G.q) return;
+  if (G.q.choices) return;
+  if (k === 'del') { G.entry = G.entry.slice(0, -1); sfx.del(); paintEntry(); return; }
+  if (k === 'ok') { if (G.entry.length) submitAnswer(G.entry); return; }
+  if (/^[0-9]$/.test(k)) {
+    if (G.entry.length >= 3) return;
+    if (G.entry === '0') G.entry = '';
+    G.entry += k; sfx.tap(); paintEntry();
+  }
+}
+function paintEntry() {
+  elSlot.textContent = G.entry.length ? G.entry : ' ';
+}
+
+/* ============================================================== rounds ==== */
+function skillLabel() {
+  var sk = SKILL_BY_ID[S.skill] || SKILLS[0];
+  var extra = '';
+  if (S.skill === 'times' && S.mulTable) extra = ' · ' + S.mulTable + '× TABLE';
+  if (S.skill === 'divide' && S.divTable) extra = ' ÷ ' + S.divTable;
+  return sk.short + extra;
+}
+function paintHead() {
+  elLabel.textContent = skillLabel();
+  elStreak.textContent = S.streak > 1 ? ('STREAK ' + S.streak) : '';
+  var m = masteryOf(S.skill);
+  elFill.style.width = Math.round(m * 100) + '%';
+}
+function nextQuestion() {
+  var key = pickNext(S.skill, G.lastKey);
+  if (!key) { titleScreen(); return; }
+  G.q = makeQuestion(key);
+  G.lastKey = key;
+  G.entry = '';
+  G.reveal = -1;
+  G.teachI = 0;
+  G.askT = 0;
+  G.tLeft = TIMER_SECS;
+  G.state = 'ask';
+  paintQuestion();
+  paintHead();
+}
+function paintQuestion() {
+  var q = G.q;
+  if (!q) return;
+  elPre.innerHTML = q.pre;
+  elPost.innerHTML = q.post;
+  if (q.choices) {
+    elSlot.classList.add('hide');
+    var html = '';
+    for (var i = 0; i < q.choices.length; i++) {
+      html += '<button class="ch" type="button" data-v="' + q.choices[i].val + '">' +
+              '<small>' + (i + 1) + '</small>' + q.choices[i].html + '</button>';
+    }
+    elCh.innerHTML = html;
+    elCh.classList.remove('off');
+    elPad.classList.add('off');
+    if (q.choices.length === 2) elCh.style.gridTemplateColumns = 'repeat(2,1fr)';
+    else elCh.style.gridTemplateColumns = 'repeat(2,1fr)';
+  } else {
+    elSlot.classList.remove('hide');
+    paintEntry();
+    elCh.classList.add('off');
+    elPad.classList.remove('off');
+  }
+  elTb.classList.add('off');
+  elFb.className = '';
+  elFb.textContent = q.choices ? 'Pick the answer.' : 'Type your answer, then ENTER.';
+  renderModel();
+}
+
+function submitAnswer(val) {
+  var q = G.q;
+  if (!q || G.state !== 'ask') return;
+  var correct;
+  if (q.choices) correct = String(val) === String(q.answer);
+  else correct = Number(val) === Number(q.answer);
+  var f = factStat(q.key);
+  if (!S.skills[S.skill]) S.skills[S.skill] = { seen: 0 };
+  var counter = ++S.skills[S.skill].seen;
+  S.total++;
+  f.n++;
+  f.ms = f.ms ? (f.ms * 0.6 + G.askT * 1000 * 0.4) : G.askT * 1000;
+  if (correct) {
+    f.c++;
+    f.box = Math.min(BOX_MAX, Math.max(0, f.box) + 1);
+    f.due = counter + INTERVAL[f.box];
+    S.streak++;
+    if (S.streak > S.bestStreak) S.bestStreak = S.streak;
+    G.state = 'right';
+    G.reveal = 9;
+    G.holdT = 0.85;
+    elFb.className = 'good';
+    elFb.textContent = pick(['Yes!', 'That’s it.', 'Correct.', 'Nice work.', 'Spot on.']) +
+      (S.streak > 2 ? '  ' + S.streak + ' in a row.' : '');
+    elPad.classList.add('off'); elCh.classList.add('off'); elTb.classList.add('off');
+    if (!q.choices) elSlot.textContent = String(q.answer);
+    sfx.right();
+    G.gained = refreshUnlocks();
+    saveNow();
+    renderModel();
+    paintHead();
+    if (G.gained.length) { G.pendingNext = true; G.state = 'pause'; unlockScreen(); }
+  } else {
+    f.box = 0;
+    f.due = counter + 1;          /* straight back into the queue */
+    S.streak = 0;
+    saveNow();
+    startTeach();
+  }
+}
+
+function startTeach() {
+  G.state = 'teach';
+  G.teachI = 0;
+  sfx.gentle();
+  elPad.classList.add('off');
+  elCh.classList.add('off');
+  elTb.classList.remove('off');
+  if (!G.q.choices) elSlot.textContent = G.entry.length ? G.entry : ' ';
+  paintTeach();
+}
+function paintTeach() {
+  var q = G.q, st = q.teach[G.teachI] || { t: '', r: 9 };
+  G.reveal = st.r;
+  elFb.className = 'teach';
+  elFb.textContent = st.t;
+  var last = G.teachI >= q.teach.length - 1;
+  elTb.innerHTML = '<button class="btn' + (last ? '' : ' ghost') + '" type="button" data-t="1" style="margin-top:0">' +
+                   (last ? 'GOT IT' : 'NEXT') + '</button>';
+  renderModel();
+}
+function teachNext() {
+  if (G.state !== 'teach') return;
+  if (G.teachI < G.q.teach.length - 1) { G.teachI++; sfx.step(); paintTeach(); }
+  else { nextQuestion(); }
+}
+
+/* =============================================================== drawing == */
+var C_LINE = 'rgba(234,240,255,0.28)';
+var C_DIM = 'rgba(234,240,255,0.45)';
+var C_GOLD = '#ffcc4d';
+var C_COOL = '#6fd8ff';
+var C_FG = '#eaf0ff';
+var C_GOOD = '#63e2a8';
+
+function fnt(px, weight) { return (weight || 700) + ' ' + Math.round(px) + 'px "Segoe UI", system-ui, sans-serif'; }
+function roundRect(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+function dot(x, y, r, col) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = col; ctx.fill();
+}
+function ring(x, y, r, col) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+}
+
+function renderModel() {
+  if (!ctx) return;
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  ctx.clearRect(0, 0, view.w, view.h);
+  var q = G.q;
+  if (!q || (G.state !== 'ask' && G.state !== 'right' && G.state !== 'teach' && G.state !== 'pause')) return;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  var rv = G.reveal;
+  switch (q.model) {
+    case 'tenframe': drawTenFrame(q, rv); break;
+    case 'line':     drawNumberLine(q, rv); break;
+    case 'columns':  drawColumns(q, rv); break;
+    case 'array':    drawArray(q, rv); break;
+    case 'groups':   drawGroups(q, rv); break;
+    case 'fracpair': drawFracPair(q, rv); break;
+    case 'fracadd':  drawFracAdd(q, rv); break;
+  }
+}
+
+/* --- ten frame ----------------------------------------------------------- */
+function drawTenFrame(q, rv) {
+  var W = view.w, H = view.h;
+  var cell = Math.min((W - 30) / 5, (H - 34) / 2, Math.max(70, H * 0.34));
+  cell = Math.max(20, cell);
+  var gw = cell * 5, gh = cell * 2;
+  var x0 = (W - gw) / 2, y0 = (H - gh) / 2;
+  var filled = q.md.filled, bond = !!q.md.bond;
+  var showEmptyCount = bond ? (rv >= 1) : false;
+  var countUp = (!bond && rv >= 1) ? (rv >= 2 ? filled : filled) : 0;
+  ctx.lineWidth = 2;
+  for (var i = 0; i < 10; i++) {
+    var cx = x0 + (i % 5) * cell, cy = y0 + ((i / 5) | 0) * cell;
+    var isFilled = i < filled;
+    ctx.strokeStyle = isFilled ? 'rgba(255,204,77,0.5)' : C_LINE;
+    ctx.strokeRect(cx + 0.5, cy + 0.5, cell - 1, cell - 1);
+    if (isFilled) {
+      dot(cx + cell / 2, cy + cell / 2, cell * 0.26, C_GOLD);
+      if (!bond && rv >= 1) {
+        ctx.fillStyle = '#0b0f1e'; ctx.font = fnt(Math.max(10, cell * 0.32));
+        ctx.fillText(String(i + 1), cx + cell / 2, cy + cell / 2 + 0.5);
+      }
+    } else if (showEmptyCount) {
+      ring(cx + cell / 2, cy + cell / 2, cell * 0.26, 'rgba(111,216,255,0.75)');
+      ctx.fillStyle = C_COOL; ctx.font = fnt(Math.max(10, cell * 0.3));
+      ctx.fillText(String(i - filled + 1), cx + cell / 2, cy + cell / 2 + 0.5);
+    }
+  }
+  if (bond && rv >= 2) {
+    ctx.fillStyle = C_GOLD; ctx.font = fnt(Math.min(19, cell * 0.36));
+    ctx.fillText(filled + ' + ' + (10 - filled) + ' = 10', W / 2, y0 + gh + Math.min(18, (H - gh) / 2 - 2));
+  }
+  if (!bond && rv >= 3) {
+    ctx.fillStyle = C_GOLD; ctx.font = fnt(Math.min(19, cell * 0.36));
+    ctx.fillText(filled + ' dots', W / 2, y0 + gh + Math.min(18, (H - gh) / 2 - 2));
+  }
+}
+
+/* --- number line --------------------------------------------------------- */
+function drawNumberLine(q, rv) {
+  var W = view.w, H = view.h;
+  var max = q.md.max, start = q.md.start, delta = q.md.delta;
+  var pad = Math.max(16, W * 0.05);
+  var x0 = pad, x1 = W - pad, span = x1 - x0;
+  var step = span / max;
+  var y = H * 0.60;
+  if (y > H - 44) y = H - 44;
+  if (y < 44) y = Math.min(H - 26, 44);
+  function px(v) { return x0 + v * step; }
+  ctx.strokeStyle = C_LINE; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+  var labelEvery = step >= 17 ? 1 : (step >= 9 ? 2 : 5);
+  ctx.font = fnt(Math.max(9, Math.min(12, step * 0.72)), 600);
+  for (var v = 0; v <= max; v++) {
+    /* never force-label the landing tick before the answer is revealed —
+       that hands the child the answer instead of making them count */
+    var big = (v % labelEvery === 0) || v === max || v === start || (rv >= 2 && v === start + delta);
+    ctx.strokeStyle = big ? C_DIM : 'rgba(234,240,255,0.18)';
+    ctx.lineWidth = big ? 1.6 : 1;
+    ctx.beginPath(); ctx.moveTo(px(v), y - (big ? 6 : 3)); ctx.lineTo(px(v), y + (big ? 6 : 3)); ctx.stroke();
+    if (big) {
+      var hit = (v === start) || (rv >= 2 && v === start + delta);
+      ctx.fillStyle = hit ? C_GOLD : C_DIM;
+      ctx.fillText(String(v), px(v), y + 17);
+    }
+  }
+  /* hops */
+  var n = Math.abs(delta), dir = delta >= 0 ? 1 : -1;
+  var showHops = (rv < 0) ? n : (rv >= 1 ? n : 0);
+  var arcH = Math.min(30, Math.max(12, y * 0.34));
+  /* start marker, kept clear of the hop labels */
+  dot(px(start), y, 5.5, C_COOL);
+  ctx.fillStyle = C_COOL; ctx.font = fnt(11, 700);
+  ctx.fillText('START', px(start), Math.max(8, y - 22 - arcH));
+  ctx.lineWidth = 2;
+  for (var i = 0; i < showHops; i++) {
+    var from = start + dir * i, to = from + dir;
+    var fx = px(from), tx = px(to), mx = (fx + tx) / 2;
+    ctx.strokeStyle = dir > 0 ? 'rgba(111,216,255,0.85)' : 'rgba(255,159,110,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(fx, y - 7);
+    ctx.quadraticCurveTo(mx, y - 7 - arcH, tx, y - 7);
+    ctx.stroke();
+    /* arrow head */
+    ctx.beginPath();
+    ctx.moveTo(tx, y - 6);
+    ctx.lineTo(tx - dir * 5, y - 12);
+    ctx.lineTo(tx + dir * 3, y - 13);
+    ctx.closePath();
+    ctx.fillStyle = dir > 0 ? 'rgba(111,216,255,0.85)' : 'rgba(255,159,110,0.9)';
+    ctx.fill();
+    if (rv >= 1 && step >= 13) {
+      ctx.fillStyle = 'rgba(234,240,255,0.75)'; ctx.font = fnt(Math.min(11, step * 0.6), 600);
+      ctx.fillText(String(from + dir), mx, y - 10 - arcH);
+    }
+  }
+  if (rv >= 2) {
+    dot(px(start + delta), y, 6.5, C_GOLD);
+    ctx.fillStyle = C_GOLD; ctx.font = fnt(Math.min(20, H * 0.13), 700);
+    ctx.fillText(String(start + delta), px(start + delta), Math.min(H - 6, y + 36));
+  }
+}
+
+/* --- place-value columns ------------------------------------------------- */
+function drawColumns(q, rv) {
+  var W = view.w, H = view.h;
+  var a = q.md.a, b = q.md.b, op = q.md.op, ans = q.md.ans;
+  var isAdd = op === '+';
+  var fs = clamp(Math.min(H * 0.21, W * 0.15), 15, 62);
+  var colW = fs * 0.72;
+  var cx = W * 0.5;
+  var right = cx + colW * 1.2;
+  var rowH = fs * 1.06;
+  var blockH = fs * 0.55 + rowH * 3 + 30;
+  var top = Math.max(fs * 0.62, (H - blockH) / 2 + fs * 0.55);
+  ctx.font = fnt(fs);
+  ctx.textAlign = 'right';
+  function digits(v, y, col) {
+    var s = String(v);
+    ctx.fillStyle = col;
+    for (var i = s.length - 1, k = 0; i >= 0; i--, k++) {
+      ctx.fillText(s.charAt(i), right - k * colW, y);
+    }
+  }
+  var yA = top + rowH * 0.5;
+  var yB = yA + rowH;
+  var yR = yB + rowH * 0.95;
+  /* carry / borrow marks */
+  if (rv >= 2) {
+    ctx.font = fnt(fs * 0.46);
+    ctx.fillStyle = C_GOOD;
+    if (isAdd) ctx.fillText('1', right - colW - colW * 0.34, top - fs * 0.42);
+    else {
+      ctx.fillText(String(((a / 10) | 0) - 1), right - colW + colW * 0.1, top - fs * 0.42);
+      ctx.fillText('1' + (a % 10), right + colW * 0.06, top - fs * 0.42);
+    }
+    ctx.font = fnt(fs);
+  }
+  digits(a, yA, C_FG);
+  digits(b, yB, C_FG);
+  ctx.fillStyle = C_DIM;
+  ctx.fillText(op, right - colW * 2.15, yB);
+  ctx.strokeStyle = C_LINE; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(right - colW * 2.5, yB + rowH * 0.42);
+  ctx.lineTo(right + colW * 0.4, yB + rowH * 0.42);
+  ctx.stroke();
+  if (rv >= 3) digits(ans, yR, C_GOLD);
+  else {
+    ctx.fillStyle = 'rgba(234,240,255,0.22)';
+    ctx.fillText('?', right, yR);
+  }
+  /* ones column highlight */
+  if (rv >= 1) {
+    ctx.strokeStyle = 'rgba(111,216,255,0.7)'; ctx.lineWidth = 2;
+    roundRect(right - colW * 0.86, top - fs * 0.16, colW * 1.0, rowH * 2.05, 6);
+    ctx.stroke();
+  }
+  /* the regroup: ten ones become one ten */
+  if (rv >= 1) {
+    ctx.textAlign = 'center';
+    var bw = Math.min(W - 24, 190);
+    var bx = (W - bw) / 2;
+    var by = Math.min(H - 30, yR + rowH * 0.55);
+    if (by + 26 <= H) {
+      var u = Math.min((bw - 22) / 10, 14);
+      ctx.strokeStyle = 'rgba(255,204,77,0.55)'; ctx.lineWidth = 1.5;
+      roundRect(bx, by, u * 10 + 10, 20, 5); ctx.stroke();
+      for (var i = 0; i < 10; i++) {
+        ctx.fillStyle = 'rgba(255,204,77,0.85)';
+        ctx.fillRect(bx + 5 + i * u + 1, by + 5, u - 2, 10);
+      }
+      ctx.fillStyle = C_DIM; ctx.font = fnt(10.5, 600); ctx.textAlign = 'left';
+      var tx2 = bx + u * 10 + 16;
+      if (tx2 < W - 8) ctx.fillText(isAdd ? '10 ones = 1 ten' : '1 ten = 10 ones', tx2, by + 10);
+    }
+  }
+  ctx.textAlign = 'center';
+}
+
+/* --- dot array ----------------------------------------------------------- */
+function drawArray(q, rv) {
+  var W = view.w, H = view.h;
+  var rows = q.md.rows, cols = q.md.cols;
+  var labelW = 26, labelH = 16;
+  var cell = Math.min((W - 30 - labelW * 2) / cols, (H - 14 - labelH) / rows,
+                      Math.max(26, Math.min(44, H * 0.085)));
+  cell = Math.max(5, cell);
+  var gw = cell * cols, gh = cell * rows;
+  var x0 = (W - gw) / 2, y0 = (H - gh) / 2 + labelH * 0.4;
+  if (y0 < labelH) y0 = labelH;
+  var r = Math.max(1.6, cell * 0.28);
+  var shown = (rv < 0 || rv >= 2) ? rows : (rv >= 1 ? rows : rows);
+  for (var ry = 0; ry < rows; ry++) {
+    var lit = (rv >= 1);
+    for (var cxi = 0; cxi < cols; cxi++) {
+      dot(x0 + cxi * cell + cell / 2, y0 + ry * cell + cell / 2, r,
+          lit ? (ry % 2 ? 'rgba(111,216,255,0.95)' : C_GOLD) : 'rgba(255,204,77,0.85)');
+    }
+    if (rv >= 1 && cell >= 11) {
+      ctx.fillStyle = 'rgba(234,240,255,0.7)'; ctx.font = fnt(Math.min(12, cell * 0.62), 600);
+      ctx.textAlign = 'left';
+      ctx.fillText(String(cols * (ry + 1)), x0 + gw + 5, y0 + ry * cell + cell / 2);
+      ctx.textAlign = 'center';
+    }
+  }
+  /* frame + labels */
+  ctx.strokeStyle = 'rgba(234,240,255,0.18)'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(x0 - 2.5, y0 - 2.5, gw + 5, gh + 5);
+  ctx.fillStyle = C_DIM; ctx.font = fnt(11, 600);
+  if (y0 - 12 > 4) ctx.fillText(cols + ' across', x0 + gw / 2, y0 - 11);
+  ctx.save();
+  ctx.translate(Math.max(9, x0 - 12), y0 + gh / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(rows + ' down', 0, 0);
+  ctx.restore();
+  if (rv >= 2) {
+    ctx.fillStyle = C_GOLD; ctx.font = fnt(Math.min(20, H * 0.14));
+    var ty = y0 + gh + 15;
+    if (ty > H - 4) ty = H - 6;
+    ctx.fillText(rows + ' × ' + cols + ' = ' + (rows * cols), W / 2, ty);
+  }
+}
+
+/* --- equal groups (division) --------------------------------------------- */
+function drawGroups(q, rv) {
+  var W = view.w, H = view.h;
+  var total = q.md.total, groups = q.md.groups, per = q.md.per;
+  var placed = (rv >= 1);
+  if (!placed) {
+    /* loose pile of dots, plus the empty groups waiting below */
+    var cols = Math.min(12, Math.ceil(Math.sqrt(total * 1.7)));
+    var rows = Math.ceil(total / cols);
+    var boxH = clamp(H * 0.16, 16, 40);
+    var cell = Math.min((W - 24) / cols, (H - boxH - 26) / rows, Math.max(22, H * 0.075));
+    cell = Math.max(4, cell);
+    var blockH = rows * cell + 15 + 8 + boxH;
+    var x0 = (W - cell * cols) / 2, y0 = Math.max(3, (H - blockH) / 2);
+    for (var i = 0; i < total; i++) {
+      var rx = i % cols, ry = (i / cols) | 0;
+      dot(x0 + rx * cell + cell / 2, y0 + ry * cell + cell / 2, Math.max(1.5, cell * 0.28), C_GOLD);
+    }
+    ctx.fillStyle = C_DIM; ctx.font = fnt(12, 600);
+    var ly = y0 + rows * cell + 12;
+    if (ly < H - 4) ctx.fillText(total + ' dots to share into ' + groups + ' groups', W / 2, ly);
+    /* empty boxes waiting to be filled */
+    var gy = Math.min(H - boxH - 2, ly + 9);
+    var bw = Math.min((W - 12) / groups - 5, 64);
+    bw = Math.max(8, bw);
+    var bx0 = (W - (bw + 5) * groups + 5) / 2;
+    for (var g = 0; g < groups; g++) {
+      ctx.strokeStyle = 'rgba(111,216,255,0.5)'; ctx.lineWidth = 1.4;
+      roundRect(bx0 + g * (bw + 5), gy, bw, boxH, 5); ctx.stroke();
+    }
+    return;
+  }
+  /* dealt into groups */
+  var gcols = Math.min(groups, groups <= 4 ? groups : (groups <= 8 ? 4 : 6));
+  var grows = Math.ceil(groups / gcols);
+  var bw2 = Math.min((W - 12) / gcols - 6, Math.max(130, W * 0.17));
+  var bh2 = Math.min((H - 26) / grows - 6, Math.max(96, H * 0.34));
+  bw2 = Math.max(14, bw2); bh2 = Math.max(14, bh2);
+  var ox = (W - (bw2 + 6) * gcols + 6) / 2;
+  var oy = Math.max(3, (H - (grows * (bh2 + 6) - 6 + 18)) / 2);
+  var pcols = Math.min(per, Math.ceil(Math.sqrt(per * 1.4)) || 1);
+  var prows = Math.ceil(per / pcols);
+  var pc = Math.min((bw2 - 8) / pcols, (bh2 - 8) / prows, Math.max(16, H * 0.055));
+  pc = Math.max(3, pc);
+  for (var gi = 0; gi < groups; gi++) {
+    var gx = ox + (gi % gcols) * (bw2 + 6);
+    var gy2 = oy + ((gi / gcols) | 0) * (bh2 + 6);
+    ctx.strokeStyle = 'rgba(111,216,255,0.6)'; ctx.lineWidth = 1.4;
+    roundRect(gx, gy2, bw2, bh2, 6); ctx.stroke();
+    var px0 = gx + (bw2 - pc * pcols) / 2, py0 = gy2 + (bh2 - pc * prows) / 2;
+    for (var k = 0; k < per; k++) {
+      dot(px0 + (k % pcols) * pc + pc / 2, py0 + ((k / pcols) | 0) * pc + pc / 2,
+          Math.max(1.4, pc * 0.3), C_GOLD);
+    }
+  }
+  ctx.fillStyle = rv >= 2 ? C_GOLD : C_DIM;
+  ctx.font = fnt(Math.min(17, H * 0.12), 700);
+  var fy = oy + grows * (bh2 + 6) + 10;
+  if (fy > H - 4) fy = H - 6;
+  ctx.fillText(rv >= 2 ? (total + ' ÷ ' + groups + ' = ' + per)
+                       : (groups + ' equal groups'), W / 2, fy);
+}
+
+/* --- fraction bars ------------------------------------------------------- */
+function bar(x, y, w, h, d, shadedCount, col) {
+  ctx.strokeStyle = C_LINE; ctx.lineWidth = 1.6;
+  var pw = w / d;
+  for (var i = 0; i < d; i++) {
+    if (i < shadedCount) {
+      ctx.fillStyle = col;
+      ctx.fillRect(x + i * pw, y, pw, h);
+    }
+    ctx.strokeRect(x + i * pw + 0.5, y + 0.5, pw - 1, h - 1);
+  }
+  ctx.strokeStyle = 'rgba(234,240,255,0.35)';
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+}
+function drawFracPair(q, rv) {
+  var W = view.w, H = view.h;
+  var list = q.md.list;
+  var lw = 42;
+  var w = Math.min(W - lw - 18, 380);
+  var h = Math.min(Math.max(34, H * 0.2), (H - 30) / 2);
+  h = Math.max(14, h);
+  var x = (W - w - lw) / 2 + lw;
+  var gap = Math.min(22, (H - h * 2) / 3);
+  var y0 = (H - (h * 2 + gap)) / 2;
+  var bigger = (list[0][0] / list[0][1] >= list[1][0] / list[1][1]) ? 0 : 1;
+  for (var i = 0; i < 2; i++) {
+    var y = y0 + i * (h + gap);
+    var hot = (rv >= 3 && i === bigger);
+    bar(x, y, w, h, list[i][1], list[i][0], hot ? C_GOLD : 'rgba(111,216,255,0.8)');
+    ctx.fillStyle = hot ? C_GOLD : C_FG; ctx.font = fnt(Math.min(17, h * 0.62));
+    ctx.textAlign = 'right';
+    ctx.fillText(list[i][0] + '/' + list[i][1], x - 8, y + h / 2);
+    ctx.textAlign = 'center';
+    if (hot) {
+      ctx.fillStyle = C_GOLD; ctx.font = fnt(11, 700);
+      if (x + w + 6 < W - 20) { ctx.textAlign = 'left'; ctx.fillText('BIGGER', x + w + 6, y + h / 2); ctx.textAlign = 'center'; }
+    }
+  }
+}
+function drawFracAdd(q, rv) {
+  var W = view.w, H = view.h;
+  var d = q.md.d, a = q.md.a, b = q.md.b;
+  var w = Math.min(W - 28, 380);
+  var h = Math.min(Math.max(46, H * 0.24), H * 0.34);
+  h = Math.max(16, h);
+  var x = (W - w) / 2;
+  var y = H * 0.34 - h / 2;
+  if (y < 6) y = 6;
+  var pw = w / d;
+  for (var i = 0; i < d; i++) {
+    if (i < a) { ctx.fillStyle = C_GOLD; ctx.fillRect(x + i * pw, y, pw, h); }
+    else if (i < a + b) {
+      ctx.fillStyle = rv >= 1 ? 'rgba(111,216,255,0.85)' : 'rgba(111,216,255,0.22)';
+      ctx.fillRect(x + i * pw, y, pw, h);
+      if (rv < 0) {
+        ctx.strokeStyle = 'rgba(111,216,255,0.8)'; ctx.lineWidth = 1.6;
+        if (ctx.setLineDash) ctx.setLineDash([5, 4]);
+        ctx.strokeRect(x + i * pw + 1.5, y + 1.5, pw - 3, h - 3);
+        if (ctx.setLineDash) ctx.setLineDash([]);
+      }
+    }
+    ctx.strokeStyle = C_LINE; ctx.lineWidth = 1.6;
+    ctx.strokeRect(x + i * pw + 0.5, y + 0.5, pw - 1, h - 1);
+  }
+  ctx.strokeStyle = 'rgba(234,240,255,0.35)';
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.fillStyle = C_DIM; ctx.font = fnt(11.5, 600);
+  var cap = a + '/' + d + ' shaded  +  ' + b + '/' + d + ' more';
+  if (y + h + 13 < H) ctx.fillText(cap, W / 2, y + h + 12);
+  if (rv >= 2) {
+    ctx.fillStyle = C_GOLD; ctx.font = fnt(Math.min(20, H * 0.14));
+    var ty = y + h + 34;
+    if (ty > H - 6) ty = H - 8;
+    ctx.fillText(a + '/' + d + ' + ' + b + '/' + d + ' = ' + (a + b) + '/' + d, W / 2, ty);
+  }
+}
+
+/* ============================================================== overlays == */
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+
+function titleScreen() {
+  G.state = 'title';
+  document.body.classList.remove('playing');
+  var sk = SKILL_BY_ID[S.skill] || SKILLS[0];
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>SUM</h1>' +
+      '<div class="tagline">A patient tutor, not a quiz. Every answer comes with a picture you can count &mdash; ten-frames, a number line, dot arrays, fraction bars &mdash; and getting one wrong just means seeing it worked through.</div>' +
+      '<div class="keys">' +
+        '<div>Answer<span>Number pad or keyboard digits</span></div>' +
+        '<div>Submit<span>ENTER</span></div>' +
+        '<div>Fix a digit<span>Backspace</span></div>' +
+        '<div>Change skill<span>SKILLS button, or S</span></div>' +
+        '<div>Pause / mute<span>P or Esc &middot; M</span></div>' +
+      '</div>' +
+      '<div class="note">Next up: <b style="color:var(--accent)">' + sk.name + '</b>' +
+        (S.total ? ' &middot; ' + S.total + ' questions answered so far &middot; best streak ' + S.bestStreak : '') +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="start">START LEARNING</button>' +
+        '<button class="btn ghost" data-act="skills">CHOOSE SKILL</button>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn ghost" data-act="progress">PROGRESS</button>' +
+        '<button class="btn ghost" data-act="timer">BEAT THE CLOCK: ' + (S.timer ? 'ON' : 'OFF') + '</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function skillsScreen() {
+  var rows = '';
+  for (var i = 0; i < SKILLS.length; i++) {
+    var sk = SKILLS[i];
+    var un = isUnlocked(sk.id);
+    var m = masteryOf(sk.id);
+    rows += '<button class="srow' + (un ? '' : ' lock') + (S.skill === sk.id ? ' cur' : '') + '" type="button"' +
+      (un ? ' data-skill="' + sk.id + '"' : ' disabled') + '>' +
+      '<div class="sn">' + (i + 1) + '. ' + sk.name +
+        '<em>' + (un ? sk.blurb : 'Locked — master ' + Math.round(UNLOCK_AT * 100) + '% of ' + SKILLS[i - 1].short + ' first') + '</em>' +
+        '<div class="mini"><i style="width:' + Math.round(m * 100) + '%"></i></div>' +
+      '</div>' +
+      '<div class="sp">' + Math.round(m * 100) + '%</div>' +
+      '</button>';
+  }
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Pick what to practise</div>' +
+      '<h2>SKILL LADDER</h2>' +
+      '<div class="slist">' + rows + '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn ghost" data-act="back">BACK</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function tableScreen(which) {
+  var cur = which === 'times' ? S.mulTable : S.divTable;
+  var chips = '<button class="chip' + (cur ? '' : ' on') + '" type="button" data-tab="0">MIX</button>';
+  for (var t = 2; t <= 12; t++) {
+    chips += '<button class="chip' + (cur === t ? ' on' : '') + '" type="button" data-tab="' + t + '">' + t + '</button>';
+  }
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">' + (which === 'times' ? 'Times tables' : 'Division facts') + '</div>' +
+      '<h2>' + (which === 'times' ? 'WHICH TABLE?' : 'DIVIDE BY?') + '</h2>' +
+      '<div class="chips" data-which="' + which + '">' + chips + '</div>' +
+      '<div class="note">MIX practises every table together. Progress counts across all of them either way.</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="startskill">START</button>' +
+        '<button class="btn ghost" data-act="skills">BACK</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function progressScreen() {
+  var rows = '', i;
+  for (i = 0; i < SKILLS.length; i++) {
+    var sk = SKILLS[i], m = masteryOf(sk.id), pool = POOL[sk.id].length;
+    rows += '<div class="srow ro' + (isUnlocked(sk.id) ? '' : ' lock') + '" style="cursor:default">' +
+      '<div class="sn">' + sk.short +
+        '<em>' + masteredCount(sk.id) + ' of ' + pool + ' facts solid</em>' +
+        '<div class="mini"><i style="width:' + Math.round(m * 100) + '%"></i></div>' +
+      '</div><div class="sp">' + Math.round(m * 100) + '%</div></div>';
+  }
+  var weak = weakest(S.skill, 6), chips = '';
+  for (i = 0; i < weak.length; i++) chips += '<b>' + factLabel(weak[i].k) + '</b>';
+  if (!chips) {
+    var any = [];
+    for (i = 0; i < SKILLS.length && any.length < 6; i++) {
+      var w2 = weakest(SKILLS[i].id, 6 - any.length);
+      for (var j = 0; j < w2.length; j++) any.push(w2[j]);
+    }
+    for (i = 0; i < any.length; i++) chips += '<b>' + factLabel(any[i].k) + '</b>';
+  }
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">For the grown-ups</div>' +
+      '<h2>PROGRESS</h2>' +
+      '<div class="slist">' + rows + '</div>' +
+      '<div class="note" style="margin-top:10px">Needs practice' + (chips ? '' : ' &mdash; nothing yet, keep going') + '</div>' +
+      (chips ? '<div class="weak">' + chips + '</div>' : '') +
+      '<div class="note">' + S.total + ' questions answered &middot; best streak ' + S.bestStreak + '</div>' +
+      '<div class="btnrow"><button class="btn ghost" data-act="back">BACK</button></div>' +
+    '</div>');
+}
+
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="note">' + skillLabel() + ' &middot; ' + Math.round(masteryOf(S.skill) * 100) + '% solid</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="skills">SKILLS</button>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn ghost" data-act="progress">PROGRESS</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function unlockScreen() {
+  if (!G.gained.length) return;
+  var names = [];
+  for (var i = 0; i < G.gained.length; i++) names.push((SKILL_BY_ID[G.gained[i]] || {}).name || G.gained[i]);
+  G.gained = [];
+  sfx.unlock();
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">New skill unlocked</div>' +
+      '<h2>' + names.join(' &amp; ').toUpperCase() + '</h2>' +
+      '<div class="tagline">You have this one solid. Something new is waiting on the ladder whenever you want it.</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">KEEP GOING</button>' +
+        '<button class="btn ghost" data-act="skills">TRY IT NOW</button>' +
+      '</div>' +
+    '</div>');
+}
+
+overlay.addEventListener('click', function (e) {
+  var el = e.target && e.target.closest ? e.target.closest('[data-act],[data-skill],[data-tab]') : null;
+  if (!el) return;
+  initAudio();
+  if (el.hasAttribute('data-tab')) {
+    var wrap = el.closest('[data-which]');
+    var which = wrap ? wrap.getAttribute('data-which') : 'times';
+    var v = parseInt(el.getAttribute('data-tab'), 10) || 0;
+    if (which === 'times') S.mulTable = v; else S.divTable = v;
+    saveNow();
+    tableScreen(which);
+    return;
+  }
+  if (el.hasAttribute('data-skill')) {
+    var id = el.getAttribute('data-skill');
+    if (!isUnlocked(id)) return;
+    S.skill = id; saveNow();
+    if (id === 'times' || id === 'divide') { tableScreen(id === 'times' ? 'times' : 'divide'); return; }
+    startSkill(id);
+    return;
+  }
+  var act = el.getAttribute('data-act');
+  if (act === 'start') startSkill(S.skill);
+  else if (act === 'startskill') startSkill(S.skill);
+  else if (act === 'skills') skillsScreen();
+  else if (act === 'progress') progressScreen();
+  else if (act === 'timer') { S.timer = !S.timer; saveNow(); applyTimerClass(); titleScreen(); }
+  else if (act === 'resume') resumePlay();
+  else if (act === 'back') { if (document.body.classList.contains('playing')) pauseScreen(); else titleScreen(); }
+  else if (act === 'title') { document.body.classList.remove('playing'); titleScreen(); }
+});
+
+function applyTimerClass() {
+  if (S.timer) document.body.classList.add('timed');
+  else document.body.classList.remove('timed');
+}
+function startSkill(id) {
+  if (!SKILL_BY_ID[id] || !isUnlocked(id)) id = 'bonds';
+  S.skill = id; saveNow();
+  initAudio();
+  hideOverlay();
+  document.body.classList.add('playing');
+  applyTimerClass();
+  G.lastKey = null;
+  nextQuestion();
+  setTimeout(resize, 0);
+}
+function resumePlay() {
+  hideOverlay();
+  document.body.classList.add('playing');
+  if (G.pendingNext || !G.q) { G.pendingNext = false; nextQuestion(); setTimeout(resize, 0); return; }
+  if (G.state === 'pause') {
+    G.state = G.teachPrev || 'ask';
+    G.teachPrev = null;
+    if (G.state === 'teach') paintTeach();
+  }
+  setTimeout(resize, 0);
+}
+function togglePause() {
+  if (G.state === 'ask' || G.state === 'right' || G.state === 'teach') {
+    if (G.state === 'right') G.pendingNext = true;
+    G.teachPrev = G.state === 'right' ? 'ask' : G.state;
+    G.state = 'pause';
+    pauseScreen();
+  } else if (G.state === 'pause') resumePlay();
+}
+
+/* ================================================================ input === */
+document.getElementById('menuBtn').addEventListener('click', function () {
+  initAudio();
+  if (G.state === 'right') G.pendingNext = true;
+  G.teachPrev = G.state === 'right' ? 'ask' : G.state;
+  G.state = 'pause';
+  skillsScreen();
+});
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { initAudio(); togglePause(); });
+
+window.addEventListener('keydown', function (e) {
+  var k = e.key;
+  if (k === 'm' || k === 'M') { initAudio(); setMuted(!muted); return; }
+  if (G.state === 'title') {
+    if (k === 'Enter' || k === ' ') { e.preventDefault(); startSkill(S.skill); }
+    return;
+  }
+  if (k === 'Escape' || k === 'p' || k === 'P') { e.preventDefault(); togglePause(); return; }
+  if (G.state === 'pause') return;
+  if (k === 's' || k === 'S') {
+    if (G.state === 'right') G.pendingNext = true;
+    G.teachPrev = G.state === 'right' ? 'ask' : G.state;
+    G.state = 'pause'; skillsScreen(); return;
+  }
+  initAudio();
+  if (G.state === 'teach') { if (k === 'Enter' || k === ' ') { e.preventDefault(); teachNext(); } return; }
+  if (G.state === 'right') { if (k === 'Enter' || k === ' ') { e.preventDefault(); nextQuestion(); } return; }
+  if (G.state !== 'ask' || !G.q) return;
+  if (G.q.choices) {
+    var n = parseInt(k, 10);
+    if (n >= 1 && n <= G.q.choices.length) { e.preventDefault(); submitAnswer(G.q.choices[n - 1].val); }
+    return;
+  }
+  if (/^[0-9]$/.test(k)) { e.preventDefault(); pressKey(k); }
+  else if (k === 'Backspace') { e.preventDefault(); pressKey('del'); }
+  else if (k === 'Enter') { e.preventDefault(); pressKey('ok'); }
+}, false);
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+/* gamepad: dpad walks the pad, A presses, B deletes, Start pauses */
+var padPrev = {};
+function pollPad() {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null, i;
+  for (i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  function btn(n) { return !!(p.buttons[n] && p.buttons[n].pressed); }
+  function edge(n) { var v = btn(n), was = padPrev[n]; padPrev[n] = v; return v && !was; }
+  var ax = p.axes && p.axes.length ? p.axes[0] : 0;
+  var ay = p.axes && p.axes.length > 1 ? p.axes[1] : 0;
+  var l = edge(14) || (ax < -0.6 && !padPrev.lx), r = edge(15) || (ax > 0.6 && !padPrev.rx);
+  var u = edge(12) || (ay < -0.6 && !padPrev.uy), dn = edge(13) || (ay > 0.6 && !padPrev.dy);
+  padPrev.lx = ax < -0.6; padPrev.rx = ax > 0.6; padPrev.uy = ay < -0.6; padPrev.dy = ay > 0.6;
+  if (G.state === 'title') { if (edge(0)) startSkill(S.skill); return; }
+  if (edge(9)) { togglePause(); return; }
+  if (G.state !== 'ask') { if (edge(0)) pressKey('ok'); return; }
+  if (G.q && G.q.choices) {
+    if (l || u) G.padSel = (G.padSel <= 0 ? G.q.choices.length : G.padSel) - 1;
+    if (r || dn) G.padSel = (G.padSel + 1) % G.q.choices.length;
+    highlightPad();
+    if (edge(0) && G.padSel >= 0) submitAnswer(G.q.choices[G.padSel].val);
+    return;
+  }
+  if (G.padSel < 0) G.padSel = 0;
+  if (l) G.padSel = (G.padSel + 11) % 12;
+  if (r) G.padSel = (G.padSel + 1) % 12;
+  if (u) G.padSel = (G.padSel + 9) % 12;
+  if (dn) G.padSel = (G.padSel + 3) % 12;
+  if (l || r || u || dn) highlightPad();
+  if (edge(0)) pressKey(PAD_KEYS[G.padSel]);
+  if (edge(1)) pressKey('del');
+}
+function highlightPad() {
+  var kids = elPad.children, i;
+  for (i = 0; i < kids.length; i++) kids[i].classList.toggle('sel', i === G.padSel);
+  var chs = elCh.children;
+  for (i = 0; i < chs.length; i++) chs[i].classList.toggle('sel', i === G.padSel);
+}
+
+window.addEventListener('blur', function () {
+  if (G.state === 'ask' || G.state === 'right' || G.state === 'teach') togglePause();
+});
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && (G.state === 'ask' || G.state === 'right' || G.state === 'teach')) togglePause();
+});
+
+/* ================================================================== loop == */
+var lastT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  pollPad();
+  if (G.state === 'ask') {
+    G.askT += dt;
+    if (S.timer) {
+      G.tLeft -= dt;
+      elTfill.style.width = clamp(G.tLeft / TIMER_SECS, 0, 1) * 100 + '%';
+      if (G.tLeft <= 0) startTeach();
+    }
+  } else if (G.state === 'right') {
+    G.holdT -= dt;
+    if (G.holdT <= 0) nextQuestion();
+  }
+}
+
+/* ================================================================== boot == */
+applyTimerClass();
+setMuted(muted);
+titleScreen();
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(document.getElementById('modelwrap')); } catch (e) {}
+}
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

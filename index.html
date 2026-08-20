@@ -1450,8 +1450,116 @@ var GAMES = [
       x.fillText('cat', w / 2, h * 0.74);
       x.textAlign = 'left'; x.textBaseline = 'alphabetic';
     }
+  },
+  {
+    id: 'greedy', name: 'Greedy', cat: 'kids', tag: 'Party', isNew: true,
+    desc: 'A greedy algorithm takes whatever is nearest and never looks back. So do four daemons fighting over one buffer pool. Slide, chomp, out-eat them.',
+    best: function () { var s = lsJSON('greedy_v1'); return s && s.best > 0 ? ['Most eaten', fmtInt(s.best)] : null; },
+    cover: function (x, w, h) {
+      var cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.42;
+      x.fillStyle = '#0d1226'; x.fillRect(0, 0, w, h);
+      var g = x.createRadialGradient(cx, cy, R * 0.15, cx, cy, R);
+      g.addColorStop(0, '#151d3d'); g.addColorStop(1, '#0d1226');
+      x.fillStyle = g; x.beginPath(); x.arc(cx, cy, R, 0, 7); x.fill();
+      x.strokeStyle = '#222c4d'; x.lineWidth = 2; x.stroke();
+      var pk = [[-0.20, -0.10], [0.12, -0.26], [0.26, 0.10], [-0.06, 0.24], [0.02, -0.02], [-0.30, 0.16]];
+      for (var i = 0; i < pk.length; i++) {
+        x.fillStyle = i === 2 ? '#ffcc4d' : '#cfd8f5';
+        x.fillRect(cx + pk[i][0] * R * 2 - 4, cy + pk[i][1] * R * 2 - 4, 8, 8);
+      }
+      var cols = ['#ffcc4d', '#4dd2ff', '#ff6b8a', '#7CE38B'];
+      var ang = [Math.PI / 2, Math.PI, -Math.PI / 2, 0];
+      var open = [0.55, 0.15, 0.42, 0.10];
+      for (var d = 0; d < 4; d++) {
+        var a = ang[d], hx = cx + Math.cos(a) * R * 0.84, hy = cy + Math.sin(a) * R * 0.84, s2 = R * 0.17;
+        x.save(); x.translate(hx, hy); x.rotate(a + Math.PI);
+        x.fillStyle = cols[d];
+        x.beginPath(); x.arc(0, 0, s2, 0, 7); x.fill();
+        x.fillStyle = '#0d1226';
+        x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, s2 * 1.06, Math.PI - open[d], Math.PI + open[d]); x.closePath(); x.fill();
+        x.beginPath(); x.arc(s2 * 0.22, -s2 * 0.42, s2 * 0.2, 0, 7); x.fill();
+        x.beginPath(); x.arc(s2 * 0.22, s2 * 0.42, s2 * 0.2, 0, 7); x.fill();
+        x.restore();
+      }
+    }
+  },
+  {
+    id: 'sum', name: 'Sum', cat: 'kids', tag: 'Maths', isNew: true,
+    desc: 'A summation, and learning to add. Number bonds up to fractions, taught with ten-frames, number lines and dot arrays — and it remembers which facts you find hard.',
+    best: function () {
+      var s = lsJSON('sum_v1');
+      if (!s || !s.facts) return null;
+      var solid = 0, total = 0, k;
+      for (k in s.facts) { total++; if (s.facts[k] && s.facts[k].box >= 4) solid++; }
+      return total ? ['Facts solid', solid + ' / ' + total] : null;
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      /* a ten-frame with six dots */
+      var fw = w * 0.72, fh = h * 0.3, x0 = (w - fw) / 2, y0 = h * 0.16;
+      x.strokeStyle = 'rgba(232,184,74,0.7)'; x.lineWidth = 1.6;
+      x.strokeRect(x0, y0, fw, fh);
+      for (var i = 1; i < 5; i++) { x.beginPath(); x.moveTo(x0 + fw * i / 5, y0); x.lineTo(x0 + fw * i / 5, y0 + fh); x.stroke(); }
+      x.beginPath(); x.moveTo(x0, y0 + fh / 2); x.lineTo(x0 + fw, y0 + fh / 2); x.stroke();
+      x.fillStyle = '#e8b84a';
+      for (var d = 0; d < 6; d++) {
+        var cx = x0 + fw * ((d % 5) + 0.5) / 5, cy = y0 + fh * ((d < 5 ? 0 : 1) + 0.5) / 2;
+        x.beginPath(); x.arc(cx, cy, Math.min(fw / 5, fh / 2) * 0.3, 0, 7); x.fill();
+      }
+      /* a dot array for 3 x 4 */
+      x.fillStyle = 'rgba(125,226,255,0.9)';
+      var ax = w * 0.16, ay = h * 0.6, gap = Math.min(w, h) * 0.075;
+      for (var r = 0; r < 3; r++) for (var c = 0; c < 4; c++) {
+        x.beginPath(); x.arc(ax + c * gap, ay + r * gap, gap * 0.22, 0, 7); x.fill();
+      }
+      x.fillStyle = '#f2eee4';
+      x.font = '800 ' + Math.round(h * 0.16) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'left'; x.textBaseline = 'middle';
+      x.fillText('3 x 4 = 12', w * 0.52, ay + gap);
+      x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'syntax', name: 'Syntax', cat: 'kids', tag: 'Writing', isNew: true,
+    desc: 'Grammar syntax, and code syntax. Capitals, commas, apostrophes and the its/it’s trap — every wrong answer explains the actual rule in plain words.',
+    best: function () {
+      var s = lsJSON('syntax_v1');
+      if (!s) return null;
+      var n = s.unlocked || s.stage || 0;
+      return n > 0 ? ['Ladder', n + ' / 7'] : null;
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      /* word tiles forming a sentence, one needing a capital */
+      var words = ['sarah', 'rode', 'her', 'bike'];
+      var tw = w * 0.2, th = h * 0.17, gap = 6;
+      var total = words.length * tw + (words.length - 1) * gap;
+      var x0 = (w - total) / 2, y0 = h * 0.3;
+      for (var i = 0; i < words.length; i++) {
+        var tx = x0 + i * (tw + gap);
+        var flagged = i === 0;
+        x.fillStyle = flagged ? 'rgba(232,184,74,0.22)' : '#1e2a55';
+        x.beginPath(); x.roundRect(tx, y0, tw, th, 5); x.fill();
+        x.strokeStyle = flagged ? '#e8b84a' : 'rgba(140,170,230,0.3)';
+        x.lineWidth = flagged ? 2 : 1.2;
+        if (flagged) { x.save(); x.setLineDash([4, 3]); x.stroke(); x.restore(); } else x.stroke();
+        x.fillStyle = flagged ? '#e8b84a' : 'rgba(215,228,255,0.85)';
+        x.font = '700 ' + Math.round(th * 0.42) + 'px "Segoe UI", sans-serif';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(words[i], tx + tw / 2, y0 + th / 2);
+      }
+      /* the corrected form below, with a period tile */
+      x.fillStyle = '#f2eee4';
+      x.font = '800 ' + Math.round(h * 0.15) + 'px "Segoe UI", sans-serif';
+      x.fillText('Sarah rode her bike.', w / 2, h * 0.68);
+      x.fillStyle = 'rgba(142,255,193,0.9)';
+      x.font = '800 ' + Math.round(h * 0.13) + 'px "Segoe UI", sans-serif';
+      x.fillText('✓', w / 2, h * 0.85);
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
   }
 ];
+
 
 
 /* ------------------------------------------------------------ rendering -- */

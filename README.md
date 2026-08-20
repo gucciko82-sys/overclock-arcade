@@ -1068,3 +1068,91 @@ All five pass the three-profile matrix and the control audit with zero
 console errors.
 
 That is **39 games**.
+
+
+### Built and play-tested 2026-08-19 — Greedy (game 40)
+
+Hungry Hungry Hippos, renamed for the house: a **greedy algorithm** takes
+whatever is nearest and never looks back, which is exactly what four
+daemons do to one shared buffer pool. Four jaws on four arcs, 24 packets
+loose in the middle, five rounds, AI that gets sharper each round.
+
+**The verification is the story here.** The browser pane in this session
+never composited, so `requestAnimationFrame` never fired — the game read
+as completely frozen: zero packets eaten, jaws at 0, daemons pinned to
+their base angles after 24 seconds. That is the Starfall trap in §3 of
+GAME-RULES, and it cost time again even though it is written down.
+Fronting the tab did not help; RAF stayed at 0 frames.
+
+So the sim was verified **headless in Node** instead —
+`.tools/greedy-headless-test.js` stubs the DOM, canvas, audio and
+localStorage, boots the real script, and drives the real `update()` on a
+fixed dt. Fifteen checks: AI leaves its base angle, AI actually chomps,
+the pool drains, scores accumulate, the player can score, rounds
+transition, the match reaches round 5, no packet escapes the arena, none
+stall dead, and a full clamped 0.05 step never flings anything. All pass.
+
+Two of those checks failed on the first run and **both were bugs in the
+test, not the game** — the player-scoring check ran after the AI had
+already cleared the board, and the dt-clamp check called `update(5)`
+directly when the clamp correctly lives in `frame()`. Worth stating
+plainly, because a red check is not automatically a red game.
+
+Kept from the house pattern: `window.__GREEDY` playtest handle (same
+convention as `__FW`, `__GG`, `__FLY`), fluid full-screen arena sized off
+`min(w,h)` so both orientations work without letterboxing, and the harness
+lives in `.tools/` rather than the game folder so rule 1 — one folder, one
+`index.html` — still holds.
+
+Not verified here, and left for a real browser: the canvas art itself, the
+three-profile responsive matrix, and the control audit. **Someone should
+eyeball it on a phone before this is called done.**
+
+That is **40 games**.
+
+### Built and play-tested 2026-08-20 — Sum and Syntax (the maths and writing tutors)
+
+The two learning games lost when the seven-agent batch died. Rebuilt as a
+pair — two concurrent builders, not seven — and both finished cleanly.
+
+**Sum** is a maths tutor, not a quiz. Seven skills from number bonds to
+fractions, 589 individually-tracked facts, each taught with a visual
+model: ten-frames, a number line you hop backwards along, place-value
+columns with a "10 ones = 1 ten" rod, dot arrays, shaded fraction bars.
+Every fact carries a Leitner box and a due counter, so weak facts come
+back sooner and mastered ones fade; a working-set cap stops 65 solid
+facts crowding out the one a child keeps missing. A wrong answer works
+the model through and re-queues the fact.
+
+**Syntax** is a sentence lab: capitals and end marks, fragments and
+run-ons, building sentences from tiles, commas, apostrophes including the
+its/it's trap, homophones in context, and editing a paragraph with
+planted errors. Every wrong answer explains the rule in a child's words,
+quoting that sentence.
+
+Integrator verification — the content itself, re-derived independently
+rather than trusted:
+
+- **Sum**: all **589 facts** walked, every answer re-computed from first
+  principles. Zero wrong. Carrying is genuinely required in every carry
+  item and borrowing in every borrow item; no subtraction goes negative;
+  every division is exact; and every fraction comparison names the
+  genuinely larger fraction.
+- **Syntax**: the capitals stage re-audited against independent rules —
+  the words needing a capital are exactly the sentence opener, proper
+  nouns and "I", with no common word wrongly capitalised, and every end
+  mark matches its sentence type. Zero faults.
+
+Both builders also found real content bugs themselves, which is the
+point of making them audit their own data: Sum's fraction-compare bars
+rendered **completely unshaded** in the ask state (a child asked "which
+is bigger?" against two blank bars — invisible to every geometry check),
+and its number line **labelled the landing tick before the answer was
+revealed**, handing over the answer. Syntax's run-on detector mislabelled
+two pieces of clean prose ("Sarah said we needed to give him a bath."),
+which would have taught a wrong rule had a paragraph hit it.
+
+A count correction while integrating: the hub and the folders were
+reconciled directly and both hold **42 games**. The running tally in
+these notes had drifted by one again — reconcile against disk, not
+against the last number written down.
