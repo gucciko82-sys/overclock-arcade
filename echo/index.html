@@ -308,8 +308,8 @@ function say(text, onend) {
   try {
     window.speechSynthesis.cancel();
     var u = new window.SpeechSynthesisUtterance(String(text));
-    u.rate = 0.85; u.pitch = 1.04; u.volume = 1; u.lang = 'en-US';
-    if (SPEECH.voice) u.voice = SPEECH.voice;
+    u.volume = 1; u.lang = 'en-US';
+    ocApply(u, SPEECH.voice);
     if (onend) { u.onend = onend; u.onerror = onend; }
     window.speechSynthesis.speak(u);
     SPEECH.spoken++;
@@ -2087,6 +2087,198 @@ if (window.ResizeObserver) { try { new window.ResizeObserver(resize).observe(art
 setMuted(muted);
 titleScreen();
 window.requestAnimationFrame(frame);
+
+/* ==================================================== WHO IS READING == */
+/* Shared across every spoken game in the arcade. She picks a character once
+   and Char, Echo, Scan, Trace and Tally all speak in it — one key, one choice,
+   because being asked the same question in five places is not a feature.
+ *
+ * What is possible has to be said plainly, because it shapes this whole
+ * design: speechSynthesis can only use voices ALREADY INSTALLED on the device.
+ * These games ship no audio files and call no APIs, so no custom voice can
+ * travel with them. The honest levers are which device voice is used and its
+ * pitch and speed — and those change the character more than the name does.
+ *
+ * She cannot read a list of voice names, so she picks by EAR: four faces, and
+ * tapping one plays it introducing itself. Nothing here is ever required — if
+ * speech is missing the button hides itself and the game plays on in silence,
+ * exactly as it did before. */
+var OC_VOICE_KEY = 'overclock_voice_v1';
+var OC_CHARACTERS = [
+  { id: 'sunny', name: 'Sunny', pitch: 1.08, rate: 0.85, hint: 'warm and steady',
+    line: 'Hello. I am Sunny. I will read everything to you.',
+    face: '<circle cx="50" cy="50" r="34" fill="#ffd54f"/>' +
+      '<circle cx="39" cy="43" r="4.5" fill="#4a3520"/><circle cx="61" cy="43" r="4.5" fill="#4a3520"/>' +
+      '<path d="M36 60 q14 12 28 0" stroke="#4a3520" stroke-width="4" fill="none" stroke-linecap="round"/>' },
+  { id: 'chip', name: 'Chip', pitch: 0.62, rate: 0.8, hint: 'a deep robot',
+    line: 'Greetings. I am Chip. I am a computer.',
+    face: '<rect x="20" y="24" width="60" height="52" rx="8" fill="#90a4ae"/>' +
+      '<rect x="32" y="40" width="12" height="8" rx="2" fill="#1b2748"/><rect x="56" y="40" width="12" height="8" rx="2" fill="#1b2748"/>' +
+      '<rect x="34" y="60" width="32" height="5" rx="2.5" fill="#1b2748"/>' +
+      '<line x1="50" y1="24" x2="50" y2="12" stroke="#90a4ae" stroke-width="4"/><circle cx="50" cy="9" r="5" fill="#ef6c00"/>' },
+  { id: 'pip', name: 'Pip', pitch: 1.5, rate: 1.0, hint: 'quick and squeaky',
+    line: 'Hi hi! I am Pip! Lets go!',
+    face: '<circle cx="50" cy="52" r="30" fill="#f06292"/>' +
+      '<circle cx="40" cy="46" r="5" fill="#fff"/><circle cx="60" cy="46" r="5" fill="#fff"/>' +
+      '<circle cx="41" cy="47" r="2.5" fill="#3e2723"/><circle cx="61" cy="47" r="2.5" fill="#3e2723"/>' +
+      '<path d="M40 63 q10 9 20 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+      '<path d="M28 30 l8 12 M72 30 l-8 12" stroke="#f06292" stroke-width="5" stroke-linecap="round"/>' },
+  { id: 'moss', name: 'Moss', pitch: 0.95, rate: 0.62, hint: 'slow and calm',
+    line: 'Hello. I am Moss. I will take my time.',
+    face: '<circle cx="50" cy="52" r="31" fill="#66bb6a"/>' +
+      '<path d="M38 46 q4 -4 8 0 M54 46 q4 -4 8 0" stroke="#1b3a1e" stroke-width="3.5" fill="none" stroke-linecap="round"/>' +
+      '<path d="M38 62 q12 8 24 0" stroke="#1b3a1e" stroke-width="4" fill="none" stroke-linecap="round"/>' }
+];
+var OC_VOICE = { charId: 'sunny', uri: '' };
+var OC_LIST = [];
+function ocChar(id) { var i; for (i = 0; i < OC_CHARACTERS.length; i++) if (OC_CHARACTERS[i].id === id) return OC_CHARACTERS[i]; return OC_CHARACTERS[0]; }
+function ocCur() { return ocChar(OC_VOICE.charId); }
+function ocLoadVoice() {
+  var raw = null, o = null;
+  try { raw = localStorage.getItem(OC_VOICE_KEY); } catch (e) {}
+  if (!raw) return;
+  try { o = JSON.parse(raw); } catch (e) { return; }
+  if (!o || typeof o !== 'object') return;
+  if (typeof o.charId === 'string' && ocChar(o.charId).id === o.charId) OC_VOICE.charId = o.charId;
+  if (typeof o.uri === 'string') OC_VOICE.uri = o.uri;
+}
+function ocSaveVoice() {
+  try { localStorage.setItem(OC_VOICE_KEY, JSON.stringify({ charId: OC_VOICE.charId, uri: OC_VOICE.uri })); } catch (e) {}
+}
+function ocVoices() {
+  var out = [], vs = [], i;
+  try { vs = window.speechSynthesis.getVoices() || []; } catch (e) { vs = []; }
+  for (i = 0; i < vs.length; i++) if (vs[i] && /^en/i.test(vs[i].lang || '')) out.push(vs[i]);
+  if (!out.length) out = vs.slice(0, 8);
+  OC_LIST = out;
+  return out;
+}
+function ocPickedVoice(fallback) {
+  var i;
+  if (!OC_LIST.length) ocVoices();
+  if (OC_VOICE.uri) for (i = 0; i < OC_LIST.length; i++) if (OC_LIST[i].voiceURI === OC_VOICE.uri) return OC_LIST[i];
+  return fallback || OC_LIST[0] || null;
+}
+/* the one call every game's say() makes */
+function ocApply(u, fallbackVoice, rateOverride) {
+  var C = ocCur();
+  u.rate = rateOverride || C.rate;
+  u.pitch = C.pitch;
+  var v = ocPickedVoice(fallbackVoice);
+  if (v) u.voice = v;
+  return u;
+}
+function ocSpeak(text) {
+  try {
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
+    window.speechSynthesis.cancel();
+    var u = new window.SpeechSynthesisUtterance(String(text));
+    ocApply(u, null);
+    u.lang = 'en-US';
+    window.speechSynthesis.speak(u);
+    return true;
+  } catch (e) { return false; }
+}
+function ocSpeechOK() {
+  try { return !!(window.speechSynthesis && window.SpeechSynthesisUtterance); } catch (e) { return false; }
+}
+/* ---- the picker: its own overlay and its own styles, so it drops into any
+        of these games without touching that game's screen system ---- */
+function ocVoiceUI() {
+  if (!ocSpeechOK()) return;
+  var st = document.createElement('style');
+  st.textContent =
+    '#ocVoiceBtn{position:fixed;left:max(10px,env(safe-area-inset-left));' +
+    'bottom:max(10px,env(safe-area-inset-bottom));z-index:40;min-height:44px;padding:0 12px 0 8px;' +
+    'display:inline-flex;align-items:center;gap:7px;border-radius:14px;cursor:pointer;' +
+    'border:2px solid rgba(128,128,128,0.38);background:rgba(255,255,255,0.9);color:#333;' +
+    'font:700 12px "Segoe UI",system-ui,sans-serif;letter-spacing:0.06em;}' +
+    '#ocVoiceBtn svg{width:28px;height:28px;display:block}' +
+    'body.playing #ocVoiceBtn{display:none}' +
+    '#ocVoiceWrap{position:fixed;inset:0;z-index:60;background:rgba(12,18,14,0.72);' +
+    'display:none;align-items:center;justify-content:center;padding:14px;overflow:auto}' +
+    '#ocVoiceWrap.on{display:flex}' +
+    '#ocVoicePanel{background:#fff;border-radius:22px;padding:16px;max-width:560px;width:100%;' +
+    'font-family:"Segoe UI",system-ui,sans-serif;color:#2f4030;box-shadow:0 12px 40px rgba(0,0,0,0.35)}' +
+    '#ocVoicePanel h3{margin:0 0 12px;font-size:13px;letter-spacing:0.2em;text-transform:uppercase;' +
+    'text-align:center;color:#5d7159}' +
+    '#ocVoiceGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}' +
+    '.ocvc{min-height:110px;border-radius:18px;border:4px solid rgba(47,64,48,0.18);background:#fff;' +
+    'cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px}' +
+    '.ocvc.on{border-color:#43a047;background:#e8f5e9}' +
+    '.ocvc svg{width:56px;height:56px;display:block}' +
+    '.ocvc b{font-size:15px}.ocvc i{font-style:normal;font-size:11px;color:#5d7159;font-weight:700}' +
+    '#ocVoiceGrown{font-size:11px;color:#5d7159;line-height:1.5;margin-top:10px;text-align:center}' +
+    '#ocVoiceGrown select{font:inherit;font-size:11px;padding:3px 5px;border-radius:8px;' +
+    'border:2px solid rgba(47,64,48,0.18);max-width:180px}' +
+    '#ocVoiceDone{margin-top:12px;width:100%;min-height:52px;border-radius:14px;border:4px solid #2e7d32;' +
+    'background:#81c784;color:#06280b;font:800 15px "Segoe UI",system-ui,sans-serif;letter-spacing:0.14em;cursor:pointer}' +
+    '@media (max-height:460px){#ocVoiceGrid{grid-template-columns:repeat(4,1fr)}' +
+    '.ocvc{min-height:88px}.ocvc i{display:none}#ocVoiceGrown{display:none}}';
+  document.head.appendChild(st);
+
+  var btn = document.createElement('button');
+  btn.id = 'ocVoiceBtn'; btn.type = 'button';
+  btn.setAttribute('aria-label', 'Choose who reads to you');
+
+  var wrap = document.createElement('div');
+  wrap.id = 'ocVoiceWrap';
+  wrap.innerHTML = '<div id="ocVoicePanel"><h3>Who should read to you?</h3>' +
+    '<div id="ocVoiceGrid"></div><div id="ocVoiceGrown"></div>' +
+    '<button id="ocVoiceDone" type="button">DONE</button></div>';
+
+  function svg(inner, cls) {
+    return '<svg viewBox="0 0 100 100" class="' + (cls || '') + '" aria-hidden="true">' + inner + '</svg>';
+  }
+  function paintBtn() { btn.innerHTML = svg(ocCur().face) + '<span>' + ocCur().name + '</span>'; }
+  function paintGrid() {
+    var g = wrap.querySelector('#ocVoiceGrid'), h = '', i, c;
+    for (i = 0; i < OC_CHARACTERS.length; i++) {
+      c = OC_CHARACTERS[i];
+      h += '<button class="ocvc' + (c.id === OC_VOICE.charId ? ' on' : '') + '" type="button" data-oc="' + c.id +
+        '" aria-label="' + c.name + ', ' + c.hint + '">' + svg(c.face) +
+        '<b>' + c.name + '</b><i>' + c.hint + '</i></button>';
+    }
+    g.innerHTML = h;
+    var gr = wrap.querySelector('#ocVoiceGrown'), list = ocVoices();
+    if (list.length > 1) {
+      var cur = ocPickedVoice(null), s = 'Grown-ups: the device voice underneath is <select id="ocVoiceSel">';
+      for (i = 0; i < list.length && i < 24; i++) {
+        s += '<option value="' + list[i].voiceURI + '"' +
+             (cur && list[i].voiceURI === cur.voiceURI ? ' selected' : '') + '>' +
+             String(list[i].name).slice(0, 26) + '</option>';
+      }
+      gr.innerHTML = s + '</select>. More can be added in the device&rsquo;s own settings.';
+      var sel = wrap.querySelector('#ocVoiceSel');
+      if (sel) sel.addEventListener('change', function () { OC_VOICE.uri = sel.value; ocSaveVoice(); ocSpeak(ocCur().line); });
+    } else { gr.innerHTML = ''; }
+  }
+  btn.addEventListener('click', function () { paintGrid(); wrap.classList.add('on'); });
+  wrap.addEventListener('click', function (e) {
+    var t = e.target && e.target.closest ? e.target.closest('[data-oc]') : null;
+    if (t) {
+      OC_VOICE.charId = ocChar(t.getAttribute('data-oc')).id;
+      ocSaveVoice(); paintGrid(); paintBtn();
+      ocSpeak(ocCur().line);
+      return;
+    }
+    if (e.target === wrap || (e.target && e.target.id === 'ocVoiceDone')) {
+      wrap.classList.remove('on');
+      try { window.speechSynthesis.cancel(); } catch (err) {}
+    }
+  });
+  document.body.appendChild(btn);
+  document.body.appendChild(wrap);
+  paintBtn();
+}
+ocLoadVoice();
+try {
+  if (ocSpeechOK() && window.speechSynthesis) window.speechSynthesis.onvoiceschanged = ocVoices;
+} catch (e) {}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ocVoiceUI);
+else ocVoiceUI();
+window.setTimeout(function () { ocVoices(); }, 400);
+
 </script>
 </body>
 </html>

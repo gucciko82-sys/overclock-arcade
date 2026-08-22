@@ -894,12 +894,18 @@ var CHARACTERS = [
       '<path d="M38 46 q4 -4 8 0 M54 46 q4 -4 8 0" stroke="#1b3a1e" stroke-width="3.5" fill="none" stroke-linecap="round"/>' +
       '<path d="M38 62 q12 8 24 0" stroke="#1b3a1e" stroke-width="4" fill="none" stroke-linecap="round"/>'; } }
 ];
-var K_VOICE = 'tally_voice_v1';
+/* One key across the whole arcade: she picks a character once and Char, Echo,
+   Scan, Trace and Tally all speak in it. Being asked the same question in five
+   different places is not a feature. */
+var K_VOICE = 'overclock_voice_v1';
+var K_VOICE_OLD = 'tally_voice_v1';
 var VOICE = { charId: 'sunny', uri: '' };
 function charById(id) { var i; for (i = 0; i < CHARACTERS.length; i++) if (CHARACTERS[i].id === id) return CHARACTERS[i]; return CHARACTERS[0]; }
 function curChar() { return charById(VOICE.charId); }
 function loadVoicePref() {
   var raw = loadStr(K_VOICE, ''), o = null;
+  /* anyone who already picked a character before it became arcade-wide keeps it */
+  if (!raw) { raw = loadStr(K_VOICE_OLD, ''); if (raw) saveStr(K_VOICE, raw); }
   if (!raw) return;
   try { o = JSON.parse(raw); } catch (e) { return; }
   if (!o || typeof o !== 'object') return;
