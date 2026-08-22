@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>The Forge — school</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="A tutor that starts where you actually are, works upward for years, and explains why on every single miss. Maths from third grade upward, with a record of the growth.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Forge">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e; --panel: #121a30; --panel2: #0e1526;
+    --fg: #eaf2ff; --dim: #8ea3c8; --line: rgba(140,170,220,0.20);
+    --accent: #ffcc4d; --cyan: #6fe3ff; --green: #6ee7a0; --warm: #ff9f5a;
+    --violet: #b48cff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent; overscroll-behavior: none;
+  }
+  button, input { font-family: inherit; color: inherit; touch-action: manipulation; }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+
+  #topbtns {
+    position: absolute; top: max(6px, env(safe-area-inset-top));
+    right: max(6px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 8;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px; background: var(--panel);
+    color: var(--fg); border: 1px solid var(--line); font-size: 17px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .iconbtn:active { transform: translateY(2px); }
+
+  #app {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    padding: 56px max(12px, env(safe-area-inset-left)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-right));
+  }
+  #app.scroll { overflow-y: auto; }
+  .screen { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+            gap: 10px; width: 100%; max-width: 780px; align-self: center; }
+  .center { align-items: center; justify-content: center; text-align: center; }
+  .eyebrow { font-size: 10.5px; letter-spacing: 0.26em; text-transform: uppercase;
+             color: var(--dim); font-weight: 700; }
+  h1 { margin: 0; font-size: clamp(38px, 11vw, 72px); font-weight: 800;
+       letter-spacing: 0.14em; color: var(--accent); }
+  .tagline { font-size: clamp(13px, 3.4vw, 16px); color: var(--dim); max-width: 460px; line-height: 1.55; }
+  .btn {
+    min-height: 56px; min-width: 190px; padding: 0 26px; border-radius: 14px;
+    border: 1px solid var(--accent); background: rgba(255,204,77,0.14); color: var(--accent);
+    font-size: 15px; font-weight: 800; letter-spacing: 0.16em; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(255,255,255,0.04); }
+  .btn:active { transform: translateY(2px); }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+  /* ---- the question ---- */
+  .qhead { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
+  .qhead .skill { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+  .qhead .bar { flex: 1 1 auto; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; }
+  .qhead .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .qwrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; gap: 12px; text-align: center; }
+  .q { font-size: clamp(26px, 7.4vw, 46px); font-weight: 800; letter-spacing: 0.01em; line-height: 1.25; }
+  .q .op { color: var(--cyan); }
+  .qsub { font-size: clamp(13px, 3.4vw, 16px); color: var(--dim); max-width: 520px; line-height: 1.5; }
+  .entry {
+    min-height: 56px; min-width: 150px; padding: 6px 18px; border-radius: 12px;
+    border: 2px solid var(--line); background: var(--panel2);
+    font-size: clamp(24px, 6vw, 34px); font-weight: 800; color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0.04em;
+  }
+  .entry.empty { color: var(--dim); }
+
+  /* keypad */
+  .pad { flex: 0 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; max-width: 520px; width: 100%; align-self: center; }
+  .key {
+    min-height: 52px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--fg); font-size: 19px; font-weight: 700; cursor: pointer;
+  }
+  .key:active { transform: translateY(2px); background: rgba(255,255,255,0.07); }
+  .key.go { border-color: var(--green); color: var(--green); background: rgba(110,231,160,0.12); }
+  .key.wide { grid-column: span 2; }
+
+  /* multiple choice */
+  .opts { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; max-width: 560px; align-self: center; }
+  .opt {
+    min-height: 62px; border-radius: 14px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--fg); font-size: 19px; font-weight: 700; cursor: pointer; padding: 8px;
+  }
+  .opt:active { transform: translateY(2px); }
+  .opt.right { border-color: var(--green); background: rgba(110,231,160,0.16); color: var(--green); }
+  .opt.show { border-color: var(--green); background: rgba(110,231,160,0.10); }
+
+  /* ---- the why ---- */
+  .why { flex: 0 0 auto; width: 100%; max-width: 620px; align-self: center;
+         border: 1px solid rgba(255,159,90,0.4); background: rgba(255,159,90,0.08);
+         border-radius: 14px; padding: 11px 13px; text-align: left; }
+  .why .rule { font-size: 11.5px; letter-spacing: 0.16em; text-transform: uppercase;
+               color: var(--warm); font-weight: 800; margin-bottom: 5px; }
+  .why .body { font-size: 14px; color: var(--fg); line-height: 1.5; }
+  .work { flex: 1 1 auto; min-height: 0; width: 100%; max-width: 620px; align-self: center;
+          overflow-y: auto; display: flex; flex-direction: column; gap: 7px; }
+  .wline { border: 1px solid var(--line); border-radius: 11px; padding: 9px 12px;
+           background: var(--panel2); display: flex; flex-direction: column; gap: 3px; }
+  .wline .ln { font-size: 17px; font-weight: 800; }
+  .wline .rs { font-size: 12.5px; color: var(--cyan); line-height: 1.45; }
+  .softmsg { font-size: 13.5px; color: var(--warm); }
+
+  /* ---- the record ---- */
+  .gu { text-align: left; font-size: 13.5px; line-height: 1.55; }
+  .gu h2 { margin: 0 0 4px; font-size: 15px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+  .card { border: 1px solid var(--line); background: var(--panel); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+  .kpi { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 9px; text-align: center; }
+  .kpi b { display: block; font-size: 22px; color: var(--accent); }
+  .kpi span { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--dim); margin-top: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; }
+  svg.chart { width: 100%; height: auto; display: block; }
+  .srow { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-top: 1px solid rgba(140,170,220,0.12); }
+  .srow:first-child { border-top: 0; }
+  .srow .nm { flex: 1 1 auto; font-size: 13px; }
+  .srow .gr { font-size: 11px; color: var(--dim); width: 42px; }
+  .srow .mb { width: 76px; height: 7px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; }
+  .srow .mb i { display: block; height: 100%; border-radius: 4px; }
+  .srow .st { width: 66px; text-align: right; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+
+  @media (min-width: 620px) { .opts { grid-template-columns: repeat(4, 1fr); } }
+  @media (max-height: 460px) {
+    #app { padding-top: 52px; }
+    .screen { gap: 6px; }
+    .q { font-size: clamp(20px, 5.4vw, 30px); }
+    .qsub { font-size: 12px; }
+    .key { min-height: 44px; font-size: 16px; }
+    .opt { min-height: 46px; font-size: 16px; }
+    .btn { min-height: 46px; }
+    .entry { min-height: 46px; font-size: 22px; }
+    .kpis { grid-template-columns: repeat(6, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Sound">&#9835;</button>
+    <button class="iconbtn" id="homeBtn" type="button" aria-label="Menu">&#9632;</button>
+  </div>
+  <div id="app"></div>
+</div>
+<script>
+"use strict";
+/* =========================================================================
+   THE FORGE — a school, not a quiz.
+
+   Read SCHOOL-ARCHITECTURE.md next to this file before changing anything
+   structural. The short version:
+
+   * There is NO language model in here and there cannot be — this is one
+     self-contained file with no server and no API key, which is what makes it
+     free, private, offline and unbreakable. "Tutor" means generated content, a
+     ladder that measures and moves the learner, and a written explanation for
+     every rule. That reads them, places them and pushes them. It is not a
+     chatbot and does not need to be one to do this job.
+   * The unit of work is a SKILL, and skills form a GRAPH via `needs`. Nothing
+     is ever gated on age or grade — only on prerequisites actually mastered.
+     A learner can be strong in number and weak in fractions at the same time,
+     and the graph lets both be true.
+   * Adding a subject means adding skills. The engine does not change.
+   * On a miss the learner never just sees the answer: the rule is named, the
+     specific slip is named where it is recognised, and the working is walked
+     one line at a time with a reason on every line. That is the entire point.
+     Thirty kids in a room means nobody gets told why. This does.
+   ========================================================================= */
+
+var SCHOOL_NAME = 'THE FORGE';        /* rename here; it is used everywhere */
+var K_SAVE  = 'forge_v1';
+var K_MUTED = 'forge_muted_v1';
+
+/* ============================================== exact rational numbers == */
+/* Answers are kept exact, so 0.75 and 3/4 are the same answer and no float
+   drift can ever mark a right answer wrong. */
+function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = b; b = a % b; a = t; } return a; }
+function R(n, d) {
+  d = (d === undefined) ? 1 : d;
+  if (!isFinite(n) || !isFinite(d) || d === 0) return { n: 0, d: 1, bad: true };
+  if (d < 0) { n = -n; d = -d; }
+  var g = gcd(n, d) || 1;
+  return { n: Math.round(n / g), d: Math.round(d / g) };
+}
+function Radd(a, b) { return R(a.n * b.d + b.n * a.d, a.d * b.d); }
+function Rsub(a, b) { return R(a.n * b.d - b.n * a.d, a.d * b.d); }
+function Rmul(a, b) { return R(a.n * b.n, a.d * b.d); }
+function Rdiv(a, b) { return b.n === 0 ? R(0, 1) : R(a.n * b.d, a.d * b.n); }
+function Req(a, b) { return a.n === b.n && a.d === b.d; }
+function Rnum(a) { return a.n / a.d; }
+/* A fraction reads as a fraction. The first version preferred decimals when
+   the bottom was even, which meant the answer line said 0.75 while the working
+   right underneath it said 3/4 — the learner sees two different answers to the
+   same question. Skills that are ABOUT decimals ask for decimals explicitly
+   with fmt:'dec'; everything else stays exact. Either form is still accepted
+   when typed, because parseAns understands both. */
+function Rstr(a) {
+  if (a.d === 1) return String(a.n);
+  return a.n + '/' + a.d;
+}
+function Rdec(a) {
+  if (a.d === 1) return String(a.n);
+  var v = a.n / a.d;
+  return String(Math.round(v * 1e6) / 1e6);
+}
+function showAns(it) { return (it && it.fmt === 'dec') ? Rdec(it.ans) : Rstr(it.ans); }
+/* what the learner may type and have counted as right */
+function parseAns(txt) {
+  var s = String(txt).trim();
+  if (!s) return null;
+  var m = s.match(/^(-?\d+)\s*\/\s*(\d+)$/);
+  if (m) return R(parseInt(m[1], 10), parseInt(m[2], 10));
+  if (/^-?\d*\.?\d+$/.test(s)) {
+    if (s.indexOf('.') < 0) return R(parseInt(s, 10), 1);
+    var neg = s.charAt(0) === '-'; if (neg) s = s.slice(1);
+    var p = s.split('.'), dec = p[1] || '';
+    var v = R(parseInt((p[0] || '0') + dec, 10) || 0, Math.pow(10, dec.length));
+    return neg ? R(-v.n, v.d) : v;
+  }
+  return null;
+}
+
+/* ================================================================ rng == */
+var seed = 123456789;
+function setSeed(s) { seed = (s >>> 0) || 1; }
+function rnd() { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }
+function ri(lo, hi) { return lo + Math.floor(rnd() * (hi - lo + 1)); }
+function pick(a) { return a[Math.floor(rnd() * a.length)]; }
+function shuffle(a) { var i, j, t; for (i = a.length - 1; i > 0; i--) { j = Math.floor(rnd() * (i + 1)); t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+function has(a, v) { var i; for (i = 0; i < a.length; i++) if (a[i] === v) return true; return false; }
+
+/* ============================================================= skills == */
+/* Each skill generates its own questions forever and explains its own rule.
+   `plain` on every item exists so an independent checker can re-derive the
+   answer from the question text alone — a skill whose plain form cannot be
+   re-derived is a skill nobody can trust. */
+function mcFrom(correctStr, wrongs) {
+  var list = [{ plain: correctStr, correct: true, why: '' }], i;
+  for (i = 0; i < wrongs.length; i++) list.push({ plain: wrongs[i][0], correct: false, why: wrongs[i][1] });
+  return shuffle(list);
+}
+
+var SKILLS = [
+  /* ------------------------------------------------ number, grade 3-4 -- */
+  {
+    id: 'add-carry', name: 'Adding with carrying', strand: 'number', grade: 3.0, needs: [],
+    rule: 'Carry into the next column',
+    gen: function () {
+      var a = ri(128, 899), b = ri(128, 899);
+      var ans = R(a + b, 1);
+      /* the classic slip: writing the whole two-digit column total down */
+      var noCarry = String(a % 10 + b % 10).length > 1 ? (a + b) - 100 + 10 : null;
+      return {
+        q: a + ' + ' + b, plain: a + ' + ' + b, ans: ans, kind: 'num',
+        rule: 'Carry into the next column',
+        why: 'A column can only hold one digit. When it comes to ten or more you write the ones digit and carry the ten into the next column along.',
+        traps: noCarry === null ? [] : [[String(noCarry), 'That looks like a carry that never made it across. When a column reaches ten, the ten belongs to the next column.']],
+        steps: [
+          { line: (a % 10) + ' + ' + (b % 10) + ' = ' + (a % 10 + b % 10), why: 'Start at the ones, on the right.' },
+          { line: 'tens: ' + (Math.floor(a / 10) % 10) + ' + ' + (Math.floor(b / 10) % 10) + (a % 10 + b % 10 >= 10 ? ' + 1 carried' : ''), why: a % 10 + b % 10 >= 10 ? 'The ones made ten or more, so one ten moves across.' : 'Nothing to carry from the ones.' },
+          { line: String(a + b), why: 'Finish the hundreds the same way.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'sub-borrow', name: 'Subtracting with borrowing', strand: 'number', grade: 3.2, needs: ['add-carry'],
+    rule: 'Borrow from the next column',
+    gen: function () {
+      var b = ri(126, 480), a = b + ri(115, 460);
+      return {
+        q: a + ' &minus; ' + b, plain: a + ' - ' + b, ans: R(a - b, 1), kind: 'num',
+        rule: 'Borrow from the next column',
+        why: 'If the top digit is smaller than the bottom one you cannot take it away yet. Borrow ten from the column to the left, which loses one there and gains ten here.',
+        traps: (function () {
+          /* The classic slip: in each column, take the smaller digit from the
+             bigger one whichever way round they are, so no borrowing ever
+             happens. Only name it when it actually differs from the right
+             answer — offering the correct answer as a "wrong answer" would
+             teach the exact opposite of the lesson. */
+          var d0 = Math.abs((a % 10) - (b % 10));
+          var d1 = Math.abs((Math.floor(a / 10) % 10) - (Math.floor(b / 10) % 10));
+          var d2 = Math.abs((Math.floor(a / 100) % 10) - (Math.floor(b / 100) % 10));
+          var flip = d2 * 100 + d1 * 10 + d0;
+          if (flip === a - b) return [];
+          return [[String(flip),
+            'That looks like each column took the smaller digit from the bigger one, whichever way round they were. Subtraction is not allowed to flip like that — when the top is smaller you borrow.']];
+        })(),
+        steps: [
+          { line: (a % 10) + ' &minus; ' + (b % 10) + ((a % 10) < (b % 10) ? ' needs a borrow' : ' = ' + ((a % 10) - (b % 10))), why: (a % 10) < (b % 10) ? 'The top ones digit is too small, so take ten from the tens.' : 'The ones subtract cleanly.' },
+          { line: 'then the tens, then the hundreds', why: 'Work left one column at a time, borrowing whenever the top is smaller.' },
+          { line: String(a - b), why: 'Check it: add this back to ' + b + ' and you should get ' + a + '.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'mul-facts', name: 'Times tables', strand: 'number', grade: 3.3, needs: [],
+    rule: 'Multiplication is repeated adding',
+    gen: function () {
+      var a = ri(3, 12), b = ri(3, 12);
+      return {
+        q: a + ' &times; ' + b, plain: a + ' * ' + b, ans: R(a * b, 1), kind: 'num',
+        rule: 'Multiplication is repeated adding',
+        why: a + ' times ' + b + ' means ' + b + ' lots of ' + a + '. It is the same answer either way round, which halves how many facts there are to know.',
+        traps: [[String(a * b - a), 'That is one lot short — ' + (b - 1) + ' lots of ' + a + ' rather than ' + b + '.'],
+                [String(a + b), 'That is ' + a + ' plus ' + b + '. Times means lots of, not added to.']],
+        steps: [
+          { line: a + ' &times; ' + b + ' = ' + b + ' lots of ' + a, why: 'Either order gives the same total.' },
+          { line: a + ' &times; ' + (b - 1) + ' = ' + (a * (b - 1)), why: 'One lot fewer, if you know that one.' },
+          { line: (a * (b - 1)) + ' + ' + a + ' = ' + (a * b), why: 'Add the last lot on.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'div-facts', name: 'Dividing', strand: 'number', grade: 3.6, needs: ['mul-facts'],
+    rule: 'Dividing undoes multiplying',
+    gen: function () {
+      var b = ri(3, 12), q = ri(3, 12), a = b * q;
+      return {
+        q: a + ' &divide; ' + b, plain: a + ' / ' + b, ans: R(q, 1), kind: 'num',
+        rule: 'Dividing undoes multiplying',
+        why: a + ' divided by ' + b + ' asks: how many ' + b + 's fit into ' + a + '? So it is the times table run backwards.',
+        traps: [[String(a - b), 'That is ' + a + ' take away ' + b + '. Divide asks how many fit in, not what is left after one.']],
+        steps: [
+          { line: 'how many ' + b + 's make ' + a + '?', why: 'That is what the division sign is asking.' },
+          { line: b + ' &times; ' + q + ' = ' + a, why: 'Find it in the times table for ' + b + '.' },
+          { line: 'so ' + a + ' &divide; ' + b + ' = ' + q, why: 'The missing factor is the answer.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'mul-multi', name: 'Long multiplication', strand: 'number', grade: 4.0, needs: ['mul-facts', 'add-carry'],
+    rule: 'Split by place value, then add',
+    gen: function () {
+      var a = ri(13, 89), b = ri(3, 9);
+      var tens = Math.floor(a / 10) * 10, ones = a % 10;
+      return {
+        q: a + ' &times; ' + b, plain: a + ' * ' + b, ans: R(a * b, 1), kind: 'num',
+        rule: 'Split by place value, then add',
+        why: 'Break the big number into its tens and its ones, multiply each piece, then add the pieces back together.',
+        traps: [[String(ones === 0 ? tens * b + 10 : tens * b + ones),
+                 ones === 0 ? 'A ten went missing on the way — check the carrying.'
+                            : 'The ones were multiplied and the tens were not, or the other way round. Every piece has to be multiplied.'],
+                [String(Math.floor(a / 10) * b * 10 + ones * b - 10), 'Close — that looks like a carry lost on the way.']],
+        steps: [
+          { line: tens + ' &times; ' + b + ' = ' + (tens * b), why: 'The tens part first.' },
+          { line: ones + ' &times; ' + b + ' = ' + (ones * b), why: 'Then the ones part.' },
+          { line: (tens * b) + ' + ' + (ones * b) + ' = ' + (a * b), why: 'Add the two pieces to get the whole thing.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'div-remain', name: 'Dividing with a remainder', strand: 'number', grade: 4.3, needs: ['div-facts'],
+    rule: 'What is left over is the remainder',
+    gen: function () {
+      var b = ri(3, 9), q = ri(4, 12), r = ri(1, b - 1), a = b * q + r;
+      return {
+        q: a + ' &divide; ' + b + ' &mdash; what is the remainder?', plain: a + ' % ' + b,
+        ans: R(r, 1), kind: 'num',
+        rule: 'What is left over is the remainder',
+        why: 'Fit as many whole ' + b + 's into ' + a + ' as you can. Whatever will not make another whole one is the remainder, and it is always smaller than ' + b + '.',
+        traps: [[String(q), 'That is how many fit in, not what is left over.'],
+                [String(b), 'A remainder can never be as big as ' + b + ' — if it were, another whole one would fit.']],
+        steps: [
+          { line: b + ' &times; ' + q + ' = ' + (b * q), why: 'The most whole ' + b + 's that fit without going over ' + a + '.' },
+          { line: a + ' &minus; ' + (b * q) + ' = ' + r, why: 'What is left after taking those out.' },
+          { line: 'remainder ' + r, why: r + ' is smaller than ' + b + ', so no more whole ones fit.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'order-ops', name: 'Order of operations', strand: 'number', grade: 5.0, needs: ['mul-facts', 'add-carry'],
+    rule: 'Times and divide before plus and minus',
+    gen: function () {
+      var a = ri(2, 12), b = ri(2, 9), c = ri(2, 12);
+      var bracket = rnd() < 0.4;
+      if (bracket) {
+        return {
+          q: '(' + a + ' + ' + b + ') &times; ' + c, plain: '(' + a + ' + ' + b + ') * ' + c,
+          ans: R((a + b) * c, 1), kind: 'num',
+          rule: 'Brackets first, always',
+          why: 'Brackets are an instruction to do that bit first, before anything else. Without them the times would have gone first.',
+          traps: [[String(a + b * c), 'That is what it would be with the brackets ignored. Brackets come first.']],
+          steps: [
+            { line: a + ' + ' + b + ' = ' + (a + b), why: 'Inside the brackets first.' },
+            { line: (a + b) + ' &times; ' + c + ' = ' + ((a + b) * c), why: 'Now the multiply, on the result.' }
+          ]
+        };
+      }
+      return {
+        q: a + ' + ' + b + ' &times; ' + c, plain: a + ' + ' + b + ' * ' + c,
+        ans: R(a + b * c, 1), kind: 'num',
+        rule: 'Times and divide before plus and minus',
+        why: 'Multiply and divide outrank add and subtract, so they happen first no matter which is written first. Left to right only breaks ties between equals.',
+        traps: [[String((a + b) * c), 'That added first and then multiplied. Times beats plus outright — it is not left to right between different ranks.']],
+        steps: [
+          { line: b + ' &times; ' + c + ' = ' + (b * c), why: 'The multiply goes first, even though the plus is written first.' },
+          { line: a + ' + ' + (b * c) + ' = ' + (a + b * c), why: 'Then the add.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'neg-int', name: 'Negative numbers', strand: 'number', grade: 6.0, needs: ['sub-borrow'],
+    rule: 'Below zero keeps going',
+    gen: function () {
+      var a = ri(2, 18), b = ri(a + 1, 30);
+      if (rnd() < 0.5) {
+        return {
+          q: a + ' &minus; ' + b, plain: a + ' - ' + b, ans: R(a - b, 1), kind: 'num',
+          rule: 'Below zero keeps going',
+          why: 'Taking away more than you started with does not stop at zero — it carries on below it. Count down ' + b + ' from ' + a + ' and you land ' + (b - a) + ' below zero.',
+          traps: [[String(b - a), 'That is the right size but it lands on the other side of zero — it should be negative.']],
+          steps: [
+            { line: a + ' &minus; ' + a + ' = 0', why: 'Take away enough to reach zero first.' },
+            { line: 'still ' + (b - a) + ' left to take', why: b + ' &minus; ' + a + ' = ' + (b - a) + '.' },
+            { line: '0 &minus; ' + (b - a) + ' = &minus;' + (b - a), why: 'Carry on below zero by that much.' }
+          ]
+        };
+      }
+      var c = ri(2, 15);
+      return {
+        q: '&minus;' + a + ' + ' + c, plain: '-' + a + ' + ' + c, ans: R(c - a, 1), kind: 'num',
+        rule: 'Adding moves you up the line',
+        why: 'Starting at &minus;' + a + ' and adding ' + c + ' means moving ' + c + ' steps up the number line.',
+        traps: [[String(-(a + c)), 'That added the two sizes together and kept the minus. Adding a positive moves you UP, toward zero.']],
+        steps: [
+          { line: 'start at &minus;' + a, why: 'Below zero by ' + a + '.' },
+          { line: 'move up ' + c, why: 'Adding always moves right along the number line.' },
+          { line: 'land on ' + (c - a), why: (c >= a ? 'Past zero and out the other side.' : 'Still ' + (a - c) + ' below zero.') }
+        ]
+      };
+    }
+  },
+
+  /* ------------------------------------------------------- fractions -- */
+  {
+    id: 'frac-equiv', name: 'Equivalent fractions', strand: 'fractions', grade: 4.2, needs: ['mul-facts'],
+    rule: 'Times top and bottom by the same thing',
+    gen: function () {
+      var d = pick([2, 3, 4, 5, 6]), n = ri(1, d - 1), k = ri(2, 5);
+      return {
+        q: '<span class="op">' + n + '/' + d + '</span> = ? / ' + (d * k),
+        /* plain has to be re-derivable by an outside checker, so it states the
+           arithmetic the answer actually comes from rather than restating the
+           puzzle with a question mark in it */
+        plain: n + ' * ' + (d * k) + ' / ' + d,
+        ans: R(n * k, 1), kind: 'num',
+        rule: 'Times top and bottom by the same thing',
+        why: 'A fraction does not change value if the top and the bottom are multiplied by the same number — you are cutting the same amount into more, smaller pieces.',
+        traps: [[String(n + (k - 1) * 1), 'That looks like the top was ADDED to rather than multiplied. Whatever is done below has to be done above.'],
+                [String(n), 'The bottom was multiplied and the top was left alone, which changes the value.']],
+        steps: [
+          { line: (d) + ' &times; ' + k + ' = ' + (d * k), why: 'Work out what the bottom was multiplied by.' },
+          { line: n + ' &times; ' + k + ' = ' + (n * k), why: 'Do exactly the same to the top.' },
+          { line: n + '/' + d + ' = ' + (n * k) + '/' + (d * k), why: 'Same amount, more pieces.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'frac-add-like', name: 'Adding fractions, same bottom', strand: 'fractions', grade: 4.5, needs: ['frac-equiv'],
+    rule: 'Add the tops, keep the bottom',
+    gen: function () {
+      var d = pick([4, 5, 6, 8, 10]), a = ri(1, d - 2), b = ri(1, d - a - 1);
+      return {
+        q: '<span class="op">' + a + '/' + d + '</span> + <span class="op">' + b + '/' + d + '</span>',
+        plain: a + '/' + d + ' + ' + b + '/' + d,
+        ans: R(a + b, d), kind: 'num',
+        rule: 'Add the tops, keep the bottom',
+        why: 'The bottom says what size the pieces are. Both are ' + d + 'ths already, so you are just counting pieces: ' + a + ' of them plus ' + b + ' of them.',
+        traps: [[(a + b) + '/' + (d + d), 'The bottoms were added too. The bottom is the SIZE of the pieces, not a count — adding it would change the pieces mid-sum.']],
+        steps: [
+          { line: 'both are ' + d + 'ths', why: 'Same size pieces, so they can be counted together.' },
+          { line: a + ' + ' + b + ' = ' + (a + b), why: 'Count the pieces.' },
+          { line: (a + b) + '/' + d + (Req(R(a + b, d), R(a + b, d)) && R(a + b, d).d !== d ? ' = ' + Rstr(R(a + b, d)) : ''), why: 'The pieces are still ' + d + 'ths.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'frac-add-unlike', name: 'Adding fractions, different bottoms', strand: 'fractions', grade: 5.2, needs: ['frac-add-like', 'mul-facts'],
+    rule: 'Make the bottoms match first',
+    gen: function () {
+      var pairs = [[2, 3], [2, 5], [3, 4], [4, 6], [3, 6], [2, 4], [5, 10], [4, 8]];
+      var p = pick(pairs), d1 = p[0], d2 = p[1];
+      var n1 = ri(1, d1 - 1), n2 = ri(1, d2 - 1);
+      var L = d1 * d2 / gcd(d1, d2);
+      var k1 = L / d1, k2 = L / d2;
+      return {
+        q: '<span class="op">' + n1 + '/' + d1 + '</span> + <span class="op">' + n2 + '/' + d2 + '</span>',
+        plain: n1 + '/' + d1 + ' + ' + n2 + '/' + d2,
+        ans: Radd(R(n1, d1), R(n2, d2)), kind: 'num',
+        rule: 'Make the bottoms match first',
+        why: 'You cannot count pieces of different sizes together. Rewrite both as ' + L + 'ths first, then it is just counting.',
+        traps: [[(n1 + n2) + '/' + (d1 + d2), 'Tops added and bottoms added. That is not addition of fractions — the pieces were different sizes to begin with.'],
+                [(n1 + n2) + '/' + L, 'The bottoms were made to match but the tops were not rescaled with them.']],
+        steps: [
+          { line: 'both into ' + L + 'ths', why: L + ' is the smallest number both ' + d1 + ' and ' + d2 + ' divide into.' },
+          { line: n1 + '/' + d1 + ' = ' + (n1 * k1) + '/' + L, why: 'Top and bottom times ' + k1 + '.' },
+          { line: n2 + '/' + d2 + ' = ' + (n2 * k2) + '/' + L, why: 'Top and bottom times ' + k2 + '.' },
+          { line: (n1 * k1) + '/' + L + ' + ' + (n2 * k2) + '/' + L + ' = ' + Rstr(Radd(R(n1, d1), R(n2, d2))), why: 'Now the pieces match, so count them.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'frac-mul', name: 'Multiplying fractions', strand: 'fractions', grade: 5.5, needs: ['frac-equiv'],
+    rule: 'Tops times tops, bottoms times bottoms',
+    gen: function () {
+      var d1 = pick([2, 3, 4, 5]), d2 = pick([2, 3, 4, 5]);
+      var n1 = ri(1, d1 - 1), n2 = ri(1, d2 - 1);
+      return {
+        q: '<span class="op">' + n1 + '/' + d1 + '</span> &times; <span class="op">' + n2 + '/' + d2 + '</span>',
+        plain: n1 + '/' + d1 + ' * ' + n2 + '/' + d2,
+        ans: Rmul(R(n1, d1), R(n2, d2)), kind: 'num',
+        rule: 'Tops times tops, bottoms times bottoms',
+        why: n1 + '/' + d1 + ' of ' + n2 + '/' + d2 + ' means taking a part OF a part, so the answer is smaller than both. Multiply straight across.',
+        traps: [[Rstr(Radd(R(n1, d1), R(n2, d2))), 'Those were added rather than multiplied. Multiplying two fractions under one makes the answer smaller, not bigger.'],
+                [(n1 * n2) + '/' + (d1 + d2), 'Tops multiplied, bottoms added. Both lines get the same treatment.']],
+        steps: [
+          { line: n1 + ' &times; ' + n2 + ' = ' + (n1 * n2), why: 'Straight across the top.' },
+          { line: d1 + ' &times; ' + d2 + ' = ' + (d1 * d2), why: 'Straight across the bottom.' },
+          { line: (n1 * n2) + '/' + (d1 * d2) + (Rstr(Rmul(R(n1, d1), R(n2, d2))) !== (n1 * n2) + '/' + (d1 * d2) ? ' = ' + Rstr(Rmul(R(n1, d1), R(n2, d2))) : ''), why: 'Then simplify if the top and bottom share a factor.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'dec-place', name: 'Decimal place value', strand: 'fractions', grade: 4.6, needs: ['add-carry'],
+    rule: 'Each step right is ten times smaller',
+    gen: function () {
+      var whole = ri(1, 9), t = ri(0, 9), h = ri(1, 9);
+      var val = whole + t / 10 + h / 100;
+      var txt = whole + '.' + t + h;
+      var placeName = pick(['tenths', 'hundredths']);
+      var digit = placeName === 'tenths' ? t : h;
+      return {
+        q: 'In <span class="op">' + txt + '</span>, which digit is in the ' + placeName + ' place?',
+        plain: 'digit(' + txt + ',' + placeName + ')',
+        ans: R(digit, 1), kind: 'num',
+        rule: 'Each step right is ten times smaller',
+        why: 'After the point the places go tenths, then hundredths, then thousandths. Each step to the right is worth ten times less than the one before.',
+        traps: [[String(placeName === 'tenths' ? h : t), 'That is the other decimal place. Tenths come first after the point, hundredths second.'],
+                [String(whole), 'That is the whole-number part, before the point.']],
+        steps: [
+          { line: txt, why: 'Read the places from the point outwards.' },
+          { line: t + ' is tenths, ' + h + ' is hundredths', why: 'First place after the point is tenths.' },
+          { line: 'so ' + placeName + ' is ' + digit, why: 'Count the places carefully — that is the whole skill.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'dec-add', name: 'Adding decimals', strand: 'fractions', grade: 5.0, needs: ['dec-place'],
+    rule: 'Line up the points',
+    gen: function () {
+      var a = ri(105, 980) / 10, b = ri(105, 980) / 10;
+      var A = Math.round(a * 10), B = Math.round(b * 10);
+      return {
+        q: (A / 10) + ' + ' + (B / 10), plain: (A / 10) + ' + ' + (B / 10),
+        ans: R(A + B, 10), kind: 'num', fmt: 'dec',
+        rule: 'Line up the points',
+        why: 'Tenths add to tenths and wholes add to wholes. Lining the decimal points up is what keeps each digit with its own kind.',
+        traps: [[String(A + B), 'That added them as if they were whole numbers, ignoring the point.']],
+        steps: [
+          { line: 'line up the points', why: 'So tenths sit under tenths.' },
+          { line: (A % 10) + ' tenths + ' + (B % 10) + ' tenths = ' + ((A % 10) + (B % 10)) + ' tenths', why: (A % 10) + (B % 10) >= 10 ? 'Ten tenths make a whole, so one carries.' : 'No carry needed.' },
+          { line: Rdec(R(A + B, 10)), why: 'Then the whole numbers, plus anything carried.' }
+        ]
+      };
+    }
+  },
+
+  /* --------------------------------------------------- measure, data -- */
+  {
+    id: 'perimeter', name: 'Perimeter', strand: 'measure', grade: 3.4, needs: ['add-carry'],
+    rule: 'Perimeter is the distance all the way round',
+    gen: function () {
+      var w = ri(3, 24), h = ri(3, 24);
+      return {
+        q: 'A rectangle is <span class="op">' + w + '</span> by <span class="op">' + h + '</span>. What is the perimeter?',
+        plain: '2*(' + w + '+' + h + ')', ans: R(2 * (w + h), 1), kind: 'num',
+        rule: 'Perimeter is the distance all the way round',
+        why: 'Walk the edge the whole way round. A rectangle has two sides of ' + w + ' and two of ' + h + ', so it is ' + w + ' + ' + h + ', doubled.',
+        traps: [[String(w * h), 'That is the area — the space inside. Perimeter is the distance round the outside.'],
+                [String(w + h), 'That is only half the way round. There are two of each side.']],
+        steps: [
+          { line: w + ' + ' + h + ' = ' + (w + h), why: 'One long side and one short side.' },
+          { line: (w + h) + ' &times; 2 = ' + (2 * (w + h)), why: 'There are two of each, so double it.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'area-rect', name: 'Area of a rectangle', strand: 'measure', grade: 3.5, needs: ['mul-facts'],
+    rule: 'Area is rows times columns',
+    gen: function () {
+      var w = ri(3, 15), h = ri(3, 12);
+      return {
+        q: 'A rectangle is <span class="op">' + w + '</span> by <span class="op">' + h + '</span>. What is the area?',
+        plain: w + ' * ' + h, ans: R(w * h, 1), kind: 'num',
+        rule: 'Area is rows times columns',
+        why: 'Think of it tiled with unit squares: ' + h + ' rows with ' + w + ' squares in each. That is exactly what multiplying does.',
+        traps: [[String(2 * (w + h)), 'That is the perimeter — the distance round the outside. Area is the space inside.'],
+                [String(w + h), 'The sides were added. Area counts squares, so the sides multiply.']],
+        steps: [
+          { line: h + ' rows of ' + w, why: 'Tile it with unit squares.' },
+          { line: w + ' &times; ' + h + ' = ' + (w * h), why: 'Rows times how many in each row.' }
+        ]
+      };
+    }
+  },
+  {
+    id: 'mean-avg', name: 'Mean average', strand: 'data', grade: 6.0, needs: ['div-facts', 'add-carry'],
+    rule: 'Share the total out equally',
+    gen: function () {
+      var n = ri(3, 5), vals = [], i, tot = 0;
+      for (i = 0; i < n; i++) { var v = ri(2, 20); vals.push(v); tot += v; }
+      /* make it come out whole, because the skill being taught is the idea */
+      var fix = (n - (tot % n)) % n;
+      vals[0] += fix; tot += fix;
+      return {
+        q: 'What is the mean of <span class="op">' + vals.join(', ') + '</span>?',
+        plain: '(' + vals.join('+') + ')/' + n, ans: R(tot / n, 1), kind: 'num',
+        rule: 'Share the total out equally',
+        why: 'The mean is what everyone would get if the whole pile were shared out evenly: add it all up, then split it between how many there are.',
+        traps: [[String(tot), 'That is the total, before sharing it out.'],
+                [String(n), 'That is how many numbers there are, not the average of them.']],
+        steps: [
+          { line: vals.join(' + ') + ' = ' + tot, why: 'Add everything together first.' },
+          { line: tot + ' &divide; ' + n + ' = ' + (tot / n), why: 'Share it between all ' + n + ' of them.' }
+        ]
+      };
+    }
+  },
+
+  /* ----------------------------------------------------------- algebra */
+  {
+    id: 'one-step-eq', name: 'One-step equations', strand: 'algebra', grade: 6.0, needs: ['mul-facts', 'sub-borrow'],
+    rule: 'Undo what was done to x',
+    gen: function () {
+      var x = ri(2, 15);
+      if (rnd() < 0.5) {
+        var a = ri(2, 20);
+        return {
+          q: 'x + ' + a + ' = ' + (x + a), plain: 'x + ' + a + ' = ' + (x + a),
+          ans: R(x, 1), kind: 'num',
+          rule: 'Undo what was done to x',
+          why: 'Something was added to x. To get x on its own, take that same something off BOTH sides, so the scales stay balanced.',
+          traps: [[String(x + a + a), 'That added ' + a + ' again. To undo an add you subtract.']],
+          steps: [
+            { line: 'x + ' + a + ' = ' + (x + a), why: 'x has had ' + a + ' added to it.' },
+            { line: 'take ' + a + ' off both sides', why: 'Whatever you do to one side you must do to the other.' },
+            { line: 'x = ' + x, why: 'Check: ' + x + ' + ' + a + ' really is ' + (x + a) + '.' }
+          ]
+        };
+      }
+      var m = ri(2, 9);
+      return {
+        q: m + 'x = ' + (m * x), plain: m + '*x = ' + (m * x), ans: R(x, 1), kind: 'num',
+        rule: 'Undo what was done to x',
+        why: 'x was multiplied by ' + m + '. To undo a multiply you divide — both sides, so it stays balanced.',
+        traps: [[String(m * x - m), 'That subtracted ' + m + '. x was multiplied, so it has to be divided to undo it.']],
+        steps: [
+          { line: m + 'x = ' + (m * x), why: m + 'x means ' + m + ' times x.' },
+          { line: 'divide both sides by ' + m, why: 'Dividing undoes multiplying.' },
+          { line: 'x = ' + x, why: 'Check: ' + m + ' &times; ' + x + ' = ' + (m * x) + '.' }
+        ]
+      };
+    }
+  }
+];
+
+var STRANDS = [
+  { id: 'number', name: 'Number', col: '#ffcc4d' },
+  { id: 'fractions', name: 'Fractions', col: '#6fe3ff' },
+  { id: 'measure', name: 'Measure', col: '#6ee7a0' },
+  { id: 'data', name: 'Data', col: '#b48cff' },
+  { id: 'algebra', name: 'Algebra', col: '#ff9f5a' }
+];
+function skillById(id) { var i; for (i = 0; i < SKILLS.length; i++) if (SKILLS[i].id === id) return SKILLS[i]; return null; }
+function strandCol(id) { var i; for (i = 0; i < STRANDS.length; i++) if (STRANDS[i].id === id) return STRANDS[i].col; return '#8ea3c8'; }
+function strandName(id) { var i; for (i = 0; i < STRANDS.length; i++) if (STRANDS[i].id === id) return STRANDS[i].name; return id; }
+
+/* ============================================================ profile == */
+/* MASTERY_HITS correct out of the last MASTERY_WINDOW, with at least
+   MASTERY_MIN attempts, is what counts as mastered. A streak alone is not
+   evidence — that is the guess-floor lesson from Tally, applied here. */
+var MASTERY_WINDOW = 8, MASTERY_HITS = 7, MASTERY_MIN = 8;
+var DEMOTE_MISSES = 3, RECENT = 6;
+var REVIEW_CHANCE = 0.22;
+
+function blankSkill() { return { a: 0, c: 0, recent: [], box: 0, due: 0, on: 0, seen: 0 }; }
+function freshProfile() {
+  var p = { v: 1, name: '', skills: {}, hist: [], sessions: 0, answered: 0, streakBest: 0, tick: 0 };
+  var i; for (i = 0; i < SKILLS.length; i++) p.skills[SKILLS[i].id] = blankSkill();
+  return p;
+}
+var P = null;
+
+function clampInt(v, lo, hi, d) {
+  if (typeof v !== 'number' || !isFinite(v)) return d;
+  v = Math.floor(v); return v < lo ? lo : (v > hi ? hi : v);
+}
+function loadProfile() {
+  var p = freshProfile(), raw = null, o = null, i, k;
+  try { raw = localStorage.getItem(K_SAVE); } catch (e) { raw = null; }
+  if (!raw) return p;
+  try { o = JSON.parse(raw); } catch (e) { return p; }
+  if (!o || typeof o !== 'object' || Object.prototype.toString.call(o) === '[object Array]') return p;
+  if (typeof o.name === 'string') p.name = o.name.slice(0, 24);
+  p.sessions = clampInt(o.sessions, 0, 999999, 0);
+  p.answered = clampInt(o.answered, 0, 9999999, 0);
+  p.streakBest = clampInt(o.streakBest, 0, 999999, 0);
+  p.tick = clampInt(o.tick, 0, 99999999, 0);
+  if (o.skills && typeof o.skills === 'object') {
+    for (k in o.skills) {
+      if (!Object.prototype.hasOwnProperty.call(o.skills, k)) continue;
+      if (!skillById(k)) continue;                 /* a skill that no longer exists is dropped */
+      var v = o.skills[k]; if (!v || typeof v !== 'object') continue;
+      var s = blankSkill();
+      s.a = clampInt(v.a, 0, 999999, 0);
+      s.c = clampInt(v.c, 0, s.a, 0);
+      s.box = clampInt(v.box, 0, 6, 0);
+      s.due = clampInt(v.due, 0, 99999999, 0);
+      s.on = clampInt(v.on, 0, 99999999, 0);
+      s.seen = clampInt(v.seen, 0, 99999999, 0);
+      if (Object.prototype.toString.call(v.recent) === '[object Array]') {
+        for (i = 0; i < v.recent.length && s.recent.length < MASTERY_WINDOW; i++) s.recent.push(v.recent[i] ? 1 : 0);
+      }
+      p.skills[k] = s;
+    }
+  }
+  if (Object.prototype.toString.call(o.hist) === '[object Array]') {
+    for (i = 0; i < o.hist.length && p.hist.length < 400; i++) {
+      var e = o.hist[i];
+      if (!e || typeof e !== 'object') continue;
+      if (typeof e.t !== 'number' || !isFinite(e.t)) continue;
+      var row = { t: Math.floor(e.t), m: {} };
+      if (e.m && typeof e.m === 'object') {
+        var sk; for (sk in e.m) if (Object.prototype.hasOwnProperty.call(e.m, sk)) row.m[sk] = clampInt(e.m[sk], 0, 9999, 0);
+      }
+      p.hist.push(row);
+    }
+  }
+  return p;
+}
+function saveProfile() {
+  try { localStorage.setItem(K_SAVE, JSON.stringify(P)); } catch (e) {}
+}
+
+/* ============================================== the graph and the ladder */
+function acc(s) { return s.a ? s.c / s.a : 0; }
+function isMastered(id) {
+  var s = P.skills[id]; if (!s) return false;
+  if (s.a < MASTERY_MIN) return false;
+  var hits = 0, i;
+  for (i = 0; i < s.recent.length; i++) if (s.recent[i]) hits++;
+  return s.recent.length >= MASTERY_WINDOW && hits >= MASTERY_HITS;
+}
+/* unlocked = every prerequisite mastered. Never gated on age or grade. */
+function isUnlocked(id) {
+  var sk = skillById(id); if (!sk) return false;
+  var i; for (i = 0; i < sk.needs.length; i++) if (!isMastered(sk.needs[i])) return false;
+  return true;
+}
+function frontier() {
+  var out = [], i;
+  for (i = 0; i < SKILLS.length; i++) {
+    if (isUnlocked(SKILLS[i].id) && !isMastered(SKILLS[i].id)) out.push(SKILLS[i]);
+  }
+  return out;
+}
+function masteredCount() { var n = 0, i; for (i = 0; i < SKILLS.length; i++) if (isMastered(SKILLS[i].id)) n++; return n; }
+function masteredByStrand() {
+  var m = {}, i;
+  for (i = 0; i < STRANDS.length; i++) m[STRANDS[i].id] = 0;
+  for (i = 0; i < SKILLS.length; i++) if (isMastered(SKILLS[i].id)) m[SKILLS[i].strand]++;
+  return m;
+}
+/* the working grade: the average nominal grade of what has actually been
+   mastered, which is a far more honest number than the child's age */
+function workingGrade() {
+  var tot = 0, n = 0, i;
+  for (i = 0; i < SKILLS.length; i++) if (isMastered(SKILLS[i].id)) { tot += SKILLS[i].grade; n++; }
+  if (!n) return null;
+  return Math.round((tot / n) * 10) / 10;
+}
+function noteHistory() {
+  var m = masteredByStrand();
+  var last = P.hist.length ? P.hist[P.hist.length - 1] : null;
+  var same = last && JSON.stringify(last.m) === JSON.stringify(m);
+  if (same) return;
+  P.hist.push({ t: P.tick, m: m });
+  while (P.hist.length > 400) P.hist.shift();
+}
+
+/* which skill next: mostly the frontier, sometimes a spaced review */
+function chooseSkill() {
+  var f = frontier(), i, due = [];
+  for (i = 0; i < SKILLS.length; i++) {
+    var id = SKILLS[i].id, s = P.skills[id];
+    if (isMastered(id) && s.due <= P.tick && s.a > 0) due.push(SKILLS[i]);
+  }
+  if (due.length && rnd() < REVIEW_CHANCE) return { sk: pick(due), mode: 'review' };
+  if (!f.length) {
+    /* everything unlocked is mastered — keep the oldest ones warm */
+    if (due.length) return { sk: pick(due), mode: 'review' };
+    return { sk: SKILLS[SKILLS.length - 1], mode: 'review' };
+  }
+  /* prefer the least-practised frontier skill, so nothing is left behind */
+  var best = f[0];
+  for (i = 1; i < f.length; i++) if (P.skills[f[i].id].a < P.skills[best.id].a) best = f[i];
+  /* but not always, or it feels mechanical */
+  if (rnd() < 0.3) best = pick(f);
+  return { sk: best, mode: 'learn' };
+}
+function buildItem(sk) {
+  var it = sk.gen();
+  it.skill = sk.id;
+  it.skillName = sk.name;
+  it.grade = sk.grade;
+  if (!it.rule) it.rule = sk.rule;
+  if (!it.traps) it.traps = [];
+  if (!it.steps) it.steps = [];
+  /* A named "wrong answer" that is actually the RIGHT answer teaches the exact
+     opposite of the lesson — the learner gets it right and is told what they
+     did wrong. Two skills produced one by accident at particular values, so
+     the guard lives here rather than in each skill: no skill written from now
+     on can reintroduce it. Duplicates go too. */
+  var clean = [], i, seen = [];
+  for (i = 0; i < it.traps.length; i++) {
+    var tv = parseAns(it.traps[i][0]);
+    if (!tv) continue;
+    if (Req(tv, it.ans)) continue;
+    var key = Rstr(tv);
+    if (has(seen, key)) continue;
+    seen.push(key);
+    clean.push(it.traps[i]);
+  }
+  it.traps = clean;
+  return it;
+}
+
+/* record an answer and move the ladder */
+function record(id, right) {
+  var s = P.skills[id];
+  s.a++; if (right) s.c++;
+  s.recent.push(right ? 1 : 0);
+  while (s.recent.length > MASTERY_WINDOW) s.recent.shift();
+  s.seen = P.tick;
+  var wasMastered = s.on > 0;
+  if (right) {
+    s.box = Math.min(6, s.box + 1);
+  } else {
+    s.box = Math.max(0, s.box - 2);
+  }
+  /* spaced review: each box roughly doubles the wait */
+  s.due = P.tick + Math.round(4 * Math.pow(1.9, s.box));
+  if (isMastered(id) && !wasMastered) s.on = P.tick;
+  if (!isMastered(id) && wasMastered) s.on = 0;
+  P.answered++;
+  P.tick++;
+  noteHistory();
+}
+
+/* =============================================================== audio == */
+var actx = null, master = null, muted = false;
+function initAudio() {
+  if (actx) return;
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    actx = new AC(); master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.4; master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || !master || muted) return;
+  try {
+    var t = actx.currentTime + (delay || 0);
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.05);
+  } catch (e) {}
+}
+var SFX = {
+  tap: function () { tone('sine', 520, 610, 0.07, 0.12); },
+  yes: function () { tone('sine', 620, 620, 0.11, 0.16, 0); tone('sine', 830, 830, 0.19, 0.16, 0.08); },
+  /* deliberately warm and rising — there is no buzzer anywhere in here */
+  soft: function () { tone('sine', 430, 430, 0.15, 0.12, 0); tone('sine', 520, 520, 0.2, 0.12, 0.13); },
+  level: function () { var i; for (i = 0; i < 4; i++) tone('triangle', 520 * Math.pow(1.18, i), 520 * Math.pow(1.18, i), 0.16, 0.13, i * 0.09); }
+};
+function setMuted(v) {
+  muted = !!v;
+  if (master) { try { master.gain.value = muted ? 0 : 0.4; } catch (e) {} }
+  var b = document.getElementById('muteBtn');
+  if (b) { b.innerHTML = muted ? '&#9834;&#10005;' : '&#9835;'; b.style.opacity = muted ? '0.45' : '1'; }
+  try { localStorage.setItem(K_MUTED, muted ? '1' : '0'); } catch (e) {}
+}
+
+/* ================================================================ game == */
+var SET_LEN = 8;
+var G = { screen: 'title', it: null, entry: '', state: 'ask', hintI: 0, usedHint: false,
+          stepI: 0, setN: 0, setRight: 0, streak: 0, chosen: -1, mode: 'learn' };
+var app = document.getElementById('app');
+
+function nextItem() {
+  var c = chooseSkill();
+  G.it = buildItem(c.sk);
+  G.mode = c.mode;
+  G.entry = ''; G.state = 'ask'; G.hintI = 0; G.usedHint = false; G.stepI = 0; G.chosen = -1;
+  render();
+}
+
+function submit(txt) {
+  if (G.state !== 'ask' || !G.it) return false;
+  var v = parseAns(txt);
+  if (v === null) return false;
+  var right = Req(v, G.it.ans);
+  G.state = right ? 'right' : 'teach';
+  G.stepI = 0;
+  if (right) {
+    G.setRight++; G.streak++;
+    if (G.streak > P.streakBest) P.streakBest = G.streak;
+    SFX.yes();
+  } else {
+    G.streak = 0;
+    G.missVal = txt;
+    SFX.soft();
+  }
+  var before = isMastered(G.it.skill);
+  record(G.it.skill, right && !G.usedHint);
+  if (!before && isMastered(G.it.skill)) { G.justMastered = G.it.skillName; SFX.level(); }
+  else G.justMastered = null;
+  G.setN++;
+  saveProfile();
+  render();
+  return true;
+}
+/* the named slip, if this exact wrong answer is one we know about */
+function trapFor(it, txt) {
+  var v = parseAns(txt), i;
+  if (v === null) return null;
+  for (i = 0; i < it.traps.length; i++) {
+    var tv = parseAns(it.traps[i][0]);
+    if (tv && Req(tv, v)) return it.traps[i][1];
+  }
+  return null;
+}
+
+/* ============================================================ rendering */
+function esc(s) { return String(s).replace(/&(?![a-z]+;|#\d+;)/g, '&amp;').replace(/</g, '&lt;'); }
+
+function render() {
+  app.classList.toggle('scroll', G.screen === 'record' || G.screen === 'title');
+  document.body.classList.toggle('playing', G.screen === 'learn');
+  if (G.screen === 'title') return renderTitle();
+  if (G.screen === 'record') return renderRecord();
+  renderLearn();
+}
+
+function renderTitle() {
+  var g = workingGrade(), m = masteredCount();
+  app.innerHTML = '<div class="screen center">' +
+    '<div class="eyebrow">Overclock &middot; school</div>' +
+    '<h1>' + SCHOOL_NAME + '</h1>' +
+    '<div class="tagline">It starts wherever you actually are, and it tells you <b>why</b> every single time &mdash; not just what the answer was.</div>' +
+    '<div class="btnrow" style="margin-top:6px">' +
+      '<button class="btn" data-act="start">' + (P.answered ? 'CARRY ON' : 'START') + '</button>' +
+      '<button class="btn ghost" data-act="record">THE RECORD</button>' +
+    '</div>' +
+    (P.answered ? '<div class="tagline" style="margin-top:10px">' + m + ' of ' + SKILLS.length + ' skills solid' +
+      (g ? ' &middot; working at about grade ' + g : '') + ' &middot; ' + P.answered + ' questions answered</div>' : '') +
+    '</div>';
+}
+
+function renderLearn() {
+  var it = G.it;
+  if (!it) { nextItem(); return; }
+  var sk = P.skills[it.skill];
+  var hits = 0, i;
+  for (i = 0; i < sk.recent.length; i++) if (sk.recent[i]) hits++;
+  var prog = Math.min(1, sk.recent.length ? hits / MASTERY_HITS : 0);
+
+  var h = '<div class="screen">' +
+    '<div class="qhead">' +
+      '<span class="skill">' + esc(it.skillName) + (G.mode === 'review' ? ' &middot; review' : '') + '</span>' +
+      '<span class="bar"><i style="width:' + Math.round(prog * 100) + '%"></i></span>' +
+      '<span class="skill">' + (G.setN % SET_LEN) + '/' + SET_LEN + '</span>' +
+    '</div>';
+
+  if (G.state === 'ask') {
+    h += '<div class="qwrap">' +
+      '<div class="q">' + it.q + '</div>' +
+      '<div class="entry' + (G.entry ? '' : ' empty') + '">' + (G.entry || 'type it') + '</div>' +
+      (G.hintI > 0 ? '<div class="why"><div class="rule">Hint</div><div class="body">' + hintText(it, G.hintI) + '</div></div>' : '') +
+      '</div>' + padHtml();
+  } else if (G.state === 'right') {
+    h += '<div class="qwrap">' +
+      '<div class="q">' + it.q + ' = <span style="color:var(--green)">' + showAns(it) + '</span></div>' +
+      (G.justMastered ? '<div class="qsub" style="color:var(--accent)">' + esc(G.justMastered) + ' is solid now.</div>'
+                      : '<div class="qsub">' + esc(it.rule) + '</div>') +
+      '</div>' +
+      '<div class="btnrow"><button class="btn" data-act="next">NEXT</button></div>';
+  } else {
+    var trap = trapFor(it, G.missVal);
+    h += '<div class="qwrap" style="justify-content:flex-start;gap:9px">' +
+      '<div class="q" style="font-size:clamp(20px,5vw,30px)">' + it.q + '</div>' +
+      '<div class="why"><div class="rule">' + esc(it.rule) + '</div><div class="body">' +
+        (trap ? esc(trap) + ' ' : '') + esc(it.why || '') + '</div></div>' +
+      '<div class="work">';
+    for (i = 0; i <= G.stepI && i < it.steps.length; i++) {
+      h += '<div class="wline"><span class="ln">' + it.steps[i].line + '</span>' +
+           '<span class="rs">' + esc(it.steps[i].why) + '</span></div>';
+    }
+    h += '</div>';
+    h += '<div class="softmsg">Not this time. Here it is, line by line.</div></div>' +
+      '<div class="btnrow">' +
+        (G.stepI < it.steps.length - 1
+          ? '<button class="btn" data-act="step">NEXT STEP</button>'
+          : '<button class="btn" data-act="next">GOT IT</button>') +
+      '</div>';
+  }
+  h += '</div>';
+  app.innerHTML = h;
+}
+function hintText(it, level) {
+  if (level === 1) return it.why || it.rule;
+  var s = it.steps[Math.min(level - 2, it.steps.length - 1)];
+  return s ? s.why : (it.why || it.rule);
+}
+function padHtml() {
+  var keys = ['7', '8', '9', '/', 'HINT', '4', '5', '6', '.', '&larr;', '1', '2', '3', '&minus;', 'GO', '0'];
+  var h = '<div class="pad">';
+  var map = { '&larr;': 'back', 'GO': 'ok', 'HINT': 'hint', '&minus;': '-' };
+  var i, k;
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    var code = map[k] || k;
+    var cls = 'key' + (k === 'GO' ? ' go' : '') + (k === '0' ? ' wide' : '');
+    h += '<button class="' + cls + '" data-k="' + code + '" type="button" aria-label="' + (code === 'back' ? 'delete' : code) + '">' + k + '</button>';
+  }
+  return h + '</div>';
+}
+
+function pressKey(k) {
+  if (G.state !== 'ask') return;
+  initAudio();
+  if (k === 'hint') { G.hintI = Math.min(G.hintI + 1, 1 + G.it.steps.length); G.usedHint = true; SFX.tap(); render(); return; }
+  if (k === 'back') { G.entry = G.entry.slice(0, -1); SFX.tap(); render(); return; }
+  if (k === 'ok') { if (!submit(G.entry)) { SFX.tap(); } return; }
+  if (G.entry.length >= 9) return;
+  if (k === '-' && G.entry.length) return;
+  if (k === '.' && G.entry.indexOf('.') >= 0) return;
+  if (k === '/' && (G.entry.indexOf('/') >= 0 || !G.entry.length)) return;
+  G.entry += k; SFX.tap(); render();
+}
+
+/* ======================================================== the record == */
+function chartSvg() {
+  var W = 320, H = 130, pad = 20;
+  var h = P.hist.slice();
+  if (h.length < 2) {
+    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '">' +
+      '<text x="' + (W / 2) + '" y="' + (H / 2) + '" text-anchor="middle" font-size="11" fill="#8ea3c8">Not enough history yet &mdash; keep going and the growth shows up here.</text></svg>';
+  }
+  var maxT = h[h.length - 1].t || 1, i, j;
+  var maxM = 1;
+  for (i = 0; i < h.length; i++) {
+    var tot = 0; for (j = 0; j < STRANDS.length; j++) tot += (h[i].m[STRANDS[j].id] || 0);
+    if (tot > maxM) maxM = tot;
+  }
+  var s = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">';
+  s += '<line x1="' + pad + '" y1="' + (H - pad) + '" x2="' + (W - 4) + '" y2="' + (H - pad) + '" stroke="rgba(140,170,220,0.3)" stroke-width="1"/>';
+  s += '<line x1="' + pad + '" y1="4" x2="' + pad + '" y2="' + (H - pad) + '" stroke="rgba(140,170,220,0.3)" stroke-width="1"/>';
+  /* stacked areas, one band per strand */
+  var base = [];
+  for (i = 0; i < h.length; i++) base.push(0);
+  for (j = 0; j < STRANDS.length; j++) {
+    var st = STRANDS[j], up = [], dn = [];
+    for (i = 0; i < h.length; i++) {
+      var x = pad + (h[i].t / maxT) * (W - pad - 6);
+      var y0 = (H - pad) - (base[i] / maxM) * (H - pad - 8);
+      base[i] += (h[i].m[st.id] || 0);
+      var y1 = (H - pad) - (base[i] / maxM) * (H - pad - 8);
+      up.push(x.toFixed(1) + ',' + y1.toFixed(1));
+      dn.unshift(x.toFixed(1) + ',' + y0.toFixed(1));
+    }
+    s += '<polygon points="' + up.join(' ') + ' ' + dn.join(' ') + '" fill="' + st.col + '" opacity="0.55"/>';
+  }
+  s += '<text x="' + (pad + 2) + '" y="12" font-size="9" fill="#8ea3c8">' + maxM + ' skills</text>';
+  s += '<text x="' + (W - 6) + '" y="' + (H - 6) + '" font-size="9" fill="#8ea3c8" text-anchor="end">' + P.answered + ' questions answered</text>';
+  return s + '</svg>';
+}
+function toCSV() {
+  var rows = [['skill', 'strand', 'grade', 'attempts', 'correct', 'accuracy', 'status']];
+  var i;
+  for (i = 0; i < SKILLS.length; i++) {
+    var sk = SKILLS[i], s = P.skills[sk.id];
+    rows.push([sk.name, strandName(sk.strand), sk.grade, s.a, s.c,
+      (s.a ? Math.round(100 * s.c / s.a) + '%' : '-'),
+      isMastered(sk.id) ? 'solid' : (isUnlocked(sk.id) ? (s.a ? 'working on it' : 'not started') : 'locked')]);
+  }
+  return rows.map(function (r) {
+    return r.map(function (c) { var v = String(c); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(',');
+  }).join('\n');
+}
+function renderRecord() {
+  var m = masteredCount(), g = workingGrade(), i;
+  var h = '<div class="screen gu">' +
+    '<h2>The record</h2>' +
+    '<div class="kpis">' +
+      '<div class="kpi"><b>' + m + '</b><span>skills solid</span></div>' +
+      '<div class="kpi"><b>' + (g === null ? '&mdash;' : g) + '</b><span>working grade</span></div>' +
+      '<div class="kpi"><b>' + P.answered + '</b><span>answered</span></div>' +
+    '</div>' +
+    '<div class="card">' + chartSvg() + '<div class="legend">';
+  for (i = 0; i < STRANDS.length; i++) {
+    h += '<span><i style="background:' + STRANDS[i].col + '"></i>' + STRANDS[i].name + '</span>';
+  }
+  h += '</div></div><div class="card">';
+  for (i = 0; i < SKILLS.length; i++) {
+    var sk = SKILLS[i], s = P.skills[sk.id];
+    var solid = isMastered(sk.id), open = isUnlocked(sk.id);
+    var hits = 0, j;
+    for (j = 0; j < s.recent.length; j++) if (s.recent[j]) hits++;
+    var pr = solid ? 1 : Math.min(1, s.recent.length ? hits / MASTERY_HITS : 0);
+    h += '<div class="srow">' +
+      '<span class="gr">gr ' + sk.grade.toFixed(1) + '</span>' +
+      '<span class="nm">' + esc(sk.name) + '</span>' +
+      '<span class="mb"><i style="width:' + Math.round(pr * 100) + '%;background:' + strandCol(sk.strand) + '"></i></span>' +
+      '<span class="st">' + (solid ? 'solid' : (open ? (s.a ? Math.round(100 * acc(s)) + '%' : 'ready') : 'locked')) + '</span>' +
+      '</div>';
+  }
+  h += '</div>' +
+    '<div class="btnrow" style="margin-bottom:8px">' +
+      '<button class="btn ghost" data-act="csv">EXPORT CSV</button>' +
+      '<button class="btn ghost" data-act="import">IMPORT</button>' +
+      '<button class="btn" data-act="home">BACK</button>' +
+    '</div>' +
+    '<div class="tagline" style="max-width:100%;font-size:11.5px">Locked means the skills it is built on are not solid yet &mdash; it unlocks itself, no age or grade decides it. Export writes the whole record as a spreadsheet.</div>' +
+    '</div>';
+  app.innerHTML = h;
+}
+function downloadCSV() {
+  var csv = toCSV();
+  try {
+    var blob = new Blob([csv], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'forge-record.csv';
+    document.body.appendChild(a); a.click();
+    window.setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 400);
+  } catch (e) {}
+  return csv;
+}
+function importProfile(text) {
+  try {
+    var o = JSON.parse(text);
+    if (!o || typeof o !== 'object') return false;
+    localStorage.setItem(K_SAVE, JSON.stringify(o));
+    P = loadProfile();
+    saveProfile();
+    render();
+    return true;
+  } catch (e) { return false; }
+}
+
+/* =============================================================== input */
+app.addEventListener('click', function (e) {
+  var t = e.target && e.target.closest ? e.target.closest('[data-act],[data-k]') : null;
+  if (!t) return;
+  initAudio();
+  var k = t.getAttribute('data-k');
+  if (k) { pressKey(k); return; }
+  var a = t.getAttribute('data-act');
+  if (a === 'start') { G.screen = 'learn'; P.sessions++; G.setN = 0; G.setRight = 0; saveProfile(); nextItem(); return; }
+  if (a === 'record') { G.screen = 'record'; SFX.tap(); render(); return; }
+  if (a === 'home') { G.screen = 'title'; SFX.tap(); render(); return; }
+  if (a === 'next') { SFX.tap(); nextItem(); return; }
+  if (a === 'step') { G.stepI = Math.min(G.stepI + 1, G.it.steps.length - 1); SFX.tap(); render(); return; }
+  if (a === 'csv') { SFX.tap(); downloadCSV(); return; }
+  if (a === 'import') {
+    var txt = window.prompt('Paste a saved record here.');
+    if (txt) importProfile(txt);
+    return;
+  }
+});
+document.addEventListener('keydown', function (e) {
+  if (G.screen !== 'learn') return;
+  var k = e.key;
+  if (k >= '0' && k <= '9') { pressKey(k); e.preventDefault(); return; }
+  if (k === '.' || k === '/' || k === '-') { pressKey(k); e.preventDefault(); return; }
+  if (k === 'Backspace') { pressKey('back'); e.preventDefault(); return; }
+  if (k === 'Enter') {
+    if (G.state === 'ask') pressKey('ok');
+    else if (G.state === 'teach' && G.stepI < G.it.steps.length - 1) { G.stepI++; render(); }
+    else nextItem();
+    e.preventDefault(); return;
+  }
+  if (k === 'h' || k === 'H') { pressKey('hint'); return; }
+});
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('homeBtn').addEventListener('click', function () { G.screen = 'title'; render(); });
+/* a paused tab is not a broken tab */
+window.addEventListener('blur', function () { saveProfile(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden) saveProfile(); });
+
+/* ================================================================ boot */
+function boot() {
+  P = loadProfile();
+  setSeed((P.answered * 2654435761 + 12345) >>> 0 || 987654321);
+  setMuted((function () { try { return localStorage.getItem(K_MUTED) === '1'; } catch (e) { return false; } })());
+  G.screen = 'title';
+  render();
+}
+boot();
+
+/* Test surface. Kept top-level on purpose so a harness can drive the real
+   engine rather than a copy of it. */
+window.FORGE = {
+  marker: 'FORGE_SCHOOL_V1',
+  SKILLS: SKILLS, STRANDS: STRANDS,
+  R: R, Rstr: Rstr, Rdec: Rdec, showAns: showAns, Req: Req, Radd: Radd, Rsub: Rsub, Rmul: Rmul, Rdiv: Rdiv, parseAns: parseAns,
+  setSeed: setSeed, buildItem: buildItem, skillById: skillById,
+  isMastered: isMastered, isUnlocked: isUnlocked, frontier: frontier,
+  masteredCount: masteredCount, workingGrade: workingGrade, chooseSkill: chooseSkill,
+  record: record, freshProfile: freshProfile, loadProfile: loadProfile, saveProfile: saveProfile,
+  toCSV: toCSV, importProfile: importProfile, trapFor: trapFor,
+  profile: function () { return P; },
+  setProfile: function (p) { P = p; },
+  game: function () { return G; },
+  submit: function (v) { return submit(v); },
+  press: function (k) { return pressKey(k); },
+  go: function (screen) { G.screen = screen; render(); },
+  MASTERY: { window: MASTERY_WINDOW, hits: MASTERY_HITS, min: MASTERY_MIN }
+};
+</script>
+</body>
+</html>
