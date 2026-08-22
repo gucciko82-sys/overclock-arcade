@@ -1294,3 +1294,105 @@ done" printed under a letter L), and Echo's hub cover sized its shapes off the
 tile's width while positioning them off its height — on tiles far wider than
 they are tall, the tree's canopy swallowed its own trunk and grew out through
 the bottom of the tile. Both fixed.
+
+### Built and play-tested 2026-08-21 — Tally (first numbers, built for Lizzy)
+
+**Tally — first numbers.** A tally is a count kept one mark at a time. This is
+the rung *below* Sum: Sum starts at written addition and assumes a reader,
+Tally is for a child still working out that four things are four things
+however they are arranged. Four activities, six rungs each: **How many?**
+(count a group, tap the numeral), **Find the number** (hear it, tap it),
+**Which has more?** (compare two or three piles, then *less*, then bare
+numerals) and **What comes next?** (counting on, counting back, the missing
+number in the middle, counting by ten and by two). It hands off to Sum.
+
+Built to the same law as Char, Trace and Echo — every prompt spoken by
+`speechSynthesis` *and* drawn, huge well-spaced targets, identical layout
+every round, no score, no timer, no red, no buzzer, and no failure state
+anywhere. A miss says the answer warmly, shows it, and brings the number back
+later as ordinary practice.
+
+**The counting-specific design.** Arrangement is half the difficulty, so the
+rungs walk through it deliberately: a neat row (easy to track), then dice
+patterns (subitising — seeing four without counting), then scattered (needs a
+real strategy), then ten-frames for the teens, which is how ten-and-some is
+actually taught. Distractors are two-or-more away at the bottom of the ladder
+and plus-or-minus-one at the top, because off-by-one is the mistake that
+actually means something.
+
+**The ladder was measured, not assumed.** A simulated learner of known ability
+was driven through the real `adapt()` and the settling point recorded, for all
+four activities at six abilities, five seeds each. The first learner model was
+itself wrong — it put 50% skill at the learner's own rung, which is really an
+ability three-quarters of a rung lower, and made a healthy ladder read as far
+too harsh. That is the second time that exact mistake has cost time here:
+**model the learner you mean.**
+
+With a correct model it found a real bug. **Which has more? drifted a
+floor-level learner a full rung above her true level** (settled 1.18 against a
+true ability of 0). Cause: every other activity widens from two buttons to
+four as it climbs, so the guess floor falls from 50% to 25% and quietly brakes
+the climb — but comparison cannot do that, because comparing five piles at
+once is a different and worse question. It sits at two or three panels the
+whole way up, so four-in-a-row stayed a 1-in-16 fluke at every rung. The fix
+is to make the gates guess-floor-aware: **five in a row where the rung shows
+only two buttons, and three confirming probe hits instead of two.** Drift fell
+to 0.84 and accuracy at level rose from 72.8% into the target band at 76.6%.
+Every one of the twenty-four cases now settles within a rung of true ability,
+inside the band, without yo-yo.
+
+A slower demote (recent window 4 instead of 5) was tried in the same rig and
+**reverted** — it measured worse on both placement and accuracy. Same
+conclusion Char reached, now with numbers for Tally specifically.
+
+**Verification.** Syntax gate (1,438 script lines, zero external references).
+A content audit re-derived **7,200 generated items** from scratch — every
+sequence's answer recomputed independently, every group's drawn count checked
+against its number, every distractor rule enforced, no thing overlapping
+another, nothing outside its box, no script leaking a bare numeral or any
+failure language. 46 of 46 scripted-play assertions: all four activities play
+a full six-item set through the real UI, stars and saves advance, a miss lights
+up the *right* answer with no red anywhere, nine hostile saves all load as a
+playable game, and the whole thing still starts and plays with
+`speechSynthesis` deleted. Layout clean at 1280x800, 390x844, 844x390 and
+768x1024.
+
+Two things caught only by looking at the screenshots:
+
+- **The speaker button sat on top of the answer cards in landscape.** Root
+  cause was not the speaker: an `<svg>` given `width: 100%` and a viewBox
+  computes its own *height* from the viewBox ratio, so a 730px-wide answer
+  card silently became 245px tall and shoved the (unshrinkable) speaker down
+  into it. Height has to be handed down from the layout instead — the row
+  takes the leftover space, the card fills the row, and the svg is a flex
+  child with `height: 0` so the flex algorithm decides, not the artwork.
+- **Two piles were drawn at different scales.** Each panel's svg stretches to
+  fill its card, so a pile of two got fish twice the size of a pile of five —
+  which hands "which has more?" a second, wrong answer: whichever panel's
+  things look bigger. That is precisely the conservation-of-number confusion
+  the activity exists to clear up. Every group in a comparison now uses the
+  radius the largest pile would use and is padded to a common canvas, so equal
+  svg boxes mean equal scale.
+
+**Also fixed while here, in the hub and the harness:**
+
+- **Char's card has always read "Unplayed."** The hub's best-score reader
+  looked for a `.ok` field on each letter; Char stores `{a: right, w: missed}`
+  and has never written `.ok`. Nothing failed, because a hub reader that
+  returns nothing looks exactly like a game nobody has played. Now kept in
+  step with Char's own `lettersKnown()`, and there is a new check that plays
+  each learning game for real and then reads its card on the hub, so a reader
+  drifting from its game fails loudly instead of silently.
+- **Greedy was never registered in either harness file**, so it had been
+  silently skipped by every matrix run since it shipped. Registered in both.
+- **WebKit will no longer launch on the Windows machine.** Windows Smart App
+  Control now blocks Playwright's `WebKit2.dll` outright ("An Application
+  Control policy has blocked this file"), which killed the whole matrix run at
+  profile two. Turning Smart App Control off is a one-way security change and
+  is not worth it for a test rig, so the two mobile profiles fall back to
+  Chromium in iPhone emulation and print a loud banner. Layout, overflow,
+  tap-target and console-error findings are still valid; **Safari-specific
+  behaviour is no longer covered on Windows and now belongs to the iOS
+  Simulator on the Mac.**
+
+Hub reconciled against disk: 46 cards, 46 game folders, every link resolves.

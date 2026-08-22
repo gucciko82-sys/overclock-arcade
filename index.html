@@ -1562,11 +1562,22 @@ var GAMES = [
     id: 'char', name: 'Char', cat: 'kids', tag: 'Letters & Sounds', isNew: true,
     desc: 'A char is one letter of code. Find the letter, match big to little, hear the sound it makes. Everything is spoken aloud — no reading needed to play.',
     best: function () {
+      /* Char stores {a: right, w: missed} per letter and calls a letter solid
+         at four-plus tries and 75%+ right — this used to read a `.ok` field
+         that Char has never written, so the card said Unplayed no matter how
+         much she played. Kept in step with Char's own lettersKnown(). */
       var s = lsJSON('char_v1');
       if (!s || !s.letters) return null;
-      var solid = 0, k;
-      for (k in s.letters) { if (s.letters[k] && s.letters[k].ok >= 3) solid++; }
-      return solid > 0 ? ['Letters solid', solid] : null;
+      var solid = 0, seen = 0, k, v, t;
+      for (k in s.letters) {
+        if (!Object.prototype.hasOwnProperty.call(s.letters, k)) continue;
+        v = s.letters[k];
+        if (!v || typeof v !== 'object') continue;
+        t = (+v.a || 0) + (+v.w || 0);
+        if (t > 0) seen++;
+        if (t >= 4 && (+v.a || 0) / t >= 0.75) solid++;
+      }
+      return seen > 0 ? ['Letters solid', solid] : null;
     },
     cover: function (x, w, h) {
       /* warm and friendly, not the arcade's dark neon — this one is for the littlest player */
@@ -1725,6 +1736,67 @@ var GAMES = [
       x.lineTo(sx - s2 * 0.35, sy + s2 * 0.45); x.lineTo(sx - s2, sy + s2 * 0.45);
       x.closePath(); x.fill();
       x.strokeStyle = '#e0952c'; x.lineWidth = 2.2; x.lineCap = 'round';
+      x.beginPath(); x.arc(sx + s2 * 0.4, sy, s2 * 0.8, -0.9, 0.9); x.stroke();
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'tally', name: 'Tally', cat: 'kids', tag: 'First Numbers', isNew: true,
+    desc: 'A tally is a count kept one mark at a time. How many, find the number, which has more, what comes next — all spoken aloud, no reading needed. Finds her level by playing with her, then keeps climbing.',
+    best: function () {
+      var s = lsJSON('tally_v1');
+      if (!s || !s.lvl || typeof s.lvl !== 'object') return null;
+      var acts = ['howmany', 'find', 'more', 'next'], climbed = 0, played = false, i, v;
+      for (i = 0; i < acts.length; i++) {
+        v = s.lvl[acts[i]];
+        if (typeof v === 'number' && isFinite(v) && v > 0) climbed += Math.min(5, Math.floor(v));
+      }
+      for (i = 0; i < acts.length; i++) {
+        if (s.played && typeof s.played[acts[i]] === 'number' && s.played[acts[i]] > 0) played = true;
+      }
+      return played ? ['Rungs climbed', climbed + ' / 20'] : null;
+    },
+    cover: function (x, w, h) {
+      /* warm and friendly like Char, Trace and Echo — the little-kid shelf
+         does not use the arcade's dark neon. A ten-frame with seven counters
+         and the numeral beside it: exactly what the game is. */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#f6fbf3'); g.addColorStop(1, '#d9ead3');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+
+      var cell = Math.min(w * 0.105, h * 0.19);
+      var fw = cell * 5, fh = cell * 2;
+      var fx0 = w * 0.08, fy0 = (h - fh) / 2 + h * 0.04;
+      x.fillStyle = '#ffffff';
+      x.fillRect(fx0, fy0, fw, fh);
+      x.strokeStyle = 'rgba(47,64,48,0.4)'; x.lineWidth = 2.4;
+      x.strokeRect(fx0, fy0, fw, fh);
+      x.lineWidth = 1.4; x.strokeStyle = 'rgba(47,64,48,0.24)';
+      for (var c = 1; c < 5; c++) {
+        x.beginPath(); x.moveTo(fx0 + c * cell, fy0); x.lineTo(fx0 + c * cell, fy0 + fh); x.stroke();
+      }
+      x.beginPath(); x.moveTo(fx0, fy0 + cell); x.lineTo(fx0 + fw, fy0 + cell); x.stroke();
+      for (var i2 = 0; i2 < 7; i2++) {
+        var col = i2 % 5, row = (i2 / 5) | 0;
+        x.fillStyle = row ? '#43a047' : '#2e7d5b';
+        x.beginPath();
+        x.arc(fx0 + col * cell + cell / 2, fy0 + row * cell + cell / 2, cell * 0.32, 0, TAU);
+        x.fill();
+      }
+      /* the numeral it adds up to */
+      x.fillStyle = '#1565c0';
+      x.font = '800 ' + Math.round(h * 0.44) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText('7', w * 0.79, fy0 + fh / 2);
+      /* the speaker, because every question here is spoken */
+      x.fillStyle = '#2e7d5b';
+      var sx = w * 0.5, sy = h * 0.11, s2 = h * 0.05;
+      x.beginPath();
+      x.moveTo(sx - s2, sy - s2 * 0.45); x.lineTo(sx - s2 * 0.35, sy - s2 * 0.45);
+      x.lineTo(sx + s2 * 0.25, sy - s2); x.lineTo(sx + s2 * 0.25, sy + s2);
+      x.lineTo(sx - s2 * 0.35, sy + s2 * 0.45); x.lineTo(sx - s2, sy + s2 * 0.45);
+      x.closePath(); x.fill();
+      x.strokeStyle = '#2e7d5b'; x.lineWidth = 2.2; x.lineCap = 'round';
       x.beginPath(); x.arc(sx + s2 * 0.4, sy, s2 * 0.8, -0.9, 0.9); x.stroke();
       x.textAlign = 'left'; x.textBaseline = 'alphabetic';
     }
