@@ -1,0 +1,1933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Dunk — Arcade Hoops</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="Neon half-court hoops inside the machine. Charge the meter, pick your arc, and let it fly. Three in a row and the ball catches fire.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dunk">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eef2ff;
+    --dim: rgba(238,242,255,0.62);
+    --panel: rgba(14,19,36,0.78);
+    --line: rgba(238,242,255,0.16);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+  #overlay, #topbtns, #touchui { cursor: auto; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.25); }
+  body:not(.playing) #topbtns { display: none; }
+
+  #touchui { position: absolute; inset: 0; z-index: 5; pointer-events: none; display: none; }
+  body.touch.playing #touchui { display: block; }
+  .tbtn {
+    position: absolute; pointer-events: auto;
+    border-radius: 14px;
+    background: rgba(238,242,255,0.09); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 16px; font-weight: 700; letter-spacing: 0.06em;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tbtn:active { background: rgba(255,204,77,0.3); }
+  #tLeft  { left: max(12px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom)); width: 64px; height: 58px; }
+  #tRight { left: calc(max(12px, env(safe-area-inset-left)) + 70px); bottom: max(14px, env(safe-area-inset-bottom)); width: 64px; height: 58px; }
+  #tShoot {
+    right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom));
+    width: 96px; height: 86px; border-radius: 18px; font-size: 13px; letter-spacing: 0.14em;
+    color: #241c05; border-color: rgba(255,204,77,0.6); background: rgba(255,204,77,0.85);
+  }
+  @media (max-width: 430px) {
+    #tLeft, #tRight { width: 56px; height: 52px; }
+    #tRight { left: calc(max(12px, env(safe-area-inset-left)) + 61px); }
+    #tShoot { width: 84px; height: 76px; }
+  }
+  @media (max-height: 420px) {
+    #tLeft, #tRight { width: 56px; height: 48px; }
+    #tShoot { width: 84px; height: 64px; }
+  }
+
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(20,28,54,0.82), rgba(5,7,15,0.95));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(540px, 100%);
+    background: rgba(12,17,32,0.93);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 22px 20px 20px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.7);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(32px, 10vw, 58px);
+    letter-spacing: 0.2em; font-weight: 700; line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 26px rgba(255,204,77,0.45);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(19px, 6vw, 28px); letter-spacing: 0.08em; font-weight: 700; }
+  h2.win { color: #6ef2a8; }
+  h2.lose { color: #ff6b8a; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.04em; margin-bottom: 12px; }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 380px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(238,242,255,0.1); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; text-align: right; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 6px; }
+  .stats.two { grid-template-columns: repeat(2, 1fr); }
+  .stat { background: rgba(238,242,255,0.05); border: 1px solid var(--line); border-radius: 10px; padding: 8px 4px; }
+  .stat .k { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(16px, 5vw, 23px); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .best { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .best b { color: var(--accent); }
+  .btn {
+    margin-top: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; min-width: 44px; padding: 0 24px;
+    border-radius: 10px; border: 1px solid rgba(255,204,77,0.6);
+    background: rgba(255,204,77,0.15); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,204,77,0.32); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(238,242,255,0.05); }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(24px, 8vw, 44px); font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+  @media (max-height: 620px) {
+    .card { padding: 14px 16px; border-radius: 12px; }
+    .keys { display: none; }
+    .stats { margin: 10px 0 4px; }
+    .btn { margin-top: 10px; min-height: 46px; }
+    .tagline { margin-bottom: 6px; }
+  }
+  @media (max-width: 400px) {
+    .btn { padding: 0 16px; letter-spacing: 0.08em; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="touchui">
+    <button class="tbtn" id="tLeft" type="button" aria-label="Step left">&#9664;</button>
+    <button class="tbtn" id="tRight" type="button" aria-label="Step right">&#9654;</button>
+    <button class="tbtn" id="tShoot" type="button" aria-label="Hold to charge, release to shoot">SHOOT</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   DUNK — arcade hoops for the Overclock arcade.
+   A neon half-court rendered on a circuit-board floor. Hold to charge,
+   release to shoot; the rim is two honest collision points so a shot off
+   the front iron can still rattle home. Three straight and you're ON FIRE.
+   One file, no assets, every pixel and every sound made at runtime.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'dunk_v1';
+var K_MUTE = 'dunk_muted_v1';
+
+/* --- world, in metres. x runs right, y runs UP from the floor line ------ */
+/* The court is deliberately a compressed half-court: a true 15m span made
+   the player 59px tall on a 390px phone. Everything that has to stay real —
+   rim height, rim bore, ball size, gravity — is real; the floor distances
+   are arcade. */
+var WORLD_W     = 10.5;
+var WORLD_TOP   = 5.0;    /* metres of air we must always be able to see */
+var WORLD_BELOW = 0.70;   /* courtside strip drawn below the floor line */
+var WORLD_H     = WORLD_TOP + WORLD_BELOW;
+var WALL_H      = 4.35;   /* padded back wall; the whole hoop stands against it */
+var CAM_MIN_SPAN = 4.6;   /* never zoom in tighter than this many metres */
+
+var G_ACC   = 11.2;       /* a touch heavier than earth — arcade snap */
+var BALL_R  = 0.122;
+var RIM_Y   = 3.05;
+/* the irons are collision POINTS, so their centres sit 2*RIM_R further
+   apart than the hoop's 0.457m inner clear diameter — get this wrong and a
+   flat-entry swish becomes geometrically impossible (it was, once) */
+var RIM_X1  = 8.360;      /* front iron */
+var RIM_X2  = 8.865;      /* back iron */
+var RIM_CX  = (RIM_X1 + RIM_X2) / 2;
+var RIM_R   = 0.024;
+var BOARD_X = 9.045, BOARD_Y0 = 2.90, BOARD_Y1 = 3.98;
+var THREE_X = 3.60;       /* at or left of this = 3 */
+var DEEP_X  = 2.00;       /* at or left of this = 4 (shootout only) */
+var SPOT_MIN = 1.30, SPOT_MAX = 6.60;
+var REL_DX = 0.30, REL_Y = 2.16;
+var MINV = 6.2, MAXV = 15.6;
+var ANG_MIN = 34, ANG_MAX = 78;
+var ENTRY_MIN = 42;       /* degrees of descent the ball needs to clear both irons */
+var REST_RIM = 0.45, REST_BOARD = 0.66, REST_FLOOR = 0.56;
+var FIRE_AT = 3;
+var SHOOT_SECS = 60;
+var CLOCK_SHOOTOUT = 5.0;
+var CLOCK_DUEL = 8.0;
+var DUEL_TARGET = 11, DUEL_CAP = 15;
+var CHARGE_RATE = 1.35;   /* meter units per second, ping-pongs 0..1..0 */
+var ASSIST_Z = 0.06;      /* release within this of the marker and the shot gets pulled true */
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function pick(a) { return a[(Math.random() * a.length) | 0]; }
+function easeOut(t) { var k = 1 - t; return 1 - k * k * k; }
+function gauss() { return (Math.random() + Math.random() + Math.random() + Math.random() - 2) * 0.7; }
+function loadJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function intOr(v, d) {
+  if (typeof v !== 'number' || !isFinite(v)) return d;
+  var n = Math.floor(v);
+  return n < 0 ? d : (n > 999999 ? d : n);
+}
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') { try { actx.resume(); } catch (e) {} } return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.4;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.4;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(24, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseBurst(dur, vol, freq, delay, type, q) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var n = Math.max(1, Math.floor(actx.sampleRate * dur));
+  var buf = actx.createBuffer(1, n, actx.sampleRate);
+  var ch = buf.getChannelData(0);
+  for (var i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  var src = actx.createBufferSource(); src.buffer = buf;
+  var f = actx.createBiquadFilter(); f.type = type || 'lowpass'; f.frequency.value = freq;
+  if (q) f.Q.value = q;
+  var g = actx.createGain(); g.gain.value = vol;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+}
+/* the crowd is filtered noise with the swell baked into the buffer */
+function crowd(level, dur, delay, rise) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var n = Math.max(1, Math.floor(actx.sampleRate * dur));
+  var buf = actx.createBuffer(1, n, actx.sampleRate);
+  var ch = buf.getChannelData(0);
+  var up = clamp(rise === undefined ? 0.22 : rise, 0.02, 0.9);
+  for (var i = 0; i < n; i++) {
+    var p = i / n;
+    var env = p < up ? Math.pow(p / up, 1.4) : Math.pow(1 - (p - up) / (1 - up), 1.7);
+    ch[i] = (Math.random() * 2 - 1) * env;
+  }
+  var src = actx.createBufferSource(); src.buffer = buf;
+  var f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 720; f.Q.value = 0.65;
+  var g = actx.createGain(); g.gain.value = level;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+}
+var sfx = {
+  charge:  function () { tone('square', 180, 320, 0.10, 0.035); },
+  release: function (p) { noiseBurst(0.05, 0.13, 2600, 0, 'highpass'); tone('triangle', 300 + p * 380, 160, 0.10, 0.10); },
+  dribble: function () { noiseBurst(0.035, 0.14, 460); tone('sine', 150, 70, 0.07, 0.07); },
+  /* swish = soft nylon hiss, no metal at all */
+  swish:   function () {
+    noiseBurst(0.18, 0.20, 3400, 0, 'bandpass', 0.9);
+    tone('sine', 880, 620, 0.14, 0.05);
+    crowd(0.34, 1.5, 0.02, 0.16);
+  },
+  /* bank = a slab of glass, then the net */
+  glass:   function () { tone('square', 520, 300, 0.07, 0.055); noiseBurst(0.05, 0.16, 1500, 0, 'bandpass', 2.2); },
+  bank:    function () {
+    noiseBurst(0.14, 0.16, 2600, 0.04, 'bandpass', 0.9);
+    tone('triangle', 380, 200, 0.16, 0.07);
+    crowd(0.3, 1.3, 0.05, 0.2);
+  },
+  rim:     function () { tone('square', 1180, 700, 0.07, 0.05); tone('sine', 2100, 1400, 0.05, 0.03); noiseBurst(0.04, 0.08, 3000, 0, 'bandpass', 3); },
+  brick:   function () { noiseBurst(0.09, 0.16, 320); tone('sine', 130, 62, 0.14, 0.09); crowd(0.11, 0.9, 0.02, 0.35); },
+  fire:    function () { tone('sawtooth', 220, 880, 0.35, 0.07); tone('sawtooth', 330, 1320, 0.35, 0.05, 0.05); crowd(0.55, 2.4, 0, 0.13); },
+  buzz:    function () { tone('square', 190, 185, 0.9, 0.09); tone('square', 96, 94, 0.9, 0.07); },
+  win:     function () { crowd(0.6, 2.8, 0, 0.12); tone('sine', 523, 523, 0.22, 0.08); tone('sine', 659, 659, 0.22, 0.08, 0.16); tone('sine', 784, 784, 0.24, 0.08, 0.32); tone('sine', 1047, 1047, 0.6, 0.09, 0.48); },
+  lose:    function () { tone('sawtooth', 300, 90, 0.6, 0.09); tone('sawtooth', 210, 62, 0.75, 0.07, 0.1); crowd(0.13, 1.4, 0, 0.4); },
+  ambient: function () { crowd(0.06, 3.0, 0, 0.5); },
+  ui:      function () { tone('square', 620, 900, 0.06, 0.05); }
+};
+
+/* ------------------------------------------------------------- save/state */
+var sv = loadJSON(K_SAVE, null);
+if (!sv || typeof sv !== 'object' || sv instanceof Array) sv = {};
+var save = {
+  best: intOr(sv.best, 0),
+  bestStreak: intOr(sv.bestStreak, 0),
+  wins: intOr(sv.wins, 0),
+  losses: intOr(sv.losses, 0)
+};
+function persist() { saveJSON(K_SAVE, save); }
+
+var G = {
+  state: 'title',        /* title | play | pause | over */
+  mode: 'shootout',      /* shootout | duel */
+  phase: 'aim',          /* aim | flight | reset | cpuaim */
+  shooter: 'you',        /* you | cpu */
+  score: 0, cpu: 0,
+  streak: 0, bestStreakRun: 0, onFire: false,
+  makes: 0, shots: 0,
+  time: SHOOT_SECS,
+  shotClock: CLOCK_SHOOTOUT,
+  cpuLevel: 1,
+  resetT: 0,
+  banner: '', bannerSub: '', bannerT: 0,
+  shake: 0, flash: 0, hype: 0,
+  winner: '', newBest: false,
+  mark: 0.5,
+  t: 0
+};
+
+var P = { x: 5.4, drift: 0, charging: false, power: 0, dir: 1, angle: 52, anim: 0, release: 0, hasBall: true, bob: 0 };
+var C = { x: 4.2, charging: false, power: 0, angle: 52, anim: 0, release: 0, hasBall: false, t: 0, targetPower: 0, targetAngle: 52, speed: 0 };
+
+var ball = null;
+var trail = [];
+var fx = [];
+var floats = [];
+var netPull = 0, rimGlow = 0, boardFlash = 0;
+var lastRimHits = 0, lastBoardHits = 0;
+
+/* ------------------------------------------------------------- geometry -- */
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var view = { w: 900, h: 600, dpr: 1 };
+var scale = 50, x0 = 0, floorY = 400, bandTop = 0, scaleMax = 90;
+var cam = { s: 50, x0: 0 };
+var crowdSeats = null, traces = null;
+
+function sx(x) { return x0 + x * scale; }
+function sy(y) { return floorY - y * scale; }
+function ux(px) { return (px - x0) / scale; }
+
+/* A side-on court is 15m wide and a phone held upright is 390px. Fitting the
+   whole thing every frame made the court a postage stamp in a void, so the
+   camera frames only what matters — the shooter, the rim and the ball — and
+   pulls back when someone throws a rainbow. The floor line never moves. */
+function camTarget() {
+  var w = view.w;
+  var sxx = (G.state === 'title') ? 5.6 : (G.shooter === 'cpu' ? C.x : P.x);
+  var lo = sxx - 1.0, hi = RIM_CX + 1.15;
+  if (ball) { lo = Math.min(lo, ball.x - 1.0); hi = Math.max(hi, ball.x + 1.0); }
+  lo = clamp(lo, -0.5, WORLD_W); hi = clamp(hi, 0, WORLD_W + 0.5);
+  var span = clamp(hi - lo, CAM_MIN_SPAN, WORLD_W + 1);
+  var s = clamp(w / span, w / (WORLD_W + 1), scaleMax);
+  /* a high ball pulls the camera back so a rainbow never leaves the frame */
+  if (ball && ball.y > WORLD_TOP - 0.4) s = Math.min(s, (floorY - 14) / (ball.y + 0.6));
+  s = Math.max(s, w / (WORLD_W + 1) * 0.55);
+  var mid = (lo + hi) / 2;
+  var nx = w / 2 - mid * s;
+  if (WORLD_W * s <= w) nx = (w - WORLD_W * s) / 2;
+  else nx = clamp(nx, w - WORLD_W * s, 0);
+  return { s: s, x0: nx };
+}
+function camUpdate(dt) {
+  var t = camTarget();
+  var k = Math.min(1, dt * (t.s < cam.s ? 11 : 5));
+  cam.s += (t.s - cam.s) * k;
+  cam.x0 += (t.x0 - cam.x0) * Math.min(1, dt * 7);
+  scale = cam.s; x0 = cam.x0;
+  bandTop = floorY - WORLD_TOP * scale;
+}
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(240, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+  /* the floor sits at a fixed height; only the zoom moves */
+  floorY = Math.round(h - Math.max(h * 0.12, 28));
+  scaleMax = h / 5.9;
+  var t = camTarget();
+  cam.s = t.s; cam.x0 = t.x0;
+  scale = cam.s; x0 = cam.x0;
+  bandTop = floorY - WORLD_TOP * scale;
+  buildArena();
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+function buildArena() {
+  var r = 1;
+  function rr() { r = (r * 1103515245 + 12345) & 0x7fffffff; return r / 0x7fffffff; }
+  crowdSeats = [];
+  var rows = 22;
+  for (var i = 0; i < rows; i++) {
+    var row = [];
+    var n = Math.ceil((WORLD_W + 6) / 0.34) + 4;
+    for (var j = 0; j < n; j++) {
+      row.push({ x: -3 + j * 0.34 + rr() * 0.16, ph: rr() * TAU, c: rr() });
+    }
+    crowdSeats.push(row);
+  }
+  traces = [];
+  for (var k = 0; k < 16; k++) {
+    var tx = rr() * WORLD_W;
+    traces.push({ x: tx, d: 0.25 + rr() * 0.9, up: rr() < 0.5, len: 0.4 + rr() * 1.4, ph: rr() * TAU });
+  }
+}
+
+/* ================================================================ physics =
+   One integrator, used by the live game and by the offline shot simulator so
+   a scripted test and a real shot cannot disagree about what the rim does.
+   It records what it touched; nothing in here plays a sound or scores — the
+   game reads the flags afterwards.                                          */
+function newBall(x, y, vx, vy) {
+  return {
+    x: x, y: y, vx: vx, vy: vy, rot: 0, spin: -vx * 1.6,
+    front: false, back: false, board: false, rimHits: 0, boardHits: 0,
+    scored: false, pts: 0, floorHits: 0, landT: -1, life: 0, dead: false,
+    fromX: x, live: true
+  };
+}
+function rimHit(b, rx, tag) {
+  var dx = b.x - rx, dy = b.y - RIM_Y;
+  var d = Math.sqrt(dx * dx + dy * dy);
+  var rad = BALL_R + RIM_R;
+  if (d >= rad || d < 1e-7) return;
+  var nx = dx / d, ny = dy / d;
+  b.x = rx + nx * rad; b.y = RIM_Y + ny * rad;
+  var vn = b.vx * nx + b.vy * ny;
+  if (vn < 0) {
+    var tx = -ny, ty = nx;
+    var vt = b.vx * tx + b.vy * ty;
+    vn = -vn * REST_RIM; vt *= 0.72;
+    b.vx = nx * vn + tx * vt;
+    b.vy = ny * vn + ty * vt;
+    b.rimHits++;
+    if (tag === 'f') b.front = true; else b.back = true;
+  }
+}
+function substep(b, h) {
+  var py = b.y;
+  b.vy -= G_ACC * h;
+  b.x += b.vx * h;
+  b.y += b.vy * h;
+  b.rot += b.spin * h;
+  b.life += h;
+
+  rimHit(b, RIM_X1, 'f');
+  rimHit(b, RIM_X2, 'b');
+
+  if (b.x + BALL_R > BOARD_X && b.y > BOARD_Y0 - BALL_R * 0.4 && b.y < BOARD_Y1 + BALL_R * 0.4) {
+    b.x = BOARD_X - BALL_R;
+    if (b.vx > 0) { b.vx = -b.vx * REST_BOARD; b.vy *= 0.92; b.board = true; b.boardHits++; }
+  }
+  /* the ball is through when its centre crosses the rim plane, falling,
+     between the two irons — the same test whether it swished or rolled */
+  if (!b.scored && py > RIM_Y && b.y <= RIM_Y && b.vy < 0 && b.x > RIM_X1 && b.x < RIM_X2) {
+    b.scored = true;
+  }
+  if (b.y < BALL_R) {
+    b.y = BALL_R;
+    b.vy = -b.vy * REST_FLOOR;
+    b.vx *= 0.86; b.spin *= 0.7;
+    b.floorHits++;
+    if (b.landT < 0) b.landT = b.life;
+  }
+  if (b.x < BALL_R) { b.x = BALL_R; b.vx = -b.vx * 0.6; }
+  if (b.x > WORLD_W - BALL_R) { b.x = WORLD_W - BALL_R; b.vx = -b.vx * 0.6; }
+  if (b.life > 9) b.dead = true;
+}
+function integrate(b, dt) {
+  var n = 6, h = dt / n, i;
+  for (i = 0; i < n; i++) { if (b.dead) return; substep(b, h); }
+}
+/* offline: same physics, no game state touched */
+function simulateShot(x, y, vx, vy) {
+  var b = newBall(x, y, vx, vy);
+  var h = 1 / 180;
+  while (!b.dead) {
+    substep(b, h);
+    if (b.scored && b.y < RIM_Y - 0.6) break;
+    if (b.floorHits >= 1 && b.life - b.landT > 0.02) break;
+    if (b.life > 7) break;
+  }
+  return { scored: b.scored, front: b.front, back: b.back, board: b.board, rimHits: b.rimHits, rimRoll: b.scored && b.front };
+}
+/* speed that puts a shot from (x,y) at angle a through (tx,ty); null if none */
+function solveSpeed(x, y, aDeg, tx, ty) {
+  var a = aDeg * Math.PI / 180;
+  var dx = tx - x, dy = ty - y;
+  var c = Math.cos(a);
+  var den = 2 * c * c * (dx * Math.tan(a) - dy);
+  if (den <= 0.0001 || dx <= 0) return null;
+  var v2 = G_ACC * dx * dx / den;
+  if (!isFinite(v2) || v2 <= 0) return null;
+  return Math.sqrt(v2);
+}
+
+/* ================================================================== shots = */
+function shooterX() { return G.shooter === 'cpu' ? C.x : P.x; }
+function releasePoint() {
+  var s = G.shooter === 'cpu' ? C : P;
+  return { x: s.x + REL_DX, y: REL_Y + s.release * 0.42 };
+}
+function shotValue(x) {
+  /* shootout is arcade money: 2 / 3 / 4 from downtown.
+     1-on-1 is street rules: 1s and 2s, first to 11, win by 2 — which is the
+     only way a one-point margin can exist for the "by 2" to mean anything. */
+  if (G.mode === 'duel') return x <= THREE_X ? 2 : 1;
+  if (x <= DEEP_X) return 4;
+  if (x <= THREE_X) return 3;
+  return 2;
+}
+function launch(speed, angleDeg) {
+  var rp = releasePoint();
+  var a = angleDeg * Math.PI / 180;
+  ball = newBall(rp.x, rp.y, Math.cos(a) * speed, Math.sin(a) * speed);
+  ball.pts = shotValue(shooterX());
+  lastRimHits = 0; lastBoardHits = 0;
+  trail.length = 0;
+  G.phase = 'flight';
+  G.shots++;
+  var s = G.shooter === 'cpu' ? C : P;
+  s.hasBall = false; s.release = 1; s.charging = false; s.power = 0;
+  sfx.release(clamp((speed - 5) / 12, 0, 1));
+  lastShot = { scored: false, front: false, back: false, board: false, swish: false, pts: 0, rimRoll: false, by: G.shooter, from: shooterX() };
+}
+var lastShot = { scored: false, front: false, back: false, board: false, swish: false, pts: 0, rimRoll: false, by: 'you', from: 0 };
+
+/* The meter is relative, not absolute: dead on the marker is the shot that
+   swishes from wherever you are standing. Distance and a flat release both
+   widen the band, so the same 40ms of thumb is worth less from downtown and
+   worth nothing at all if you shoot a line drive. */
+/* Arrival angle obeys tan(entry) = tan(release) - 2*dy/dx, so from close
+   range a flat release literally cannot fit the ball between the two irons:
+   the gap perpendicular to the flight shrinks below a ball's width. Rather
+   than offer an impossible shot, the arc has a floor that rises as you step
+   in — basketball's own answer, get under it. */
+function minAngleFor(x) {
+  var dx = RIM_CX - (x + REL_DX);
+  if (dx < 0.35) return ANG_MAX - 4;
+  var t = Math.tan(ENTRY_MIN * Math.PI / 180) + 2 * (RIM_Y - REL_Y) / dx;
+  return clamp(Math.atan(t) * 180 / Math.PI, ANG_MIN, ANG_MAX - 4);
+}
+function shotBand() {
+  var rp = releasePoint();
+  var dist = Math.max(0.6, RIM_CX - rp.x);
+  var a = P.angle, mn = minAngleFor(P.x);
+  var flat = clamp((mn + 7 - a) / 14, 0, 1);
+  var steep = clamp((a - (mn + 24)) / 14, 0, 1);
+  var af = 1 + flat * 0.8 + steep * 0.5;
+  return 0.38 * af * (0.55 + dist * 0.075);
+}
+function meterSpeed(power) {
+  var rp = releasePoint();
+  var vp = solveSpeed(rp.x, rp.y, P.angle, RIM_CX, RIM_Y);
+  if (vp === null) vp = 12.5;   /* angle can't reach the rim — let it sail */
+  var e = power - G.mark;
+  if (Math.abs(e) < ASSIST_Z) e *= 0.32;   /* the assist, and it is visible on the bar */
+  return clamp(vp * (1 + e * shotBand()), 3.5, 21);
+}
+function playerShoot() {
+  if (G.state !== 'play' || G.phase !== 'aim' || G.shooter !== 'you') return;
+  P.charging = false;
+  launch(meterSpeed(clamp(P.power, 0, 1)), P.angle);
+}
+function startCharge() {
+  if (G.state !== 'play' || G.phase !== 'aim' || G.shooter !== 'you') return;
+  if (P.charging) return;
+  P.charging = true; P.power = 0; P.dir = 1;
+  sfx.charge();
+}
+
+/* ----------------------------------------------------------- shot result - */
+function makeBasket(b) {
+  var pts = b.pts;
+  var swish = (b.rimHits === 0 && b.boardHits === 0);
+  var banked = b.boardHits > 0;
+  lastShot.scored = true; lastShot.swish = swish; lastShot.rimRoll = b.front;
+  lastShot.front = b.front; lastShot.back = b.back; lastShot.board = banked;
+
+  var who = G.shooter;
+  if (who === 'you') {
+    G.streak++;
+    if (G.streak > G.bestStreakRun) G.bestStreakRun = G.streak;
+    G.makes++;
+    var wasFire = G.onFire;
+    if (G.streak >= FIRE_AT) G.onFire = true;
+    var bonus = (G.mode === 'shootout' && G.onFire) ? 1 : 0;
+    var total = pts + bonus;
+    if (G.mode === 'shootout') G.score += total; else G.score += pts;
+    lastShot.pts = (G.mode === 'shootout') ? total : pts;
+    if (!wasFire && G.onFire) {
+      banner('ON FIRE', 'every bucket pays a bonus');
+      sfx.fire();
+      G.shake = Math.max(G.shake, 16); G.flash = 1;
+      burst(RIM_CX, RIM_Y, 34, '#ff9a3c');
+    }
+  } else {
+    G.cpu += pts;
+    lastShot.pts = pts;
+    G.streak = 0; G.onFire = false;
+  }
+  netPull = 1; rimGlow = 1;
+  G.hype = Math.min(1, G.hype + 0.35 + pts * 0.06);
+  G.shake = Math.max(G.shake, swish ? 5 : 9);
+  if (swish) sfx.swish(); else sfx.bank();
+
+  var col = who === 'cpu' ? '#ff6b8a' : (swish ? '#6ef2a8' : '#ffcc4d');
+  var word = swish ? 'SWISH' : (banked ? 'BANK' : (b.front ? 'ROLLS IN' : 'GOOD'));
+  addFloat(RIM_CX, RIM_Y + 0.55, word, col, 20);
+  addFloat(RIM_CX, RIM_Y + 1.05, '+' + lastShot.pts, who === 'cpu' ? '#ff6b8a' : '#ffcc4d', 26);
+  burst(RIM_CX, RIM_Y - 0.15, swish ? 14 : 20, col);
+  if (G.mode === 'duel') checkDuelEnd();
+}
+function missBasket(b) {
+  lastShot.scored = false;
+  lastShot.front = b.front; lastShot.back = b.back; lastShot.board = b.boardHits > 0;
+  if (G.shooter === 'you') {
+    if (G.onFire) { addFloat(P.x, 2.9, 'FIRE OUT', '#7c8bb5', 15); }
+    G.streak = 0; G.onFire = false;
+  }
+  sfx.brick();
+  addFloat(b.x, Math.max(0.9, b.y + 0.4), b.rimHits ? 'OFF THE IRON' : 'BRICK', '#7c8bb5', 15);
+}
+function endShot(scored) {
+  G.resetT = scored ? 0.85 : 0.7;
+  G.phase = 'reset';
+  if (G.mode === 'duel') {
+    /* Straight alternating possession. Make-it-take-it read well on paper and
+       played terribly: a hot shooter ran 11-0 and the CPU never touched the
+       ball, so its difficulty ramp never happened. */
+    if (G.shooter === 'you') {
+      G.shooter = 'cpu'; rankCpu();
+      banner('CPU BALL', 'level ' + G.cpuLevel);
+    } else {
+      G.shooter = 'you';
+      banner('YOUR BALL', '');
+    }
+  }
+}
+
+/* the machine warms up as the game tightens — level tracks the leading score */
+function rankCpu() {
+  G.cpuLevel = clamp(1 + Math.floor(Math.max(G.score, G.cpu) * 0.75), 1, 9);
+}
+function checkDuelEnd() {
+  var a = G.score, b = G.cpu;
+  var lead = Math.abs(a - b);
+  var hi = Math.max(a, b);
+  if ((hi >= DUEL_TARGET && lead >= 2) || hi >= DUEL_CAP) {
+    G.winner = a > b ? 'you' : 'cpu';
+    gameOver();
+    return true;
+  }
+  return false;
+}
+
+/* ------------------------------------------------------------- possession */
+function nextSpot() {
+  var x;
+  if (G.mode === 'shootout') {
+    var roll = Math.random();
+    if (roll < 0.30) x = rnd(4.6, SPOT_MAX);
+    else if (roll < 0.78) x = rnd(2.2, THREE_X);
+    else x = rnd(SPOT_MIN, DEEP_X);
+    P.drift = (Math.random() < 0.5 ? -1 : 1) * (0.45 + (SHOOT_SECS - G.time) * 0.016);
+  } else {
+    x = G.shooter === 'you' ? rnd(2.6, 6.8) : rnd(1.8, 6.9);
+    P.drift = 0;
+  }
+  if (G.shooter === 'cpu') {
+    C.x = clamp(x, SPOT_MIN, SPOT_MAX);
+    if (G.mode === 'duel') P.x = clamp(C.x + 1.15, SPOT_MIN, RIM_CX - 0.7);
+  } else {
+    P.x = clamp(x, SPOT_MIN, SPOT_MAX);
+    if (G.mode === 'duel') C.x = clamp(P.x + 1.15, SPOT_MIN, RIM_CX - 0.7);
+  }
+}
+function beginPossession() {
+  ball = null; trail.length = 0;
+  nextSpot();
+  G.phase = G.shooter === 'cpu' ? 'cpuaim' : 'aim';
+  G.shotClock = G.mode === 'shootout' ? CLOCK_SHOOTOUT : CLOCK_DUEL;
+  G.mark = rnd(0.30, 0.74);
+  P.charging = false; P.power = 0; P.dir = 1;
+  P.angle = clamp(minAngleFor(P.x) + 7, ANG_MIN, ANG_MAX);
+  P.hasBall = G.shooter === 'you';
+  C.hasBall = G.shooter === 'cpu';
+  if (G.shooter === 'cpu') planCpuShot();
+  sfx.dribble();
+}
+/* tuned against a 700-shot offline sample per level, not by feel */
+var CPU_SIG = [0.240, 0.185, 0.135, 0.104, 0.078, 0.060, 0.048, 0.038, 0.029];
+function cpuSigma(L) { return CPU_SIG[clamp((L | 0) - 1, 0, CPU_SIG.length - 1)]; }
+function planCpuShot() {
+  var L = G.cpuLevel;
+  var wantThree = Math.random() < clamp(0.2 + L * 0.06, 0.2, 0.62);
+  C.x = wantThree ? rnd(2.0, THREE_X) : rnd(4.2, 6.9);
+  var ang = minAngleFor(C.x) + rnd(3, 11);
+  var v = solveSpeed(C.x + REL_DX, REL_Y, ang, RIM_CX, RIM_Y + 0.03);
+  if (v === null) v = 11;
+  var sigma = cpuSigma(L);
+  if (G.onFire) sigma *= 1.35;   /* the crowd is in their head */
+  C.targetAngle = ang + gauss() * sigma * 26;
+  C.speed = v * (1 + gauss() * sigma);
+  C.t = 0; C.charging = false; C.power = 0; C.release = 0;
+}
+
+/* --------------------------------------------------------------- effects - */
+function addFloat(x, y, txt, col, size) {
+  floats.push({ x: x, y: y, txt: txt, col: col, t: 1.15, size: size || 16 });
+}
+function burst(x, y, n, col) {
+  for (var i = 0; i < n; i++) {
+    var a = rnd(0, TAU), s = rnd(1.2, 5.4);
+    fx.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s + 1.4, t: rnd(0.35, 0.85), life: 0.85, col: col, r: rnd(0.02, 0.06) });
+  }
+}
+function banner(txt, sub) { G.banner = txt; G.bannerSub = sub || ''; G.bannerT = 1.5; }
+
+/* ================================================================== modes = */
+function startMode(mode) {
+  initAudio();
+  hideOverlay();
+  document.body.classList.add('playing');
+  G.mode = mode;
+  G.state = 'play';
+  G.score = 0; G.cpu = 0;
+  G.streak = 0; G.bestStreakRun = 0; G.onFire = false;
+  G.makes = 0; G.shots = 0;
+  G.time = SHOOT_SECS;
+  G.cpuLevel = 1;
+  G.shooter = 'you';
+  G.winner = ''; G.newBest = false;
+  G.shake = 0; G.flash = 0; G.hype = 0.15;
+  G.banner = ''; G.bannerT = 0; G.resetT = 0;
+  fx.length = 0; floats.length = 0; trail.length = 0;
+  P.angle = 52; P.x = 5.4;
+  C.x = 4.2;
+  ball = null;
+  beginPossession();
+  banner(mode === 'shootout' ? 'SHOOT!' : 'FIRST TO 11', mode === 'shootout' ? '60 seconds' : 'win by 2');
+  sfx.ambient();
+}
+function gameOver() {
+  G.state = 'over';
+  document.body.classList.remove('playing');
+  if (G.mode === 'shootout') {
+    if (G.score > save.best) { save.best = G.score; G.newBest = true; }
+    if (G.bestStreakRun > save.bestStreak) save.bestStreak = G.bestStreakRun;
+    sfx.buzz();
+    setTimeout(function () { if (G.state === 'over') { if (G.score >= Math.max(1, save.best)) sfx.win(); } }, 420);
+  } else {
+    if (G.winner === 'you') { save.wins++; sfx.win(); } else { save.losses++; sfx.lose(); }
+  }
+  persist();
+  endScreen();
+}
+
+/* ==================================================================== sim = */
+function update(dt) {
+  G.t += dt;
+  if (G.bannerT > 0) G.bannerT -= dt;
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 28);
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 2.2);
+  if (netPull > 0) netPull = Math.max(0, netPull - dt * 2.6);
+  if (rimGlow > 0) rimGlow = Math.max(0, rimGlow - dt * 1.5);
+  if (boardFlash > 0) boardFlash = Math.max(0, boardFlash - dt * 3.4);
+  if (G.hype > 0) G.hype = Math.max(0, G.hype - dt * 0.22);
+
+  var i;
+  for (i = fx.length - 1; i >= 0; i--) {
+    var p = fx[i];
+    p.t -= dt; p.vy -= 9 * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.y < 0.02) { p.y = 0.02; p.vy = -p.vy * 0.4; p.vx *= 0.7; }
+    if (p.t <= 0) fx.splice(i, 1);
+  }
+  for (i = floats.length - 1; i >= 0; i--) {
+    floats[i].t -= dt; floats[i].y += dt * 0.7;
+    if (floats[i].t <= 0) floats.splice(i, 1);
+  }
+  for (i = trail.length - 1; i >= 0; i--) {
+    trail[i].t -= dt;
+    if (trail[i].t <= 0) trail.splice(i, 1);
+  }
+
+  if (G.state !== 'play') return;
+
+  if (G.mode === 'shootout') {
+    G.time -= dt;
+    if (G.time <= 0) {
+      G.time = 0;
+      if (G.phase !== 'flight') { gameOver(); return; }
+    }
+  }
+
+  /* player drift + nudge */
+  if (G.phase === 'aim' || G.phase === 'flight' || G.phase === 'reset') {
+    if (G.mode === 'shootout' && P.drift !== 0 && G.phase === 'aim') {
+      P.x += P.drift * dt;
+      if (P.x < SPOT_MIN) { P.x = SPOT_MIN; P.drift = Math.abs(P.drift); }
+      if (P.x > SPOT_MAX) { P.x = SPOT_MAX; P.drift = -Math.abs(P.drift); }
+    }
+  }
+  if (G.phase === 'aim' && G.shooter === 'you') {
+    var mv = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+    if (mv) { P.x = clamp(P.x + mv * 3.2 * dt, SPOT_MIN, SPOT_MAX); }
+    var av = (held.up ? 1 : 0) - (held.down ? 1 : 0);
+    if (av) P.angle += av * 34 * dt;
+    P.angle = clamp(P.angle, minAngleFor(P.x), ANG_MAX);
+    if (P.charging) {
+      P.power += P.dir * CHARGE_RATE * dt;
+      if (P.power >= 1) { P.power = 1; P.dir = -1; }
+      if (P.power <= 0) { P.power = 0; P.dir = 1; }
+    }
+    P.anim = lerp(P.anim, P.charging ? 1 : 0, Math.min(1, dt * 10));
+    G.shotClock -= dt;
+    if (G.shotClock <= 0) {
+      G.shotClock = 0;
+      shotClockViolation();
+      return;
+    }
+  }
+  if (G.mode === 'duel') {
+    /* the man guarding you slides between you and the rim */
+    if (G.shooter === 'you') {
+      var dfx = clamp(P.x + 1.15, SPOT_MIN, RIM_CX - 0.7);
+      C.x += (dfx - C.x) * Math.min(1, dt * 4);
+    } else {
+      var dfy = clamp(C.x + 1.15, SPOT_MIN, RIM_CX - 0.7);
+      P.x += (dfy - P.x) * Math.min(1, dt * 4);
+    }
+  }
+  if (P.release > 0) P.release = Math.max(0, P.release - dt * 3.2);
+  if (C.release > 0) C.release = Math.max(0, C.release - dt * 3.2);
+  P.bob += dt;
+
+  /* CPU windup */
+  if (G.phase === 'cpuaim') {
+    C.t += dt;
+    C.anim = clamp(C.t / 0.75, 0, 1);
+    C.charging = C.t > 0.25;
+    C.power = clamp((C.t - 0.25) / 0.55, 0, 1);
+    G.shotClock = Math.max(0, G.shotClock - dt);
+    if (C.t >= 0.85) {
+      G.shooter = 'cpu';
+      launch(C.speed, C.targetAngle);
+    }
+  }
+
+  /* flight */
+  if (G.phase === 'flight' && ball) {
+    integrate(ball, dt);
+    trail.push({ x: ball.x, y: ball.y, t: 0.34 });
+    if (trail.length > 60) trail.shift();
+    if (ball.rimHits > lastRimHits) { lastRimHits = ball.rimHits; sfx.rim(); rimGlow = Math.max(rimGlow, 0.7); G.shake = Math.max(G.shake, 3); }
+    if (ball.boardHits > lastBoardHits) { lastBoardHits = ball.boardHits; sfx.glass(); boardFlash = 1; }
+    if (ball.scored && ball.y < RIM_Y - 0.55) {
+      makeBasket(ball);
+      if (G.state === 'over') return;
+      endShot(true);
+    } else if (!ball.scored && ball.floorHits >= 1 && ball.life - ball.landT > 0.28) {
+      missBasket(ball);
+      endShot(false);
+    } else if (ball.life > 6 || ball.dead) {
+      missBasket(ball);
+      endShot(false);
+    }
+  } else if (ball && (G.phase === 'reset' || G.phase === 'aim' || G.phase === 'cpuaim')) {
+    integrate(ball, dt);
+    trail.push({ x: ball.x, y: ball.y, t: 0.22 });
+    if (trail.length > 60) trail.shift();
+  }
+
+  if (G.phase === 'reset') {
+    G.resetT -= dt;
+    if (G.resetT <= 0) {
+      if (G.mode === 'shootout' && G.time <= 0) { gameOver(); return; }
+      beginPossession();
+    }
+  }
+}
+function shotClockViolation() {
+  sfx.buzz();
+  addFloat(P.x, 2.6, 'SHOT CLOCK', '#ff6b8a', 17);
+  G.streak = 0; G.onFire = false;
+  G.shots++;
+  lastShot = { scored: false, front: false, back: false, board: false, swish: false, pts: 0, rimRoll: false, by: G.shooter, from: P.x };
+  if (G.mode === 'duel') { G.shooter = G.shooter === 'you' ? 'cpu' : 'you'; rankCpu(); }
+  G.phase = 'reset'; G.resetT = 0.6;
+}
+
+/* ================================================================= render = */
+function drawArena(t) {
+  var w = view.w, h = view.h;
+  var g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#04060d');
+  g.addColorStop(0.4, '#080c1a');
+  g.addColorStop(1, '#0b0f1e');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+
+  var wallTop = sy(WALL_H);
+  var hype = G.hype;
+
+  /* ---- upper bowl: the crowd fills everything above the padded wall ---- */
+  if (wallTop > 8) {
+    var cg = ctx.createLinearGradient(0, Math.max(0, wallTop - 4.6 * scale), 0, wallTop);
+    cg.addColorStop(0, '#05080f');
+    cg.addColorStop(0.55, '#0a0f22');
+    cg.addColorStop(1, '#121936');
+    ctx.fillStyle = cg; ctx.fillRect(0, 0, w, wallTop);
+
+    /* rig lights up in the rafters */
+    var lights = Math.max(3, Math.round(w / 220));
+    for (var j = 0; j < lights; j++) {
+      var lx = (j + 0.5) * w / lights;
+      var ly = Math.min(wallTop * 0.10, 34);
+      var lg = ctx.createRadialGradient(lx, ly, 0, lx, ly, 54);
+      lg.addColorStop(0, 'rgba(190,215,255,0.20)');
+      lg.addColorStop(1, 'rgba(190,215,255,0)');
+      ctx.fillStyle = lg; ctx.fillRect(lx - 54, ly - 54, 108, 108);
+    }
+
+    /* the bowl fills the whole sky: rows tighten and dim as they climb, so a
+       tall phone gets an upper deck instead of a black void */
+    var bowlTop = Math.max(0, wallTop - 4.6 * scale);
+    var bowlH = wallTop - bowlTop;
+    if (bowlTop > 4) drawRoof(bowlTop, t);
+    var rad0 = Math.max(1.0, scale * 0.05);
+    var yy = wallTop, r = 0, nR = crowdSeats.length;
+    while (yy > bowlTop - 2 && r < 260) {
+      var depth = clamp((yy - bowlTop) / Math.max(1, bowlH), 0, 1);   /* 1 at the wall */
+      var rr2 = Math.max(0.7, rad0 * (0.34 + depth * 0.72));
+      var stp = rr2 * 2.9;
+      yy -= stp;
+      var row = crowdSeats[r % nR];
+      var xoff = (r % 3) * 0.11;
+      var lumBase = (0.09 + hype * 0.20) * (0.40 + depth * 0.85);
+      for (var q = 0; q < row.length; q++) {
+        var pp = row[q];
+        var px = sx(pp.x + xoff);
+        if (px < -6 || px > w + 6) continue;
+        var bob = Math.sin(t * (2.1 + hype * 5) + pp.ph) * stp * 0.16 * (0.25 + hype * 2.0);
+        var lum = lumBase + pp.c * 0.15 * (0.4 + depth * 0.8);
+        ctx.fillStyle = pp.c > 0.92
+          ? 'rgba(255,204,77,' + Math.min(0.85, lum * 2.2).toFixed(3) + ')'
+          : 'rgba(' + Math.round(110 + pp.c * 70) + ',' + Math.round(140 + pp.c * 55) + ',255,' + lum.toFixed(3) + ')';
+        ctx.beginPath(); ctx.arc(px, yy + bob, rr2, 0, TAU); ctx.fill();
+      }
+      r++;
+    }
+    drawJumbotron(wallTop, t);
+  }
+
+  /* ---- the padded back wall the hoop stands against ---- */
+  var wallH = floorY - wallTop;
+  if (wallH > 4) {
+    var wg = ctx.createLinearGradient(0, wallTop, 0, floorY);
+    wg.addColorStop(0, '#111a38');
+    wg.addColorStop(1, '#0a1024');
+    ctx.fillStyle = wg; ctx.fillRect(0, wallTop, w, wallH);
+    /* padding seams */
+    ctx.strokeStyle = 'rgba(120,160,255,0.10)';
+    ctx.lineWidth = 1;
+    var seam = Math.max(26, scale * 1.1);
+    for (var sX = (x0 % seam + seam) % seam; sX < w; sX += seam) {
+      ctx.beginPath(); ctx.moveTo(sX, wallTop + wallH * 0.22); ctx.lineTo(sX, floorY); ctx.stroke();
+    }
+    /* LED ribbon across the top of the wall */
+    var ribH = Math.max(11, Math.min(26, wallH * 0.22));
+    ctx.fillStyle = 'rgba(5,9,20,0.92)';
+    ctx.fillRect(0, wallTop, w, ribH);
+    ctx.strokeStyle = 'rgba(255,204,77,0.22)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, wallTop); ctx.lineTo(w, wallTop); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, wallTop + ribH); ctx.lineTo(w, wallTop + ribH); ctx.stroke();
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, wallTop, w, ribH); ctx.clip();
+    ctx.font = '700 ' + Math.round(ribH * 0.52) + 'px "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255,204,77,' + (0.20 + hype * 0.34).toFixed(3) + ')';
+    var msg = '  OVERCLOCK ARENA  ·  DUNK  ·  ';
+    var mw = ctx.measureText(msg).width;
+    var off = -((t * 58) % mw);
+    for (var m = off; m < w; m += mw) ctx.fillText(msg, m, wallTop + ribH * 0.55);
+    ctx.restore();
+    /* neon accent lines so the wall reads as machine, not a grey slab */
+    ctx.strokeStyle = 'rgba(64,214,255,0.10)';
+    ctx.lineWidth = Math.max(1, scale * 0.02);
+    var a1 = wallTop + wallH * 0.46, a2 = wallTop + wallH * 0.72;
+    ctx.beginPath(); ctx.moveTo(0, a1); ctx.lineTo(w, a1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, a2); ctx.lineTo(w, a2); ctx.stroke();
+    /* courtside heads along the foot of the wall */
+    var hr = Math.max(1.4, scale * 0.055);
+    for (var c2 = 0; c2 < crowdSeats[0].length; c2 += 2) {
+      var cp = crowdSeats[0][c2];
+      var cxp = sx(cp.x - 0.12);
+      if (cxp < -8 || cxp > w + 8) continue;
+      ctx.fillStyle = 'rgba(9,14,30,0.75)';
+      ctx.beginPath(); ctx.arc(cxp, floorY - hr * 1.5, hr, 0, TAU); ctx.fill();
+      ctx.fillRect(cxp - hr * 1.15, floorY - hr * 0.7, hr * 2.3, hr * 0.9);
+    }
+  }
+}
+function drawRoof(bot, t) {
+  var w = view.w;
+  var g = ctx.createLinearGradient(0, 0, 0, bot);
+  g.addColorStop(0, '#04060c');
+  g.addColorStop(1, '#070b16');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, bot);
+  ctx.strokeStyle = 'rgba(110,140,205,0.07)';
+  ctx.lineWidth = 1;
+  var beams = Math.max(1, Math.min(3, Math.floor(bot / 110)));
+  for (var i = 0; i < beams; i++) {
+    var y = bot * (0.16 + i * 0.72 / Math.max(1, beams - 1 || 1));
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    var d = Math.max(24, w / 16);
+    ctx.beginPath();
+    for (var x = -d; x < w + d; x += d) {
+      ctx.moveTo(x, y); ctx.lineTo(x + d / 2, y - d * 0.16);
+      ctx.lineTo(x + d, y);
+    }
+    ctx.stroke();
+  }
+  var lights = Math.max(3, Math.round(w / 200));
+  for (var j = 0; j < lights; j++) {
+    var lx = (j + 0.5) * w / lights, ly = bot * 0.80;
+    var lg = ctx.createRadialGradient(lx, ly, 0, lx, ly, Math.max(40, bot * 0.5));
+    lg.addColorStop(0, 'rgba(200,220,255,0.16)');
+    lg.addColorStop(1, 'rgba(200,220,255,0)');
+    ctx.fillStyle = lg;
+    ctx.fillRect(lx - bot, ly - bot, bot * 2, bot * 2);
+    ctx.fillStyle = 'rgba(225,238,255,0.5)';
+    ctx.fillRect(lx - 5, ly - 3, 10, 4);
+  }
+}
+function drawJumbotron(wallTop, t) {
+  /* only when there is a real bowl to hang it in — otherwise it lands on the
+     canvas HUD, which it did once, printing the shot clock through the score */
+  if (wallTop < 175) return;
+  var boxH = clamp(wallTop * 0.30, 34, Math.min(view.h * 0.13, 104));
+  var boxW = Math.min(view.w * 0.5, boxH * 2.6);
+  var cx = view.w / 2;
+  var top = clamp(wallTop * 0.24, 72, wallTop - boxH - 16);
+  if (top < 72 || top + boxH + 12 > wallTop) return;
+  ctx.strokeStyle = 'rgba(140,165,220,0.22)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx - boxW * 0.28, top - 40); ctx.lineTo(cx - boxW * 0.28, top); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + boxW * 0.28, top - 40); ctx.lineTo(cx + boxW * 0.28, top); ctx.stroke();
+  ctx.fillStyle = 'rgba(6,10,22,0.94)';
+  ctx.strokeStyle = 'rgba(120,160,255,0.32)'; ctx.lineWidth = 1.5;
+  roundRect(cx - boxW / 2, top, boxW, boxH, 6); ctx.fill(); ctx.stroke();
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '700 ' + Math.round(boxH * 0.44) + 'px "Segoe UI", system-ui, sans-serif';
+  var txt, col;
+  if (G.state === 'title') { txt = 'DUNK'; col = '#ffcc4d'; }
+  else if (G.mode === 'duel') { txt = G.score + ' — ' + G.cpu; col = '#eef2ff'; }
+  else { txt = String(G.score); col = '#ffcc4d'; }
+  ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 12;
+  ctx.fillText(txt, cx, top + boxH * 0.42);
+  ctx.shadowBlur = 0;
+  ctx.font = '700 ' + Math.max(8, Math.round(boxH * 0.17)) + 'px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(160,185,240,0.72)';
+  var sub = G.state === 'title' ? 'OVERCLOCK ARENA'
+    : (G.mode === 'duel' ? 'YOU vs CPU L' + G.cpuLevel : (G.onFire ? 'ON FIRE' : 'SHOOTOUT'));
+  ctx.fillText(sub, cx, top + boxH * 0.78);
+  ctx.restore();
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+function drawFloor(t) {
+  var w = view.w, h = view.h;
+  var fy = floorY;
+  var g = ctx.createLinearGradient(0, fy, 0, h);
+  g.addColorStop(0, '#101a33');
+  g.addColorStop(1, '#070b16');
+  ctx.fillStyle = g; ctx.fillRect(0, fy, w, h - fy);
+
+  /* circuit traces running off toward the viewer */
+  ctx.save();
+  ctx.lineWidth = Math.max(1, scale * 0.016);
+  for (var i = 0; i < traces.length; i++) {
+    var tr = traces[i];
+    var pulse = 0.22 + 0.28 * (0.5 + 0.5 * Math.sin(t * 1.4 + tr.ph));
+    ctx.strokeStyle = 'rgba(64,214,255,' + pulse.toFixed(3) + ')';
+    var px = sx(tr.x), py = fy + tr.d * scale * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(px, fy);
+    ctx.lineTo(px, py);
+    ctx.lineTo(px + (tr.up ? 1 : -1) * tr.len * scale, py);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(64,214,255,' + (pulse * 0.9).toFixed(3) + ')';
+    ctx.beginPath(); ctx.arc(px + (tr.up ? 1 : -1) * tr.len * scale, py, Math.max(1.4, scale * 0.022), 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+
+  /* the floor line itself */
+  ctx.strokeStyle = 'rgba(120,200,255,0.55)';
+  ctx.lineWidth = Math.max(1.5, scale * 0.028);
+  ctx.beginPath(); ctx.moveTo(0, fy); ctx.lineTo(w, fy); ctx.stroke();
+  ctx.strokeStyle = 'rgba(120,200,255,0.13)';
+  ctx.lineWidth = Math.max(1, scale * 0.09);
+  ctx.beginPath(); ctx.moveTo(0, fy + scale * 0.05); ctx.lineTo(w, fy + scale * 0.05); ctx.stroke();
+
+  /* the rim's light pooling on the hardwood */
+  var rgx = sx(RIM_CX);
+  var rg = ctx.createRadialGradient(rgx, fy, 0, rgx, fy, scale * 1.9);
+  rg.addColorStop(0, 'rgba(255,138,43,' + (0.10 + rimGlow * 0.24).toFixed(3) + ')');
+  rg.addColorStop(1, 'rgba(255,138,43,0)');
+  ctx.fillStyle = rg;
+  ctx.fillRect(rgx - scale * 1.9, fy - scale * 0.5, scale * 3.8, scale * 1.6);
+
+  /* zone markers */
+  markLine(THREE_X, G.mode === 'duel' ? '2' : '3', '#ffcc4d');
+  if (G.mode === 'shootout') markLine(DEEP_X, 'DEEP 4', '#ff6bd6');
+  /* restricted arc under the rim */
+  ctx.strokeStyle = 'rgba(120,200,255,0.28)';
+  ctx.lineWidth = Math.max(1, scale * 0.02);
+  ctx.beginPath();
+  ctx.arc(sx(RIM_CX), fy, 1.25 * scale, Math.PI, TAU);
+  ctx.stroke();
+}
+function markLine(wx, label, col) {
+  var px = sx(wx), fy = floorY;
+  if (px < -20 || px > view.w + 20) return;
+  ctx.strokeStyle = col; ctx.globalAlpha = 0.55;
+  ctx.lineWidth = Math.max(1.5, scale * 0.03);
+  ctx.beginPath(); ctx.moveTo(px, fy - scale * 0.26); ctx.lineTo(px, fy + scale * 0.22); ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = col;
+  ctx.font = '700 ' + Math.max(8, Math.round(scale * 0.16)) + 'px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.globalAlpha = 0.7;
+  if (px > 34 && px < view.w - 34) ctx.fillText(label, px, fy + scale * 0.26);
+  ctx.globalAlpha = 1;
+}
+function drawHoop(t) {
+  var bx = sx(BOARD_X), by1 = sy(BOARD_Y1), by0 = sy(BOARD_Y0);
+  var bw = Math.max(4, scale * 0.13);
+
+  /* stanchion + arm, behind the glass */
+  ctx.strokeStyle = 'rgba(150,175,225,0.35)';
+  ctx.lineWidth = Math.max(2, scale * 0.07);
+  var stX = sx(10.05);
+  ctx.beginPath(); ctx.moveTo(stX, floorY); ctx.lineTo(stX, sy(3.6)); ctx.lineTo(bx + bw, sy(3.6)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(stX, sy(3.0)); ctx.lineTo(bx + bw, sy(3.55)); ctx.stroke();
+
+  /* backboard glass */
+  ctx.save();
+  ctx.fillStyle = 'rgba(150,200,255,' + (0.10 + boardFlash * 0.35).toFixed(3) + ')';
+  ctx.fillRect(bx, by1, bw, by0 - by1);
+  ctx.strokeStyle = 'rgba(190,225,255,' + (0.55 + boardFlash * 0.4).toFixed(3) + ')';
+  ctx.lineWidth = Math.max(1.5, scale * 0.022);
+  ctx.strokeRect(bx, by1, bw, by0 - by1);
+  ctx.restore();
+
+  /* the inner square, seen edge on as a bright stub */
+  ctx.strokeStyle = 'rgba(255,255,255,' + (0.5 + boardFlash * 0.5).toFixed(3) + ')';
+  ctx.lineWidth = Math.max(1.5, scale * 0.03);
+  ctx.beginPath();
+  ctx.moveTo(bx, sy(RIM_Y + 0.03)); ctx.lineTo(bx, sy(RIM_Y + 0.48));
+  ctx.stroke();
+
+  /* rim: two irons, drawn as the two collision points they actually are */
+  var ry = sy(RIM_Y);
+  var glow = rimGlow;
+  ctx.save();
+  if (glow > 0) { ctx.shadowColor = G.onFire ? '#ff8a2b' : '#ffcc4d'; ctx.shadowBlur = 18 * glow; }
+  ctx.strokeStyle = G.onFire ? '#ff9a3c' : '#ff7a2b';
+  ctx.lineWidth = Math.max(2.4, scale * 0.055);
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(sx(RIM_X1), ry); ctx.lineTo(sx(RIM_X2), ry); ctx.stroke();
+  ctx.restore();
+  var ir = Math.max(2, scale * (BALL_R * 0.28));
+  ctx.fillStyle = G.onFire ? '#ffd08a' : '#ffa863';
+  ctx.beginPath(); ctx.arc(sx(RIM_X1), ry, ir, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(sx(RIM_X2), ry, ir, 0, TAU); ctx.fill();
+
+  /* net — strands snap down on a make */
+  var pull = netPull;
+  var netH = (0.42 + pull * 0.20) * scale;
+  var strands = 8;
+  ctx.strokeStyle = 'rgba(238,244,255,' + (0.45 + pull * 0.5).toFixed(3) + ')';
+  ctx.lineWidth = Math.max(1, scale * 0.014);
+  var xL = sx(RIM_X1), xR = sx(RIM_X2);
+  var botL = lerp(xL, xR, 0.26), botR = lerp(xL, xR, 0.74);
+  var k;
+  for (k = 0; k <= strands; k++) {
+    var f = k / strands;
+    var tx = lerp(xL, xR, f);
+    var bxx = lerp(botL, botR, f);
+    var sway = Math.sin(t * 3 + k) * scale * 0.012 * (1 - pull);
+    ctx.beginPath();
+    ctx.moveTo(tx, ry);
+    ctx.quadraticCurveTo(lerp(tx, bxx, 0.5) + sway, ry + netH * 0.55, bxx, ry + netH);
+    ctx.stroke();
+  }
+  for (k = 1; k <= 3; k++) {
+    var yy = ry + netH * (k / 3.4);
+    var ff = k / 3.4;
+    ctx.beginPath();
+    ctx.moveTo(lerp(xL, botL, ff), yy);
+    ctx.lineTo(lerp(xR, botR, ff), yy);
+    ctx.stroke();
+  }
+}
+function drawTrail() {
+  if (!trail.length) return;
+  for (var i = 0; i < trail.length; i++) {
+    var p = trail[i];
+    var a = clamp(p.t / 0.34, 0, 1);
+    var r = BALL_R * scale * (0.35 + a * 0.6);
+    if (G.onFire && lastShot.by === 'you') {
+      var g = ctx.createRadialGradient(sx(p.x), sy(p.y), 0, sx(p.x), sy(p.y), r * 2.1);
+      g.addColorStop(0, 'rgba(255,232,140,' + (a * 0.55).toFixed(3) + ')');
+      g.addColorStop(0.5, 'rgba(255,138,43,' + (a * 0.34).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(255,60,10,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), r * 2.1, 0, TAU); ctx.fill();
+    } else {
+      ctx.fillStyle = 'rgba(140,190,255,' + (a * 0.16).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), r, 0, TAU); ctx.fill();
+    }
+  }
+}
+function drawBall() {
+  if (!ball) return;
+  var px = sx(ball.x), py = sy(ball.y), r = BALL_R * scale;
+  ctx.save();
+  ctx.translate(px, py); ctx.rotate(ball.rot);
+  var g = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.1, 0, 0, r);
+  g.addColorStop(0, '#ffb066');
+  g.addColorStop(1, '#e0611a');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(40,16,6,0.8)';
+  ctx.lineWidth = Math.max(1, r * 0.10);
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(0, r); ctx.stroke();
+  ctx.beginPath(); ctx.arc(-r * 1.35, 0, r * 1.15, -0.75, 0.75); ctx.stroke();
+  ctx.beginPath(); ctx.arc(r * 1.35, 0, r * 1.15, Math.PI - 0.75, Math.PI + 0.75); ctx.stroke();
+  ctx.restore();
+}
+/* ------------------------------------------------------------ the figures */
+function limb(x1, y1, x2, y2, w, col) {
+  ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+}
+function drawPlayer(px, chargeAmt, releaseAmt, jersey, trim, hasBall, bob, aimDeg, contest) {
+  var u = scale;
+  var crouch = chargeAmt * 0.16;
+  var footY = floorY;
+  var hipY = footY - (0.92 - crouch) * u;
+  var shoY = footY - (1.52 - crouch * 0.7) * u;
+  var headY = footY - (1.76 - crouch * 0.6) * u;
+  var bx = sx(px);
+  var lean = chargeAmt * 0.04 * u;
+  var lw = Math.max(2.5, u * 0.075);
+  var jump = releaseAmt * 0.22 * u;
+  hipY -= jump; shoY -= jump; headY -= jump;
+  var breathe = Math.sin(bob * 2.4) * u * 0.012;
+
+  ctx.save();
+  /* shadow */
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(bx, footY + u * 0.03, u * 0.24, u * 0.06, 0, 0, TAU); ctx.fill();
+
+  /* legs */
+  var kneeF = footY - (0.46 - crouch * 0.5) * u;
+  limb(bx - lw * 0.4, hipY, bx - u * 0.14, kneeF, lw, '#22304f');
+  limb(bx - u * 0.14, kneeF, bx - u * 0.19, footY - jump * 0.6, lw, '#22304f');
+  limb(bx + lw * 0.4, hipY, bx + u * 0.15, kneeF, lw, '#22304f');
+  limb(bx + u * 0.15, kneeF, bx + u * 0.20, footY - jump * 0.6, lw, '#22304f');
+  /* shoes */
+  ctx.fillStyle = trim;
+  ctx.beginPath(); ctx.ellipse(bx - u * 0.19, footY - jump * 0.6 - u * 0.02, u * 0.09, u * 0.045, 0, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(bx + u * 0.20, footY - jump * 0.6 - u * 0.02, u * 0.09, u * 0.045, 0, 0, TAU); ctx.fill();
+
+  /* torso / jersey */
+  ctx.fillStyle = jersey;
+  ctx.beginPath();
+  ctx.moveTo(bx - u * 0.15 + lean, shoY + breathe);
+  ctx.lineTo(bx + u * 0.15 + lean, shoY + breathe);
+  ctx.lineTo(bx + u * 0.12, hipY);
+  ctx.lineTo(bx - u * 0.12, hipY);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = trim; ctx.lineWidth = Math.max(1, u * 0.018);
+  ctx.stroke();
+
+  /* arms: fold in as the meter charges, snap up on release */
+  var armUp = Math.max(chargeAmt * 0.55, releaseAmt, contest ? 0.82 + Math.sin(bob * 3.1) * 0.06 : 0);
+  var handX = bx + u * (0.20 + armUp * 0.14);
+  var handY = shoY + u * (0.26 - armUp * 0.92);
+  var elbowX = bx + u * (0.21 + armUp * 0.02);
+  var elbowY = shoY + u * (0.16 - armUp * 0.30);
+  limb(bx + u * 0.12 + lean, shoY + u * 0.04, elbowX, elbowY, lw * 0.85, '#c98a5e');
+  limb(elbowX, elbowY, handX, handY, lw * 0.85, '#c98a5e');
+  limb(bx - u * 0.12 + lean, shoY + u * 0.04, bx - u * 0.21, shoY + u * 0.30 - armUp * u * 0.34, lw * 0.85, '#c98a5e');
+
+  /* head */
+  ctx.fillStyle = '#c98a5e';
+  ctx.beginPath(); ctx.arc(bx + lean * 1.4, headY + breathe, u * 0.115, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#1b2440';
+  ctx.beginPath(); ctx.arc(bx + lean * 1.4, headY - u * 0.035 + breathe, u * 0.115, Math.PI * 1.05, TAU * 0.99); ctx.fill();
+
+  /* held ball */
+  if (hasBall) {
+    var r = BALL_R * u;
+    var hx = handX + u * 0.02, hy = handY - u * 0.02;
+    var g = ctx.createRadialGradient(hx - r * 0.35, hy - r * 0.35, r * 0.1, hx, hy, r);
+    g.addColorStop(0, '#ffb066'); g.addColorStop(1, '#e0611a');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(hx, hy, r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,16,6,0.75)'; ctx.lineWidth = Math.max(1, r * 0.1);
+    ctx.beginPath(); ctx.arc(hx, hy, r, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hx - r, hy); ctx.lineTo(hx + r, hy); ctx.stroke();
+  }
+  ctx.restore();
+  return { hx: handX, hy: handY };
+}
+function drawAim(t) {
+  if (G.state !== 'play' || G.phase !== 'aim' || G.shooter !== 'you') return;
+  var rp = releasePoint();
+  var a = P.angle * Math.PI / 180;
+
+  /* the arc guide runs the real shot maths, so what you see is what fires */
+  var pw = P.charging ? P.power : G.mark;
+  var v = meterSpeed(pw);
+  var vx = Math.cos(a) * v, vy = Math.sin(a) * v;
+  ctx.save();
+  var dots = P.charging ? 46 : 22;
+  for (var i = 1; i <= dots; i++) {
+    var tt = i * 0.045;
+    var px = rp.x + vx * tt;
+    var py = rp.y + vy * tt - 0.5 * G_ACC * tt * tt;
+    if (py < 0.05 || px > BOARD_X + 0.5) break;
+    var syy = sy(py);
+    if (syy < -30) continue;
+    var al = (1 - 0.7 * i / dots) * (P.charging ? 0.8 : 0.34);
+    ctx.fillStyle = G.onFire ? 'rgba(255,154,60,' + al.toFixed(3) + ')' : 'rgba(255,204,77,' + al.toFixed(3) + ')';
+    var rr = Math.max(1.3, scale * (P.charging ? 0.030 : 0.022));
+    ctx.beginPath(); ctx.arc(sx(px), syy, rr, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+
+}
+function drawPowerMeter() {
+  if (G.state !== 'play') return;
+  var showing = (G.phase === 'aim' && G.shooter === 'you');
+  if (!showing) return;
+  var w = view.w, h = view.h;
+  var mw = Math.min(240, w * 0.46), mh = 12;
+  var mx = (w - mw) / 2, my = h - mh - 16;
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,15,30,0.72)';
+  ctx.strokeStyle = 'rgba(238,242,255,0.2)'; ctx.lineWidth = 1;
+  roundRect(mx - 3, my - 3, mw + 6, mh + 6, 5); ctx.fill(); ctx.stroke();
+  /* the assist zone, drawn honestly: release in the green and the shot is
+     pulled true; dead on the white notch and it swishes on its own */
+  var zx = mx + mw * clamp(G.mark - ASSIST_Z, 0, 1);
+  var zw = mw * (Math.min(1, G.mark + ASSIST_Z) - Math.max(0, G.mark - ASSIST_Z));
+  ctx.fillStyle = 'rgba(110,242,168,0.30)';
+  ctx.fillRect(zx, my, zw, mh);
+  var g = ctx.createLinearGradient(mx, 0, mx + mw, 0);
+  g.addColorStop(0, '#4ad6ff'); g.addColorStop(0.62, '#ffcc4d'); g.addColorStop(1, '#ff5a5a');
+  ctx.fillStyle = g;
+  ctx.fillRect(mx, my, mw * clamp(P.power, 0, 1), mh);
+  var nx = mx + mw * clamp(G.mark, 0, 1);
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(nx, my - 4); ctx.lineTo(nx, my + mh + 4); ctx.stroke();
+  ctx.fillStyle = 'rgba(200,215,255,0.75)';
+  ctx.font = '700 10px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillText(P.charging ? 'RELEASE' : 'HOLD TO CHARGE', w / 2, my - 6);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(140,170,225,0.8)';
+  ctx.fillText('ARC ' + Math.round(P.angle) + '°', mx + mw, my - 6);
+  ctx.restore();
+}
+function drawFx() {
+  var i;
+  for (i = 0; i < fx.length; i++) {
+    var p = fx[i];
+    var a = clamp(p.t / p.life, 0, 1);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = p.col;
+    ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), Math.max(1, p.r * scale), 0, TAU); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (i = 0; i < floats.length; i++) {
+    var f = floats[i];
+    var al = clamp(f.t / 1.15, 0, 1);
+    ctx.globalAlpha = al;
+    ctx.font = '700 ' + Math.round(f.size * Math.min(1.5, Math.max(0.7, scale / 46))) + 'px "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = f.col;
+    ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 6;
+    ctx.fillText(f.txt, sx(f.x), sy(f.y));
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+}
+/* --------------------------------------------------------------- the HUD - */
+var RES_W = 100, RES_H = 52;
+function drawHUD() {
+  if (G.state === 'title') return;
+  var w = view.w;
+  ctx.save();
+  ctx.textBaseline = 'top';
+
+  /* left: score */
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(160,185,240,0.75)';
+  ctx.font = '700 10px "Segoe UI", system-ui, sans-serif';
+  if (G.mode === 'shootout') {
+    ctx.fillText('SCORE', 14, 12);
+    ctx.fillStyle = '#ffcc4d';
+    ctx.font = '700 30px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText(String(G.score), 14, 22);
+  } else {
+    ctx.fillText('YOU', 14, 10);
+    ctx.fillStyle = G.shooter === 'you' ? '#4ad6ff' : '#eef2ff';
+    ctx.font = '700 22px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText(String(G.score), 46, 4);
+    ctx.fillStyle = 'rgba(160,185,240,0.75)';
+    ctx.font = '700 10px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText('CPU', 14, 34);
+    ctx.fillStyle = G.shooter === 'cpu' ? '#ff6b8a' : '#eef2ff';
+    ctx.font = '700 22px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText(String(G.cpu), 46, 28);
+  }
+
+  /* centre: the big clock */
+  var cx = w / 2;
+  ctx.textAlign = 'center';
+  var big, lab, col;
+  if (G.mode === 'shootout') {
+    big = G.time.toFixed(1);
+    lab = 'TIME';
+    col = G.time <= 10 ? '#ff6b8a' : '#eef2ff';
+  } else {
+    big = Math.ceil(G.shotClock).toFixed(0);
+    lab = 'SHOT CLOCK';
+    col = G.shotClock <= 3 ? '#ff6b8a' : '#eef2ff';
+  }
+  ctx.fillStyle = 'rgba(160,185,240,0.7)';
+  ctx.font = '700 9px "Segoe UI", system-ui, sans-serif';
+  ctx.fillText(lab, cx, 8);
+  ctx.fillStyle = col;
+  ctx.font = '700 ' + (view.w < 420 ? 24 : 28) + 'px "Segoe UI", system-ui, sans-serif';
+  ctx.fillText(big, cx, 18);
+
+  /* shot-clock ribbon under the clock (shootout only — duel shows it big) */
+  if (G.mode === 'shootout') {
+    var bw = Math.min(120, w * 0.28), bh = 5;
+    var f = clamp(G.shotClock / CLOCK_SHOOTOUT, 0, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    ctx.fillRect(cx - bw / 2, 50, bw, bh);
+    ctx.fillStyle = f < 0.34 ? '#ff6b8a' : '#4ad6ff';
+    ctx.fillRect(cx - bw / 2, 50, bw * f, bh);
+  }
+
+  /* right edge, always BELOW the reserved icon block */
+  ctx.textAlign = 'right';
+  var ry = RES_H + 12;
+  if (G.onFire) {
+    var pulse = 0.6 + 0.4 * Math.sin(G.t * 9);
+    ctx.fillStyle = 'rgba(255,138,43,' + pulse.toFixed(3) + ')';
+    ctx.font = '700 15px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText('ON FIRE ×' + G.streak, w - 14, ry);
+    ry += 20;
+  } else if (G.streak > 0) {
+    ctx.fillStyle = 'rgba(160,185,240,0.8)';
+    ctx.font = '700 12px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText('STREAK ' + G.streak, w - 14, ry);
+    ry += 18;
+  }
+  if (G.mode === 'duel') {
+    ctx.fillStyle = 'rgba(160,185,240,0.7)';
+    ctx.font = '700 11px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText('CPU LEVEL ' + G.cpuLevel, w - 14, ry);
+    ry += 16;
+    ctx.fillStyle = G.shooter === 'you' ? '#4ad6ff' : '#ff6b8a';
+    ctx.fillText(G.shooter === 'you' ? 'YOUR BALL' : 'CPU BALL', w - 14, ry);
+    ry += 16;
+  }
+  ctx.fillStyle = 'rgba(160,185,240,0.7)';
+  ctx.font = '700 11px "Segoe UI", system-ui, sans-serif';
+  ctx.fillText(shotValue(P.x) + ' POINTER', w - 14, ry);
+  ctx.restore();
+}
+function drawBanner() {
+  if (G.bannerT <= 0) return;
+  var a = clamp(G.bannerT / 1.5, 0, 1);
+  var w = view.w;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, a * 1.6);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  var y = bandTop + WORLD_TOP * scale * 0.28;
+  ctx.font = '700 ' + Math.round(Math.min(46, w * 0.085)) + 'px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = G.banner === 'ON FIRE' ? '#ff8a2b' : '#ffcc4d';
+  ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 20;
+  ctx.fillText(G.banner, w / 2, y);
+  ctx.shadowBlur = 0;
+  if (G.bannerSub) {
+    ctx.font = '700 12px "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(200,215,255,0.8)';
+    ctx.fillText(G.bannerSub, w / 2, y + 30);
+  }
+  ctx.restore();
+}
+function render(t) {
+  var w = view.w, h = view.h;
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  var sh = G.shake;
+  if (sh > 0.2) {
+    ctx.translate(rnd(-sh, sh), rnd(-sh, sh));
+  }
+  drawArena(t);
+  drawFloor(t);
+  drawTrail();
+  drawHoop(t);
+
+  /* figures */
+  if (G.state !== 'title') {
+    if (G.mode === 'duel') {
+      var cpuCharge = G.phase === 'cpuaim' ? C.power : 0;
+      drawPlayer(C.x, cpuCharge, C.release, '#8f2447', '#ff6b8a', C.hasBall, P.bob * 0.8 + 1.3, C.targetAngle, G.shooter === 'you');
+    }
+    drawPlayer(P.x, P.anim, P.release, G.onFire ? '#b64a12' : '#1d5f8f', G.onFire ? '#ffb066' : '#4ad6ff', P.hasBall, P.bob, P.angle, G.mode === 'duel' && G.shooter === 'cpu');
+  } else {
+    drawPlayer(5.4, 0, 0, '#1d5f8f', '#4ad6ff', true, t, 52, false);
+  }
+  drawAim(t);
+  drawBall();
+  drawFx();
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  drawPowerMeter();
+  drawHUD();
+  drawBanner();
+  if (G.flash > 0) {
+    ctx.fillStyle = 'rgba(255,180,80,' + (G.flash * 0.22).toFixed(3) + ')';
+    ctx.fillRect(0, 0, w, h);
+  }
+}
+
+/* ================================================================= input = */
+var held = { left: false, right: false, up: false, down: false };
+
+function canvasPoint(e) {
+  var r = cv.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+var dragY0 = 0, dragA0 = 52, dragging = false;
+cv.addEventListener('pointerdown', function (e) {
+  initAudio();
+  if (G.state !== 'play') return;
+  var p = canvasPoint(e);
+  dragging = true; dragY0 = p.y; dragA0 = P.angle;
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  startCharge();
+  e.preventDefault();
+});
+cv.addEventListener('pointermove', function (e) {
+  if (!dragging) return;
+  var p = canvasPoint(e);
+  P.angle = clamp(dragA0 + (dragY0 - p.y) * 0.22, minAngleFor(P.x), ANG_MAX);
+  e.preventDefault();
+});
+function endDrag(e) {
+  if (!dragging) return;
+  dragging = false;
+  if (P.charging) playerShoot();
+  if (e) e.preventDefault();
+}
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', endDrag);
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+  if (e.repeat) return;
+  initAudio();
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'p' || k === 'escape') { if (G.state === 'play' || G.state === 'pause') togglePause(); return; }
+  if (G.state === 'title') {
+    if (k === ' ' || k === 'enter' || k === '1') startMode('shootout');
+    else if (k === '2') startMode('duel');
+    return;
+  }
+  if (G.state === 'over') {
+    if (k === ' ' || k === 'enter' || k === 'r') startMode(G.mode);
+    return;
+  }
+  if (k === 'arrowleft' || k === 'a') held.left = true;
+  else if (k === 'arrowright' || k === 'd') held.right = true;
+  else if (k === 'arrowup' || k === 'w') held.up = true;
+  else if (k === 'arrowdown' || k === 's') held.down = true;
+  else if (k === ' ' || k === 'enter') startCharge();
+});
+window.addEventListener('keyup', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === 'arrowleft' || k === 'a') held.left = false;
+  else if (k === 'arrowright' || k === 'd') held.right = false;
+  else if (k === 'arrowup' || k === 'w') held.up = false;
+  else if (k === 'arrowdown' || k === 's') held.down = false;
+  else if (k === ' ' || k === 'enter') { if (P.charging) playerShoot(); }
+});
+(function () {
+  function hold(id, prop) {
+    var b = document.getElementById(id);
+    if (!b) return;
+    b.addEventListener('pointerdown', function (e) { initAudio(); held[prop] = true; e.preventDefault(); });
+    b.addEventListener('pointerup', function () { held[prop] = false; });
+    b.addEventListener('pointercancel', function () { held[prop] = false; });
+    b.addEventListener('pointerleave', function () { held[prop] = false; });
+  }
+  hold('tLeft', 'left'); hold('tRight', 'right');
+  var s = document.getElementById('tShoot');
+  s.addEventListener('pointerdown', function (e) { initAudio(); startCharge(); e.preventDefault(); });
+  function fire(e) { if (P.charging) playerShoot(); if (e) e.preventDefault(); }
+  s.addEventListener('pointerup', fire);
+  s.addEventListener('pointercancel', fire);
+  s.addEventListener('pointerleave', fire);
+})();
+
+var padShoot = false, padPause = false;
+function pollPad() {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null;
+  for (var i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  var ax = p.axes && p.axes.length > 0 ? p.axes[0] : 0;
+  var ay = p.axes && p.axes.length > 1 ? p.axes[1] : 0;
+  held.left = !!(p.buttons[14] && p.buttons[14].pressed) || ax < -0.4;
+  held.right = !!(p.buttons[15] && p.buttons[15].pressed) || ax > 0.4;
+  held.up = !!(p.buttons[12] && p.buttons[12].pressed) || ay < -0.4;
+  held.down = !!(p.buttons[13] && p.buttons[13].pressed) || ay > 0.4;
+  var a = !!(p.buttons[0] && p.buttons[0].pressed);
+  if (a && !padShoot) {
+    initAudio();
+    if (G.state === 'title') startMode('shootout');
+    else if (G.state === 'over') startMode(G.mode);
+    else startCharge();
+  } else if (!a && padShoot) {
+    if (P.charging) playerShoot();
+  }
+  padShoot = a;
+  var st = !!(p.buttons[9] && p.buttons[9].pressed);
+  if (st && !padPause && (G.state === 'play' || G.state === 'pause')) togglePause();
+  padPause = st;
+}
+window.addEventListener('gamepadconnected', function () {});
+
+window.addEventListener('blur', function () { if (G.state === 'play') togglePause(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden && G.state === 'play') togglePause(); });
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { if (G.state === 'play' || G.state === 'pause') togglePause(); });
+
+/* =============================================================== overlays = */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(html) { overlay.innerHTML = html; overlay.classList.add('on'); }
+function recordLine() {
+  return '<div class="best">Best shootout <b>' + save.best + '</b> &middot; 1-on-1 record <b>' + save.wins + '–' + save.losses + '</b></div>';
+}
+function titleScreen() {
+  G.state = 'title';
+  G.mode = 'shootout';
+  document.body.classList.remove('playing');
+  P.charging = false; P.power = 0;
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>DUNK</h1>' +
+      '<div class="tagline">Neon half-court, circuit-board hardwood, and a rim with two very honest pieces of iron. Charge the meter, pick your arc, let it fly. Three straight and the ball catches fire.</div>' +
+      '<div class="keys">' +
+        '<div>Shoot<span>Hold Space / click / SHOOT — release to fire</span></div>' +
+        '<div>Arc<span>Up / Down or drag — step in and it forces a higher arc</span></div>' +
+        '<div>Step<span>Left / Right</span></div>' +
+        '<div>Gamepad<span>Hold A to charge, D-pad to aim</span></div>' +
+        '<div>Shootout<span>2 inside, 3 deep, 4 from DOWNTOWN</span></div>' +
+        '<div>1-on-1<span>1s and 2s, alternating ball, first to 11 by 2</span></div>' +
+        '<div>On fire<span>3 in a row — every bucket pays +1</span></div>' +
+      '</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Best run</div><div class="v accent">' + save.best + '</div></div>' +
+        '<div class="stat"><div class="k">Best streak</div><div class="v">' + save.bestStreak + '</div></div>' +
+        '<div class="stat"><div class="k">1-on-1</div><div class="v">' + save.wins + '–' + save.losses + '</div></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" type="button" data-act="shootout">SHOOTOUT</button>' +
+        '<button class="btn ghost" type="button" data-act="duel">1-ON-1</button>' +
+      '</div>' +
+    '</div>'
+  );
+}
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<div class="paused">Paused</div>' +
+      '<div class="tagline">' + (G.mode === 'shootout' ? 'Clock is stopped.' : 'The CPU can wait.') + '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" type="button" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" type="button" data-act="quit">QUIT</button>' +
+      '</div>' +
+    '</div>'
+  );
+}
+function endScreen() {
+  var head, sub, cls = '';
+  var acc = G.shots ? Math.round(G.makes / G.shots * 100) : 0;
+  if (G.mode === 'shootout') {
+    head = G.newBest ? 'NEW BEST' : 'FINAL BUZZER';
+    cls = G.newBest ? 'win' : '';
+    sub = G.newBest ? 'Personal best committed to disk.' : 'Sixty seconds, gone.';
+    showOverlay(
+      '<div class="card">' +
+        '<div class="eyebrow">Shootout complete</div>' +
+        '<h2 class="' + cls + '">' + head + '</h2>' +
+        '<div class="tagline">' + sub + '</div>' +
+        '<div class="stats">' +
+          '<div class="stat"><div class="k">Score</div><div class="v accent">' + G.score + '</div></div>' +
+          '<div class="stat"><div class="k">Buckets</div><div class="v">' + G.makes + '/' + G.shots + '</div></div>' +
+          '<div class="stat"><div class="k">Best streak</div><div class="v">' + G.bestStreakRun + '</div></div>' +
+        '</div>' +
+        recordLine() +
+        '<div class="btnrow">' +
+          '<button class="btn" type="button" data-act="again">RUN IT BACK</button>' +
+          '<button class="btn ghost" type="button" data-act="title">MENU</button>' +
+        '</div>' +
+      '</div>'
+    );
+  } else {
+    var won = G.winner === 'you';
+    head = won ? 'GAME. YOU TAKE IT.' : 'CPU TAKES IT.';
+    cls = won ? 'win' : 'lose';
+    sub = won ? 'Buckets when it mattered.' : 'The machine got hot. Run it back.';
+    showOverlay(
+      '<div class="card">' +
+        '<div class="eyebrow">1-on-1 complete</div>' +
+        '<h2 class="' + cls + '">' + head + '</h2>' +
+        '<div class="tagline">' + sub + '</div>' +
+        '<div class="stats">' +
+          '<div class="stat"><div class="k">Final</div><div class="v accent">' + G.score + '–' + G.cpu + '</div></div>' +
+          '<div class="stat"><div class="k">Shooting</div><div class="v">' + acc + '%</div></div>' +
+          '<div class="stat"><div class="k">CPU level</div><div class="v">' + G.cpuLevel + '</div></div>' +
+        '</div>' +
+        recordLine() +
+        '<div class="btnrow">' +
+          '<button class="btn" type="button" data-act="again">RUN IT BACK</button>' +
+          '<button class="btn ghost" type="button" data-act="title">MENU</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio(); sfx.ui();
+  var act = btn.getAttribute('data-act');
+  if (act === 'shootout') startMode('shootout');
+  else if (act === 'duel') startMode('duel');
+  else if (act === 'again') startMode(G.mode);
+  else if (act === 'resume') togglePause();
+  else if (act === 'quit' || act === 'title') titleScreen();
+});
+function togglePause() {
+  if (G.state === 'play') { G.state = 'pause'; pauseScreen(); }
+  else if (G.state === 'pause') { G.state = 'play'; hideOverlay(); }
+}
+
+/* =================================================================== loop = */
+var lastT = 0, nowT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  nowT += dt;
+  pollPad();
+  update(dt);
+  camUpdate(dt);
+  render(nowT);
+}
+
+/* ============================================================ test hooks = */
+/* Everything a scripted play needs to drive the REAL game: the physics
+   below is the same integrator the live ball uses, and every scoring path
+   goes through the same makeBasket()/endShot() the player's shots do. */
+window.__dunk = {
+  state: function () {
+    return {
+      state: G.state, mode: G.mode, phase: G.phase, shooter: G.shooter,
+      score: G.score, cpu: G.cpu, streak: G.streak, onFire: G.onFire,
+      makes: G.makes, shots: G.shots, time: G.time, shotClock: G.shotClock,
+      cpuLevel: G.cpuLevel, winner: G.winner, newBest: G.newBest,
+      playerX: P.x, cpuX: C.x, angle: P.angle, power: P.power, mark: G.mark, band: shotBand(),
+      charging: P.charging, hasBall: P.hasBall,
+      ballLive: !!ball, ball: ball ? { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, scored: ball.scored, front: ball.front, back: ball.back, rim: ball.rimHits, board: ball.boardHits } : null,
+      save: { best: save.best, bestStreak: save.bestStreak, wins: save.wins, losses: save.losses },
+      lastShot: lastShot
+    };
+  },
+  start: startMode,
+  title: titleScreen,
+  pause: togglePause,
+  resume: function () { if (G.state === 'pause') togglePause(); },
+  /* run the real update loop without waiting on RAF */
+  step: function (secs, h) {
+    if (G.state === 'pause') togglePause();
+    var dt = h || 1 / 120;
+    var n = Math.max(1, Math.round(secs / dt));
+    for (var i = 0; i < n; i++) { update(dt); camUpdate(dt); }
+    return this.state();
+  },
+  setSpot: function (x) { P.x = clamp(x, SPOT_MIN, SPOT_MAX); P.drift = 0; return P.x; },
+  setAngle: function (a) { P.angle = clamp(a, minAngleFor(P.x), ANG_MAX); return P.angle; },
+  minAngle: function (x) { return minAngleFor(x === undefined ? P.x : x); },
+  setScore: function (a, b) { G.score = a; G.cpu = b; },
+  setStreak: function (n) { G.streak = n; G.onFire = n >= FIRE_AT; },
+  setLevel: function (n) { G.cpuLevel = clamp(n | 0, 1, 9); },
+  giveBall: function () { G.shooter = 'you'; P.hasBall = true; C.hasBall = false; G.phase = 'aim'; G.shotClock = G.mode === 'shootout' ? CLOCK_SHOOTOUT : CLOCK_DUEL; },
+  /* fire an exact shot from the current spot: angle in degrees, speed m/s */
+  fire: function (angleDeg, speed) {
+    if (G.state !== 'play' || G.phase !== 'aim') return false;
+    P.angle = clamp(angleDeg, minAngleFor(P.x), ANG_MAX);
+    launch(speed, P.angle);
+    return true;
+  },
+  setMark: function (m) { G.mark = clamp(m, 0, 1); return G.mark; },
+  /* release the meter at an exact position — the real player path */
+  fireAtPower: function (pw) {
+    if (G.state !== 'play' || G.phase !== 'aim' || G.shooter !== 'you') return false;
+    P.power = clamp(pw, 0, 1); P.charging = true;
+    playerShoot();
+    return true;
+  },
+  meterSpeed: function (pw) { return meterSpeed(pw); },
+  /* the speed that swishes it from here at this angle */
+  perfectSpeed: function (angleDeg, dy) {
+    var rp = releasePoint();
+    return solveSpeed(rp.x, rp.y, angleDeg === undefined ? P.angle : angleDeg, RIM_CX, RIM_Y + (dy || 0));
+  },
+  /* headless physics probe — same substep() the live ball runs through */
+  probe: function (x, angleDeg, speed) {
+    var a = angleDeg * Math.PI / 180;
+    return simulateShot(x + REL_DX, REL_Y, Math.cos(a) * speed, Math.sin(a) * speed);
+  },
+  solve: function (x, angleDeg, ty) { return solveSpeed(x + REL_DX, REL_Y, angleDeg, RIM_CX, ty === undefined ? RIM_Y : ty); },
+  /* offline CPU accuracy sample, so difficulty ramp is measurable */
+  cpuSample: function (level, n, sigOverride) {
+    var made = 0;
+    for (var i = 0; i < n; i++) {
+      var wantThree = Math.random() < clamp(0.2 + level * 0.06, 0.2, 0.62);
+      var x = wantThree ? rnd(2.0, THREE_X) : rnd(4.2, 6.9);
+      var ang = minAngleFor(x) + rnd(3, 11);
+      var v = solveSpeed(x + REL_DX, REL_Y, ang, RIM_CX, RIM_Y + 0.03);
+      if (v === null) continue;
+      var sigma = sigOverride === undefined ? cpuSigma(level) : sigOverride;
+      var r = this.probe(x, ang + gauss() * sigma * 26, v * (1 + gauss() * sigma));
+      if (r.scored) made++;
+    }
+    return made / n;
+  },
+  consts: { RIM_X1: RIM_X1, RIM_X2: RIM_X2, RIM_Y: RIM_Y, RIM_CX: RIM_CX, BOARD_X: BOARD_X, THREE_X: THREE_X, DEEP_X: DEEP_X, FIRE_AT: FIRE_AT, G: G_ACC, REL_Y: REL_Y, REL_DX: REL_DX, TARGET: DUEL_TARGET, CAP: DUEL_CAP },
+  reserved: function () { return { w: RES_W, h: RES_H }; }
+};
+
+/* =================================================================== boot = */
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

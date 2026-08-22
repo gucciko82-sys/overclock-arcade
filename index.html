@@ -1800,6 +1800,183 @@ var GAMES = [
       x.beginPath(); x.arc(sx + s2 * 0.4, sy, s2 * 0.8, -0.9, 0.9); x.stroke();
       x.textAlign = 'left'; x.textBaseline = 'alphabetic';
     }
+  },
+  {
+    id: 'clock', name: 'Clock', cat: 'action', tag: 'Rhythm', isNew: true,
+    desc: 'The machine ticks, you hit the beat. Four buses, three tracks from 96 to 150 BPM, holds and chains. Every note is generated from the music itself, so a note can never land on silence.',
+    best: function () {
+      var s = lsJSON('clock_v1');
+      if (!s || !s.t || typeof s.t !== 'object') return null;
+      var top = 0, k, v;
+      for (k in s.t) {
+        if (!Object.prototype.hasOwnProperty.call(s.t, k)) continue;
+        v = s.t[k];
+        if (v && typeof v === 'object' && typeof v.s === 'number' && isFinite(v.s) && v.s > top) top = v.s;
+      }
+      return top > 0 ? ['High score', fmtInt(top)] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#0d1226'); g.addColorStop(1, '#161d3a');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* four lanes converging on the judgement line */
+      var n = 4, lw = w / n, i;
+      for (i = 1; i < n; i++) {
+        x.strokeStyle = 'rgba(255,255,255,0.09)'; x.lineWidth = 1;
+        x.beginPath(); x.moveTo(i * lw, 0); x.lineTo(i * lw, h * 0.82); x.stroke();
+      }
+      /* notes falling, two colours so the lanes read apart */
+      var rows = [[0, 0.14], [2, 0.24], [1, 0.4], [3, 0.4], [0, 0.56], [2, 0.68]];
+      for (i = 0; i < rows.length; i++) {
+        var lane = rows[i][0], y = h * rows[i][1];
+        x.fillStyle = lane < 2 ? '#ff6fae' : '#ffcc4d';
+        x.beginPath(); x.roundRect(lane * lw + lw * 0.14, y, lw * 0.72, h * 0.045, h * 0.022); x.fill();
+      }
+      /* the judgement line, drawn as an actual square-wave clock trace */
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 2.4; x.lineJoin = 'miter';
+      var base = h * 0.82, amp = h * 0.05, step = w / 8;
+      x.beginPath(); x.moveTo(0, base);
+      for (i = 0; i < 8; i++) {
+        var xx = i * step, hi = (i % 2 === 0);
+        x.lineTo(xx, hi ? base - amp : base);
+        x.lineTo(xx + step, hi ? base - amp : base);
+        x.lineTo(xx + step, hi ? base : base - amp);
+      }
+      x.stroke();
+      /* the pads */
+      for (i = 0; i < n; i++) {
+        x.strokeStyle = 'rgba(255,255,255,0.22)'; x.lineWidth = 1.4;
+        x.beginPath(); x.roundRect(i * lw + lw * 0.1, h * 0.88, lw * 0.8, h * 0.09, 4); x.stroke();
+      }
+    }
+  },
+  {
+    id: 'checksum', name: 'Checksum', cat: 'strategy', isNew: true, tag: 'Checkers',
+    desc: 'Checkers, played properly: captures are compulsory, chains must be finished, and a man crowned mid-jump stops there. Three CPU strengths from half-asleep to ROOT, or two players on one screen.',
+    best: function () {
+      var s = lsJSON('checksum_v1');
+      if (!s || typeof s !== 'object') return null;
+      var w = 0, l = 0, k, v;
+      for (k in s) {
+        if (!Object.prototype.hasOwnProperty.call(s, k)) continue;
+        v = s[k];
+        if (!v || typeof v !== 'object') continue;
+        if (typeof v.w === 'number' && isFinite(v.w) && v.w > 0) w += Math.floor(v.w);
+        if (typeof v.l === 'number' && isFinite(v.l) && v.l > 0) l += Math.floor(v.l);
+      }
+      return (w + l) > 0 ? ['Record', w + 'W ' + l + 'L'] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#0c1124'); g.addColorStop(1, '#141b33');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* a corner of the board, big enough to read as checkers at thumbnail size */
+      var n = 5, s = Math.min(w, h) * 0.19;
+      var x0 = (w - n * s) / 2, y0 = (h - n * s) / 2;
+      var r, c;
+      for (r = 0; r < n; r++) for (c = 0; c < n; c++) {
+        var isDark = ((r + c) & 1) === 1;
+        x.fillStyle = isDark ? '#182444' : '#0f1730';
+        x.fillRect(x0 + c * s, y0 + r * s, s, s);
+      }
+      x.strokeStyle = 'rgba(255,204,77,0.5)'; x.lineWidth = 1.6;
+      x.strokeRect(x0, y0, n * s, n * s);
+      /* two gold bits, one cyan, and a crowned king */
+      function bit(cr, cc, gold, king) {
+        var cx = x0 + cc * s + s / 2, cy = y0 + cr * s + s / 2, rad = s * 0.34;
+        x.fillStyle = gold ? '#ffcc4d' : '#6fe3ff';
+        x.beginPath(); x.arc(cx, cy, rad, 0, TAU); x.fill();
+        x.fillStyle = 'rgba(0,0,0,0.55)';
+        x.font = '700 ' + Math.round(rad * 1.15) + 'px "Segoe UI", sans-serif';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(gold ? '1' : '0', cx, cy + 1);
+        if (king) {
+          x.strokeStyle = 'rgba(0,0,0,0.6)'; x.lineWidth = 1.6;
+          x.beginPath(); x.arc(cx, cy, rad * 0.66, 0, TAU); x.stroke();
+        }
+        x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+      }
+      bit(0, 1, false, false);
+      bit(1, 2, false, false);
+      bit(3, 0, true, false);
+      bit(4, 3, true, true);
+      /* the jump the gold bit is about to make */
+      x.strokeStyle = 'rgba(255,204,77,0.75)'; x.lineWidth = 2;
+      x.setLineDash([5, 5]);
+      x.beginPath();
+      x.moveTo(x0 + 0 * s + s / 2, y0 + 3 * s + s / 2);
+      x.lineTo(x0 + 2 * s + s / 2, y0 + 1 * s + s / 2);
+      x.stroke();
+      x.setLineDash([]);
+    }
+  },
+  {
+    id: 'dunk', name: 'Dunk', cat: 'sports', tag: 'Basketball', isNew: true,
+    desc: 'Arcade hoops on a circuit-board floor. Hold to charge, release on the marker. Real ball physics off two irons and the glass, so a front-rim roll can still drop. Three straight and you are ON FIRE.',
+    best: function () {
+      var s = lsJSON('dunk_v1');
+      if (!s || typeof s !== 'object') return null;
+      var b = (typeof s.best === 'number' && isFinite(s.best)) ? Math.floor(s.best) : 0;
+      var w = (typeof s.wins === 'number' && isFinite(s.wins)) ? Math.floor(s.wins) : 0;
+      if (b > 0) return ['Best run', fmtInt(b)];
+      return w > 0 ? ['1-on-1 wins', w] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#0b1024'); g.addColorStop(0.7, '#111a36'); g.addColorStop(1, '#0d1428');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* crowd specks */
+      for (var i = 0; i < 34; i++) {
+        x.fillStyle = (i % 3 === 0) ? 'rgba(255,204,77,0.5)' : 'rgba(160,190,255,0.35)';
+        x.beginPath(); x.arc(Math.random() * w, Math.random() * h * 0.26, 1.6, 0, TAU); x.fill();
+      }
+      /* the floor */
+      x.fillStyle = '#101a34';
+      x.fillRect(0, h * 0.82, w, h * 0.18);
+      x.strokeStyle = 'rgba(111,227,255,0.35)'; x.lineWidth = 1.2;
+      x.beginPath(); x.moveTo(0, h * 0.82); x.lineTo(w, h * 0.82); x.stroke();
+      /* backboard, rim and net on the right */
+      var bx = w * 0.8, ry = h * 0.42;
+      x.strokeStyle = 'rgba(200,225,255,0.65)'; x.lineWidth = 2;
+      x.strokeRect(bx, ry - h * 0.16, w * 0.035, h * 0.2);
+      x.beginPath(); x.moveTo(bx + w * 0.017, ry + h * 0.04); x.lineTo(bx + w * 0.017, h * 0.82); x.stroke();
+      x.strokeStyle = '#ff7a3d'; x.lineWidth = 3.4;
+      x.beginPath(); x.moveTo(bx - w * 0.1, ry); x.lineTo(bx, ry); x.stroke();
+      x.strokeStyle = 'rgba(255,255,255,0.55)'; x.lineWidth = 1;
+      for (var k = 0; k <= 4; k++) {
+        var nx = bx - w * 0.1 + (w * 0.1) * (k / 4);
+        x.beginPath(); x.moveTo(nx, ry); x.lineTo(bx - w * 0.075 + (w * 0.05) * (k / 4), ry + h * 0.085); x.stroke();
+      }
+      x.beginPath(); x.moveTo(bx - w * 0.1, ry + h * 0.085); x.lineTo(bx - w * 0.025, ry + h * 0.085); x.stroke();
+      /* the shot: an arc from the left, ball in flight */
+      x.strokeStyle = 'rgba(255,204,77,0.5)'; x.lineWidth = 2; x.setLineDash([4, 5]);
+      x.beginPath();
+      x.moveTo(w * 0.16, h * 0.66);
+      x.quadraticCurveTo(w * 0.44, h * 0.05, bx - w * 0.05, ry - h * 0.02);
+      x.stroke(); x.setLineDash([]);
+      x.fillStyle = '#ff7a3d';
+      x.beginPath(); x.arc(w * 0.45, h * 0.24, h * 0.062, 0, TAU); x.fill();
+      x.strokeStyle = 'rgba(0,0,0,0.55)'; x.lineWidth = 1.3;
+      x.beginPath(); x.arc(w * 0.45, h * 0.24, h * 0.062, 0, TAU); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.45 - h * 0.062, h * 0.24); x.lineTo(w * 0.45 + h * 0.062, h * 0.24); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.45, h * 0.24 - h * 0.062); x.lineTo(w * 0.45, h * 0.24 + h * 0.062); x.stroke();
+      /* The shooter. A stick figure the height of a fingernail is just noise
+         on a card this size — the first version drew one about 20px tall and
+         it read as a stray tick mark. Solid shapes, sized off the tile. */
+      var px = w * 0.155, py = h * 0.82;
+      var headR = h * 0.075, bodyTop = py - h * 0.34, bodyBot = py - h * 0.02;
+      x.fillStyle = '#2f6ea8';
+      x.beginPath(); x.roundRect(px - w * 0.022, bodyTop, w * 0.044, bodyBot - bodyTop, w * 0.02); x.fill();
+      x.strokeStyle = '#2f6ea8'; x.lineWidth = Math.max(3, h * 0.05); x.lineCap = 'round';
+      /* the shooting arm, up and toward the hoop */
+      x.beginPath();
+      x.moveTo(px + w * 0.012, bodyTop + h * 0.06);
+      x.lineTo(px + w * 0.055, bodyTop - h * 0.09);
+      x.stroke();
+      x.lineCap = 'butt';
+      x.fillStyle = '#e8b58c';
+      x.beginPath(); x.arc(px, bodyTop - headR * 0.55, headR, 0, TAU); x.fill();
+    }
   }
 ];
 

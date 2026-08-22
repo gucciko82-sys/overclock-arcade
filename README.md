@@ -1396,3 +1396,131 @@ Two things caught only by looking at the screenshots:
   Simulator on the Mac.**
 
 Hub reconciled against disk: 46 cards, 46 game folders, every link resolves.
+
+### Built and play-tested 2026-08-21 — Clock and Checksum (games 47 and 48)
+
+Built in parallel by two builders under §11, with the integrator doing the hub
+cards, the README, both harness registrations and an independent verification
+pass on each. Both were re-checked from scratch rather than on the builders'
+reports — the point of the second pass is that it cannot inherit the first
+pass's mistakes.
+
+**Clock — the arcade's first rhythm game.** Four buses, three tracks (IDLE LOOP
+96 BPM / BUS TRAFFIC 124 / TURBO MODE 150), PERFECT-GOOD-LATE windows at
+55/105/160 ms, combo multiplier to ×4, hold notes with sustain ticks. A SYNC
+meter instead of lives: misses drain it and break the combo but never end the
+run on the spot. Finish and you get CLOCK SYNCED with a grade; run the meter
+dry and it is SYNC LOST.
+
+Two things make or break a rhythm game, and both were verified rather than
+assumed:
+
+- **The chart is generated from the music, not typed against it.** Each track
+  is a seeded pattern generator that emits one list of timed audio events, and
+  the playable notes *are* the lead events — the same objects in both arrays.
+  Checked by identity, not by proximity: **107/107, 188/188 and 263/263 notes
+  are literally scheduled audio events**, and every note sits on a sixteenth at
+  its own tempo (worst deviation across all three charts: 0.000 ms). A note
+  landing on silence is structurally impossible.
+- **Song position comes from `AudioContext.currentTime`, not the frame clock.**
+  GAME-RULES §3 bans wall-clock in game logic; an audio clock is the one real
+  exception for a rhythm game and the file says so where it does it. Verified
+  by freezing the main thread for 600 ms on purpose: **the song advanced 0.611 s
+  against 0.604 s of wall time.** A dt clock clamped at 0.05 s per frame would
+  have lost most of that and slid every note out of time. There is a watchdog
+  that falls back to a dt accumulator if the context stalls or is blocked.
+
+**Checksum — checkers, played properly.** Gold ONE against cyan ZERO on a
+circuit-board board. Captures are compulsory, chains must be finished, a man
+crowned mid-chain **stops there**, kings move and jump both ways, and a player
+with pieces but no legal move loses. Three CPU strengths that differ by real
+search rather than a handicap — IDLE (depth 2, material only), KERNEL (depth 7,
+full evaluation), ROOT (depth 16 inside a 650 ms budget) — plus two players on
+one screen. Negamax with alpha-beta, iterative deepening, capture extensions
+and root move ordering; undo works in both modes.
+
+**How the rules were actually checked.** For a rules game the only check worth
+much is a second implementation, so the integrator wrote an independent English
+draughts move generator and compared it move-for-move against the game's over
+**934 positions from fourteen seeded games — zero disagreements**, and those
+positions were confirmed to contain the interesting cases rather than quiet
+shuffling: 233 forced-capture positions, 43 multi-jumps, 17 crown-ends-chain
+moves and 559 backward king moves. Four rules were then set up by hand as well:
+a quiet move is refused when a capture exists; a man crowned mid-jump stops
+with the second enemy still on the board; a king captures backwards where the
+same man on the same square cannot; and a side with a piece and no legal move
+has no moves. ROOT beat IDLE 6/6 from both seats.
+
+**A trap for the next person writing board tests:** `parseBoard` skips blank
+lines, so a row of eight spaces silently collapses the board and shifts every
+square. Three "rule failures" in the first integration run were entirely that —
+the game was right and the test was reading a different position than it had
+written. Use dots for empty squares. The 934-position cross-check is what made
+it obvious which side was wrong.
+
+**Verification.** Syntax gates clean (Clock 1,331 script lines, Checksum 1,404;
+zero external references, save/restore balanced 13/13 and 16/16). Full device
+matrix and `ui-audit` clean for both in portrait and landscape, zero console
+errors, every control on screen and at or above 40px. Clock additionally:
+scored and judged through the real keyboard path, misses drain SYNC without
+ending the run, SYNC reaching zero does end it, a finished track writes its
+save, and a corrupt save still boots the title screen with all three tracks.
+Checksum additionally: a whole game played out through the real tap path with
+zero refused taps and a genuine result.
+
+Both were eyeballed at every size. Clock's field was screenshotted mid-song on
+the densest chart rather than during its lead-in, because an empty field proves
+nothing about how notes render.
+
+Hub reconciled against disk: 48 cards, 48 game folders, every cover paints
+something, every link resolves.
+
+### Built and play-tested 2026-08-21 — Dunk (game 49)
+
+**Dunk — arcade hoops**, built for a fourteen-year-old who wants loud and fun,
+not a simulation. Side-on neon half-court on a circuit-board floor. Hold to
+charge and release on a **marker meter** — each possession drops a white notch
+at a random spot on the bar with a green assist zone around it, and the error
+scales with how far off you release and how flat your arc is. Two modes:
+SHOOTOUT (60 seconds, moving spots, 2 / 3 / DEEP-4, five-second shot clock,
+ON FIRE at three straight pays a bonus a bucket) and 1-ON-1 (street rules, 1s
+and 2s, alternating possession, first to 11 win by 2, CPU strength tracking
+the leading score).
+
+**The question that decides whether a shooting game has anything in it** is
+whether the meter can be ignored, and the builder honestly flagged that it
+might be. So it was measured rather than argued about: sweeping the whole
+release bar at every legal spot and counting what scores gives **38% of the
+bar at the deepest four-point spot, rising monotonically to 75% at point
+blank** — 38 / 38 / 39 / 43 / 48 / 59 / 69 / 75 across the eight spots. The
+meter tightens exactly where the points are, and close shots stay forgiving,
+which is the arcade gradient this game wants. (A first pass at this
+measurement sampled a spot 7.2 m out and reported a 97% window; SPOT_MAX is
+6.60, so that was a spot no player can ever stand on. Check that the position
+you are measuring is one the game can actually reach.)
+
+**The rim is two colliders**, 0.505 m between iron centres, with live glass
+behind. Over 726 simulated shots: 305 front-iron contacts, 226 back-iron, 289
+off the glass, 31 clean swishes and **219 front-rim rolls that dropped** —
+which is the single best feeling in a basketball game and it had to be shown
+to exist, not assumed.
+
+Also verified: a deep shot pays more than a close one, ON FIRE lights at three
+straight and not before, 1-on-1 refuses to end at 11-10 and does end at 12-10,
+the CPU's make rate climbs 48% → 86% from level 1 to 9, and a corrupt save
+boots to the title screen with zeroed records. Matrix and `ui-audit` clean at
+desktop, portrait and landscape with zero console errors.
+
+Bugs the builder found and fixed, all by testing rather than reading — a legal
+swish was geometrically impossible (the irons were 0.45 m apart centre to
+centre, giving a 0.402 m bore against a real rim's 0.457); close shots could
+not be made at all until a distance-based minimum arc was added; and 1-on-1
+finished 11-0 because make-it-take-it froze the CPU out of the game entirely
+so its difficulty ramp never ran.
+
+One integrator fix in the hub: **Dunk's first cover drew a stick figure about
+twenty pixels tall**, which reads as a stray tick mark rather than a person on
+a card that size. Solid shapes, sized off the tile.
+
+Hub reconciled against disk: **49 cards, 49 game folders**, every cover paints
+something, every link resolves.
