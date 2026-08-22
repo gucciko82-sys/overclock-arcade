@@ -1,0 +1,2588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Branch — Chess</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="Chess, run inside the machine. Every move opens a branch and the CPU tries to predict yours. Full rules — castling, en passant, promotion, the fifty-move rule, threefold repetition — with legal moves lit up, undo, and a move list, so a beginner can learn on it.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Branch">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eaf2ff;
+    --dim: rgba(234,242,255,0.58);
+    --panel: rgba(9,13,30,0.62);
+    --line: rgba(255,255,255,0.13);
+    --light: #f0dca8;
+    --dark: #7de2ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+  #satop { position: absolute; top: 0; left: 0; width: 1px; height: env(safe-area-inset-top); pointer-events: none; }
+  #sabot { position: absolute; bottom: 0; left: 0; width: 1px; height: env(safe-area-inset-bottom); pointer-events: none; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.22); }
+  body:not(.playing) #topbtns { display: none; }
+
+  #actbtns {
+    position: absolute;
+    left: max(10px, env(safe-area-inset-left));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    display: flex; gap: 8px; z-index: 6;
+  }
+  body:not(.playing) #actbtns { display: none; }
+  .actbtn {
+    min-width: 86px; height: 44px; padding: 0 14px;
+    border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 12px; font-weight: 800; letter-spacing: 0.14em;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .actbtn:active { background: rgba(255,204,77,0.22); color: var(--accent); }
+  @media (max-width: 400px) { .actbtn { min-width: 76px; padding: 0 10px; font-size: 11px; letter-spacing: 0.1em; } }
+
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(11,15,30,0.80), rgba(6,8,18,0.96));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(560px, 100%);
+    background: rgba(10,14,30,0.88);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 22px 20px 20px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(30px, 9vw, 52px);
+    letter-spacing: 0.1em; font-weight: 800; line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 24px rgba(255,204,77,0.45);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(20px, 6vw, 30px); letter-spacing: 0.08em; font-weight: 800; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.04em; margin-bottom: 10px; line-height: 1.45; }
+  .keys {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 5px 16px;
+    font-size: 12px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 460px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 8px;
+    border-bottom: 1px dashed rgba(255,255,255,0.09); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; white-space: nowrap; }
+  .keys .hdr { border: none; color: var(--accent); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 13px 0 4px; }
+  .stat { background: rgba(255,255,255,0.045); border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; }
+  .stat .k { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(15px, 4.6vw, 21px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .best { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .best b { color: var(--accent); }
+  .lbl { font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--dim); margin: 12px 0 2px; }
+  .btn {
+    margin-top: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; padding: 0 22px;
+    border-radius: 14px; border: 1px solid rgba(255,204,77,0.55);
+    background: rgba(255,204,77,0.13); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.14em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,204,77,0.3); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(255,255,255,0.05); }
+  .btn.sm { min-height: 46px; padding: 0 14px; font-size: 12.5px; letter-spacing: 0.08em; }
+  .btnrow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(26px, 8vw, 46px); font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+  .movelist {
+    margin: 10px auto 2px; max-width: 460px; max-height: 148px; overflow-y: auto;
+    text-align: left; font-size: 12px; line-height: 1.6; color: var(--dim);
+    font-variant-numeric: tabular-nums;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+    border-radius: 12px; padding: 8px 10px;
+  }
+  .movelist b { color: var(--fg); font-weight: 700; }
+  .movelist i { color: rgba(234,242,255,0.34); font-style: normal; }
+  #promoCv { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+  .promobtn {
+    width: 76px; height: 92px; border-radius: 14px;
+    border: 1px solid rgba(255,204,77,0.45); background: rgba(255,204,77,0.10);
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    padding-bottom: 6px; cursor: pointer; position: relative;
+    font-family: inherit; font-size: 10px; font-weight: 800; letter-spacing: 0.12em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .promobtn canvas { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); }
+  .promobtn:active { background: rgba(255,204,77,0.26); }
+  @media (max-height: 620px) {
+    .card { padding: 12px 14px; border-radius: 16px; }
+    .keys, .ext, .best { display: none; }
+    h1 { font-size: clamp(24px, 6vw, 32px); margin: 2px 0 0; }
+    h2 { font-size: clamp(18px, 5vw, 24px); }
+    .tagline { margin-bottom: 4px; font-size: 11.5px; line-height: 1.35; }
+    .lbl { margin: 8px 0 0; }
+    .btn { margin-top: 6px; min-height: 44px; }
+    .btn.sm { min-height: 44px; }
+    .stats { margin: 8px 0 2px; }
+    .stat { padding: 5px 4px; }
+    .stat .v { font-size: 17px; }
+    .movelist { max-height: 74px; margin: 6px auto 0; }
+    .promobtn { width: 64px; height: 80px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="satop"></div>
+  <div id="sabot"></div>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="actbtns">
+    <button class="actbtn" id="undoBtn" type="button" aria-label="Undo">UNDO</button>
+    <button class="actbtn" id="flipBtn" type="button" aria-label="Flip board">FLIP</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   BRANCH — chess for the Overclock arcade.
+
+   The name is the joke twice over: the CPU wins by walking a BRANCHING
+   search tree, and it is trying to do BRANCH PREDICTION on you. Three
+   opponents named after the real thing — STATIC always guesses the same
+   way, BIMODAL keeps a counter, PERCEPTRON actually learns the shape of
+   the position.
+
+   Full FIDE rules: every piece, castling with all four of its conditions,
+   en passant (and its one-move expiry), promotion with a choice, check,
+   checkmate, stalemate, the fifty-move rule, threefold repetition and
+   insufficient material. You cannot move a pinned piece, and if you try
+   the game tells you why.
+
+   One file, no assets. Every piece is drawn to canvas by hand — no glyphs,
+   no images — and every sound comes out of an oscillator.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'branch_v1';
+var K_MUTE = 'branch_muted_v1';
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+function loadJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function nowMs() { return (window.performance && window.performance.now) ? window.performance.now() : Date.now(); }
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null, noiseBuf = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') { try { actx.resume(); } catch (e) {} } return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.5;
+    master.connect(actx.destination);
+    noiseBuf = actx.createBuffer(1, 4096, actx.sampleRate);
+    var d = noiseBuf.getChannelData(0);
+    for (var i = 0; i < 4096; i++) d[i] = Math.random() * 2 - 1;
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.5;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(24, f1), t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + dur * 0.14);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noise(dur, vol, f0, f1, delay) {
+  if (!actx || muted || !noiseBuf) return;
+  var t = actx.currentTime + (delay || 0);
+  var s = actx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+  var f = actx.createBiquadFilter(); f.type = 'bandpass';
+  f.frequency.setValueAtTime(f0, t);
+  f.frequency.exponentialRampToValueAtTime(Math.max(60, f1), t + dur);
+  f.Q.value = 1.4;
+  var g = actx.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(master);
+  s.start(t); s.stop(t + dur + 0.02);
+}
+var sfx = {
+  tap:   function () { tone('sine', 640, 800, 0.045, 0.14); },
+  move:  function () { noise(0.07, 0.16, 900, 420); tone('triangle', 300, 210, 0.08, 0.15); },
+  cap:   function () { noise(0.16, 0.30, 1700, 260); tone('sawtooth', 260, 74, 0.17, 0.17); },
+  castle:function () { tone('triangle', 300, 240, 0.08, 0.16); tone('triangle', 380, 300, 0.09, 0.15, 0.08); },
+  check: function () { tone('square', 720, 740, 0.09, 0.16); tone('square', 980, 1000, 0.13, 0.15, 0.08); },
+  promo: function () { var n = [523, 698, 880, 1174]; for (var i = 0; i < 4; i++) tone('square', n[i], n[i] * 1.01, 0.16, 0.15, i * 0.07); },
+  deny:  function () { tone('square', 190, 118, 0.15, 0.16); },
+  undo:  function () { tone('triangle', 540, 260, 0.11, 0.15); },
+  win:   function () { var n = [523, 659, 784, 1046]; for (var i = 0; i < 4; i++) tone('square', n[i], n[i] * 1.01, 0.20, 0.16, i * 0.10); },
+  lose:  function () { var n = [420, 330, 262, 190]; for (var i = 0; i < 4; i++) tone('sawtooth', n[i], n[i] * 0.96, 0.24, 0.15, i * 0.11); },
+  draw:  function () { tone('triangle', 380, 300, 0.30, 0.14); tone('triangle', 300, 240, 0.34, 0.12, 0.16); }
+};
+
+/* ============================================================ rules core ==
+   0x88 board. Square = rank * 16 + file, rank 0 is White's back rank
+   (rank "1"), file 0 is the a-file. A square is off the board exactly when
+   (sq & 0x88) is non-zero, which is the whole reason for the layout: no
+   bounds arithmetic anywhere in move generation.
+
+   Piece value = colour bit | type. WHITE = 8, BLACK = 16.
+   ========================================================================= */
+var WHITE = 8, BLACK = 16;
+var EMPTY = 0, PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6;
+
+function typeOf(p) { return p & 7; }
+function colorOf(p) { return p & 24; }
+function onBoard(s) { return (s & 0x88) === 0; }
+function rankOf(s) { return s >> 4; }
+function fileOf(s) { return s & 15; }
+function sq88(file, rank) { return rank * 16 + file; }
+function sqName(s) { return String.fromCharCode(97 + fileOf(s)) + String(rankOf(s) + 1); }
+function nameToSq(n) {
+  if (typeof n !== 'string' || n.length < 2) return -1;
+  var f = n.charCodeAt(0) - 97, r = n.charCodeAt(1) - 49;
+  if (f < 0 || f > 7 || r < 0 || r > 7) return -1;
+  return sq88(f, r);
+}
+function sqIsLight(s) { return (((s >> 4) + (s & 15)) & 1) === 1; }
+
+var N_OFF = [31, 33, 14, 18, -31, -33, -14, -18];
+var B_OFF = [15, 17, -15, -17];
+var R_OFF = [1, -1, 16, -16];
+var K_OFF = [1, -1, 16, -16, 15, 17, -15, -17];
+
+/* castling-right bits */
+var CR_WK = 1, CR_WQ = 2, CR_BK = 4, CR_BQ = 8;
+/* Any move touching one of these squares kills the matching rights, which
+   covers "the rook moved", "the rook was captured" and "the king moved"
+   in one table lookup. */
+var CMASK = new Int32Array(128);
+(function () {
+  for (var i = 0; i < 128; i++) CMASK[i] = 15;
+  CMASK[nameToSq('e1')] = 15 & ~(CR_WK | CR_WQ);
+  CMASK[nameToSq('h1')] = 15 & ~CR_WK;
+  CMASK[nameToSq('a1')] = 15 & ~CR_WQ;
+  CMASK[nameToSq('e8')] = 15 & ~(CR_BK | CR_BQ);
+  CMASK[nameToSq('h8')] = 15 & ~CR_BK;
+  CMASK[nameToSq('a8')] = 15 & ~CR_BQ;
+})();
+
+/* move flags */
+var F_EP = 1, F_CASTLE_K = 2, F_CASTLE_Q = 4, F_DOUBLE = 8;
+/* A move packs into one non-negative 32-bit int:
+   bits 0-7 from | 8-15 to | 16-19 promo type | 20-23 flags | 24-28 captured */
+function mk(from, to, promo, flags, cap) {
+  return from | (to << 8) | (promo << 16) | (flags << 20) | (cap << 24);
+}
+function mFrom(m) { return m & 255; }
+function mTo(m) { return (m >> 8) & 255; }
+function mPromo(m) { return (m >> 16) & 15; }
+function mFlags(m) { return (m >> 20) & 15; }
+function mCap(m) { return (m >> 24) & 31; }
+
+/* ------------------------------------------------------------- zobrist -- */
+var zs = 0x1a2b3c4d >>> 0;
+function zr() {
+  /* xorshift32 — deterministic, so two runs of the game agree on keys */
+  zs ^= zs << 13; zs >>>= 0;
+  zs ^= zs >>> 17;
+  zs ^= zs << 5; zs >>>= 0;
+  return zs >>> 0;
+}
+var ZP1 = [], ZP2 = [], ZC1 = new Int32Array(16), ZC2 = new Int32Array(16),
+    ZE1 = new Int32Array(128), ZE2 = new Int32Array(128), ZS1 = 0, ZS2 = 0;
+(function () {
+  for (var p = 0; p < 24; p++) {
+    ZP1[p] = new Int32Array(128); ZP2[p] = new Int32Array(128);
+    for (var s = 0; s < 128; s++) { ZP1[p][s] = zr() | 0; ZP2[p][s] = zr() | 0; }
+  }
+  for (var c = 0; c < 16; c++) { ZC1[c] = zr() | 0; ZC2[c] = zr() | 0; }
+  for (var e = 0; e < 128; e++) { ZE1[e] = zr() | 0; ZE2[e] = zr() | 0; }
+  ZS1 = zr() | 0; ZS2 = zr() | 0;
+})();
+
+/* --------------------------------------------------------------- position */
+function newPos() {
+  return {
+    bd: new Int8Array(128),
+    side: WHITE,
+    castling: 0,
+    ep: -1,
+    half: 0,
+    full: 1,
+    kw: -1, kb: -1,
+    h1: 0, h2: 0,
+    undo: []
+  };
+}
+function clonePos(P) {
+  return {
+    bd: new Int8Array(P.bd),
+    side: P.side, castling: P.castling, ep: P.ep, half: P.half, full: P.full,
+    kw: P.kw, kb: P.kb, h1: P.h1, h2: P.h2, undo: []
+  };
+}
+function rehash(P) {
+  var a = 0, b = 0, s, p;
+  for (s = 0; s < 128; s++) {
+    if (s & 0x88) continue;
+    p = P.bd[s];
+    if (p) { a ^= ZP1[p][s]; b ^= ZP2[p][s]; }
+  }
+  a ^= ZC1[P.castling]; b ^= ZC2[P.castling];
+  if (P.ep >= 0) { a ^= ZE1[P.ep]; b ^= ZE2[P.ep]; }
+  if (P.side === BLACK) { a ^= ZS1; b ^= ZS2; }
+  P.h1 = a | 0; P.h2 = b | 0;
+}
+function posKey(P) { return (P.h1 >>> 0) + ':' + (P.h2 >>> 0); }
+
+var START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+var FEN_CH = { p: PAWN, n: KNIGHT, b: BISHOP, r: ROOK, q: QUEEN, k: KING };
+var CH_FEN = ['', 'p', 'n', 'b', 'r', 'q', 'k'];
+
+/* An en-passant square is only real if a pawn is actually standing next to
+   it. FIDE says two positions differ only when the en-passant capture is
+   available, and dropping the phantom square is also what makes threefold
+   repetition agree with the rulebook. It changes no move generation: with
+   no adjacent pawn, no en-passant capture could be produced anyway. */
+function normaliseEp(P) {
+  if (P.ep < 0) return;
+  var us = P.side, pawn = us | PAWN;
+  var back = (us === WHITE) ? P.ep - 16 : P.ep + 16;
+  var l = back - 1, r = back + 1;
+  if ((onBoard(l) && P.bd[l] === pawn) || (onBoard(r) && P.bd[r] === pawn)) return;
+  P.ep = -1;
+}
+
+function setFEN(P, fen) {
+  var parts = String(fen).trim().split(/\s+/);
+  var i, s;
+  for (s = 0; s < 128; s++) P.bd[s] = 0;
+  var rows = parts[0].split('/');
+  if (rows.length !== 8) throw new Error('bad FEN board');
+  for (var r = 0; r < 8; r++) {
+    var row = rows[r], file = 0, rank = 7 - r;
+    for (i = 0; i < row.length; i++) {
+      var ch = row.charAt(i);
+      if (ch >= '1' && ch <= '8') { file += (ch.charCodeAt(0) - 48); continue; }
+      var lc = ch.toLowerCase();
+      if (!FEN_CH[lc]) throw new Error('bad FEN piece ' + ch);
+      P.bd[sq88(file, rank)] = (ch === lc ? BLACK : WHITE) | FEN_CH[lc];
+      file++;
+    }
+  }
+  P.side = (parts[1] === 'b') ? BLACK : WHITE;
+  P.castling = 0;
+  var c = parts[2] || '-';
+  if (c.indexOf('K') >= 0) P.castling |= CR_WK;
+  if (c.indexOf('Q') >= 0) P.castling |= CR_WQ;
+  if (c.indexOf('k') >= 0) P.castling |= CR_BK;
+  if (c.indexOf('q') >= 0) P.castling |= CR_BQ;
+  P.ep = (parts[3] && parts[3] !== '-') ? nameToSq(parts[3]) : -1;
+  P.half = parts[4] ? (parseInt(parts[4], 10) || 0) : 0;
+  P.full = parts[5] ? (parseInt(parts[5], 10) || 1) : 1;
+  P.kw = -1; P.kb = -1;
+  for (s = 0; s < 128; s++) {
+    if (s & 0x88) continue;
+    if (P.bd[s] === (WHITE | KING)) P.kw = s;
+    else if (P.bd[s] === (BLACK | KING)) P.kb = s;
+  }
+  P.undo.length = 0;
+  normaliseEp(P);
+  rehash(P);
+  return P;
+}
+function toFEN(P) {
+  var out = '', r, f, run;
+  for (r = 7; r >= 0; r--) {
+    run = 0;
+    for (f = 0; f < 8; f++) {
+      var p = P.bd[sq88(f, r)];
+      if (!p) { run++; continue; }
+      if (run) { out += run; run = 0; }
+      var ch = CH_FEN[typeOf(p)];
+      out += (colorOf(p) === WHITE) ? ch.toUpperCase() : ch;
+    }
+    if (run) out += run;
+    if (r > 0) out += '/';
+  }
+  out += (P.side === WHITE) ? ' w ' : ' b ';
+  var c = '';
+  if (P.castling & CR_WK) c += 'K';
+  if (P.castling & CR_WQ) c += 'Q';
+  if (P.castling & CR_BK) c += 'k';
+  if (P.castling & CR_BQ) c += 'q';
+  out += (c || '-') + ' ';
+  out += (P.ep >= 0 ? sqName(P.ep) : '-') + ' ';
+  out += P.half + ' ' + P.full;
+  return out;
+}
+
+/* ------------------------------------------------------------- attacks -- */
+function isAttacked(P, sq, by) {
+  var bd = P.bd, i, t, p, d;
+  /* pawns: a white pawn on sq-17/sq-15 attacks sq */
+  if (by === WHITE) {
+    if (onBoard(sq - 17) && bd[sq - 17] === (WHITE | PAWN)) return true;
+    if (onBoard(sq - 15) && bd[sq - 15] === (WHITE | PAWN)) return true;
+  } else {
+    if (onBoard(sq + 17) && bd[sq + 17] === (BLACK | PAWN)) return true;
+    if (onBoard(sq + 15) && bd[sq + 15] === (BLACK | PAWN)) return true;
+  }
+  for (i = 0; i < 8; i++) {
+    t = sq + N_OFF[i];
+    if (onBoard(t) && bd[t] === (by | KNIGHT)) return true;
+  }
+  for (i = 0; i < 8; i++) {
+    t = sq + K_OFF[i];
+    if (onBoard(t) && bd[t] === (by | KING)) return true;
+  }
+  for (i = 0; i < 4; i++) {
+    d = B_OFF[i]; t = sq + d;
+    while (onBoard(t)) {
+      p = bd[t];
+      if (p) {
+        if (colorOf(p) === by) { var ty = typeOf(p); if (ty === BISHOP || ty === QUEEN) return true; }
+        break;
+      }
+      t += d;
+    }
+  }
+  for (i = 0; i < 4; i++) {
+    d = R_OFF[i]; t = sq + d;
+    while (onBoard(t)) {
+      p = bd[t];
+      if (p) {
+        if (colorOf(p) === by) { var ty2 = typeOf(p); if (ty2 === ROOK || ty2 === QUEEN) return true; }
+        break;
+      }
+      t += d;
+    }
+  }
+  return false;
+}
+function kingSq(P, c) { return c === WHITE ? P.kw : P.kb; }
+function inCheck(P, c) {
+  var k = kingSq(P, c);
+  if (k < 0) return false;
+  return isAttacked(P, k, c === WHITE ? BLACK : WHITE);
+}
+
+/* ------------------------------------------------- pseudo-legal move gen -- */
+var PROMOS = [QUEEN, ROOK, BISHOP, KNIGHT];
+
+function genPseudo(P, out, capturesOnly) {
+  var bd = P.bd, us = P.side, them = (us === WHITE ? BLACK : WHITE);
+  var sq, p, t, i, d, to, tp;
+  for (sq = 0; sq < 128; sq++) {
+    if (sq & 0x88) { sq += 7; continue; }
+    p = bd[sq];
+    if (!p || colorOf(p) !== us) continue;
+    t = typeOf(p);
+    if (t === PAWN) {
+      var dir = (us === WHITE) ? 16 : -16;
+      var startR = (us === WHITE) ? 1 : 6;
+      var promoR = (us === WHITE) ? 7 : 0;
+      to = sq + dir;
+      if (!capturesOnly && onBoard(to) && bd[to] === 0) {
+        if (rankOf(to) === promoR) {
+          for (i = 0; i < 4; i++) out.push(mk(sq, to, PROMOS[i], 0, 0));
+        } else {
+          out.push(mk(sq, to, 0, 0, 0));
+          if (rankOf(sq) === startR) {
+            var to2 = sq + dir * 2;
+            if (bd[to2] === 0) out.push(mk(sq, to2, 0, F_DOUBLE, 0));
+          }
+        }
+      } else if (capturesOnly && onBoard(to) && bd[to] === 0 && rankOf(to) === promoR) {
+        /* a quiet promotion is a big swing — quiescence must see it */
+        out.push(mk(sq, to, QUEEN, 0, 0));
+      }
+      for (i = -1; i <= 1; i += 2) {
+        to = sq + dir + i;
+        if (!onBoard(to)) continue;
+        tp = bd[to];
+        if (tp && colorOf(tp) === them) {
+          if (rankOf(to) === promoR) {
+            for (var q = 0; q < 4; q++) out.push(mk(sq, to, PROMOS[q], 0, tp));
+          } else out.push(mk(sq, to, 0, 0, tp));
+        } else if (tp === 0 && to === P.ep && P.ep >= 0) {
+          out.push(mk(sq, to, 0, F_EP, them | PAWN));
+        }
+      }
+    } else if (t === KNIGHT || t === KING) {
+      var offs = (t === KNIGHT) ? N_OFF : K_OFF;
+      for (i = 0; i < 8; i++) {
+        to = sq + offs[i];
+        if (!onBoard(to)) continue;
+        tp = bd[to];
+        if (tp === 0) { if (!capturesOnly) out.push(mk(sq, to, 0, 0, 0)); }
+        else if (colorOf(tp) === them) out.push(mk(sq, to, 0, 0, tp));
+      }
+    } else {
+      var dirs = (t === BISHOP) ? B_OFF : (t === ROOK) ? R_OFF : K_OFF;
+      var nd = (t === QUEEN) ? 8 : 4;
+      for (i = 0; i < nd; i++) {
+        d = dirs[i]; to = sq + d;
+        while (onBoard(to)) {
+          tp = bd[to];
+          if (tp === 0) { if (!capturesOnly) out.push(mk(sq, to, 0, 0, 0)); }
+          else {
+            if (colorOf(tp) === them) out.push(mk(sq, to, 0, 0, tp));
+            break;
+          }
+          to += d;
+        }
+      }
+    }
+  }
+  if (!capturesOnly) genCastles(P, out);
+  return out;
+}
+
+/* Castling, with all four conditions spelled out:
+   1. the right still exists (king and rook have never moved — CMASK keeps
+      that honest, including a rook captured on its home square),
+   2. every square between them is empty,
+   3. the king is not in check right now,
+   4. the king neither passes through nor lands on an attacked square. */
+function genCastles(P, out) {
+  var us = P.side, them = (us === WHITE ? BLACK : WHITE), bd = P.bd;
+  if (us === WHITE) {
+    if (P.kw !== 4) return;
+    if ((P.castling & CR_WK) && bd[5] === 0 && bd[6] === 0 &&
+        !isAttacked(P, 4, them) && !isAttacked(P, 5, them) && !isAttacked(P, 6, them))
+      out.push(mk(4, 6, 0, F_CASTLE_K, 0));
+    if ((P.castling & CR_WQ) && bd[3] === 0 && bd[2] === 0 && bd[1] === 0 &&
+        !isAttacked(P, 4, them) && !isAttacked(P, 3, them) && !isAttacked(P, 2, them))
+      out.push(mk(4, 2, 0, F_CASTLE_Q, 0));
+  } else {
+    if (P.kb !== 116) return;
+    if ((P.castling & CR_BK) && bd[117] === 0 && bd[118] === 0 &&
+        !isAttacked(P, 116, them) && !isAttacked(P, 117, them) && !isAttacked(P, 118, them))
+      out.push(mk(116, 118, 0, F_CASTLE_K, 0));
+    if ((P.castling & CR_BQ) && bd[115] === 0 && bd[114] === 0 && bd[113] === 0 &&
+        !isAttacked(P, 116, them) && !isAttacked(P, 115, them) && !isAttacked(P, 114, them))
+      out.push(mk(116, 114, 0, F_CASTLE_Q, 0));
+  }
+}
+
+/* ------------------------------------------------------- make / unmake --- */
+function makeMove(P, m) {
+  var from = mFrom(m), to = mTo(m), promo = mPromo(m), flags = mFlags(m), cap = mCap(m);
+  var bd = P.bd, p = bd[from], us = colorOf(p), t = typeOf(p);
+  var h1 = P.h1, h2 = P.h2;
+
+  P.undo.push({ m: m, castling: P.castling, ep: P.ep, half: P.half, full: P.full,
+                kw: P.kw, kb: P.kb, h1: P.h1, h2: P.h2 });
+
+  if (P.ep >= 0) { h1 ^= ZE1[P.ep]; h2 ^= ZE2[P.ep]; }
+  h1 ^= ZC1[P.castling]; h2 ^= ZC2[P.castling];
+
+  /* lift the mover */
+  h1 ^= ZP1[p][from]; h2 ^= ZP2[p][from];
+  bd[from] = 0;
+
+  /* remove anything captured */
+  if (flags & F_EP) {
+    var capSq = (us === WHITE) ? to - 16 : to + 16;
+    var cp = bd[capSq];
+    h1 ^= ZP1[cp][capSq]; h2 ^= ZP2[cp][capSq];
+    bd[capSq] = 0;
+  } else if (cap) {
+    h1 ^= ZP1[cap][to]; h2 ^= ZP2[cap][to];
+  }
+
+  /* set it down (promotion changes what lands) */
+  var np = promo ? (us | promo) : p;
+  bd[to] = np;
+  h1 ^= ZP1[np][to]; h2 ^= ZP2[np][to];
+
+  if (t === KING) {
+    if (us === WHITE) P.kw = to; else P.kb = to;
+    if (flags & F_CASTLE_K) {
+      var rf = to + 1, rt = to - 1, rp = bd[rf];
+      bd[rf] = 0; bd[rt] = rp;
+      h1 ^= ZP1[rp][rf] ^ ZP1[rp][rt]; h2 ^= ZP2[rp][rf] ^ ZP2[rp][rt];
+    } else if (flags & F_CASTLE_Q) {
+      var rf2 = to - 2, rt2 = to + 1, rp2 = bd[rf2];
+      bd[rf2] = 0; bd[rt2] = rp2;
+      h1 ^= ZP1[rp2][rf2] ^ ZP1[rp2][rt2]; h2 ^= ZP2[rp2][rf2] ^ ZP2[rp2][rt2];
+    }
+  }
+
+  P.castling &= CMASK[from] & CMASK[to];
+  h1 ^= ZC1[P.castling]; h2 ^= ZC2[P.castling];
+
+  P.ep = (flags & F_DOUBLE) ? ((from + to) >> 1) : -1;
+  P.half = (t === PAWN || cap) ? 0 : P.half + 1;
+  if (P.side === BLACK) P.full++;
+  P.side = (us === WHITE) ? BLACK : WHITE;
+  h1 ^= ZS1; h2 ^= ZS2;
+
+  P.h1 = h1 | 0; P.h2 = h2 | 0;
+  normaliseEp(P);
+  if (P.ep >= 0) { P.h1 ^= ZE1[P.ep]; P.h2 ^= ZE2[P.ep]; }
+}
+
+function unmakeMove(P) {
+  var u = P.undo.pop();
+  if (!u) return;
+  var m = u.m;
+  var from = mFrom(m), to = mTo(m), promo = mPromo(m), flags = mFlags(m), cap = mCap(m);
+  var bd = P.bd;
+  var np = bd[to];
+  var us = colorOf(np);
+
+  bd[from] = promo ? (us | PAWN) : np;
+  bd[to] = 0;
+
+  if (flags & F_EP) {
+    var capSq = (us === WHITE) ? to - 16 : to + 16;
+    bd[capSq] = cap;
+  } else if (cap) {
+    bd[to] = cap;
+  }
+
+  if (flags & F_CASTLE_K) {
+    var rt = to - 1, rf = to + 1;
+    bd[rf] = bd[rt]; bd[rt] = 0;
+  } else if (flags & F_CASTLE_Q) {
+    var rt2 = to + 1, rf2 = to - 2;
+    bd[rf2] = bd[rt2]; bd[rt2] = 0;
+  }
+
+  P.castling = u.castling; P.ep = u.ep; P.half = u.half; P.full = u.full;
+  P.kw = u.kw; P.kb = u.kb; P.h1 = u.h1; P.h2 = u.h2;
+  P.side = us;
+}
+
+function genLegal(P) {
+  var pseudo = genPseudo(P, []), out = [], us = P.side, them = (us === WHITE ? BLACK : WHITE);
+  for (var i = 0; i < pseudo.length; i++) {
+    makeMove(P, pseudo[i]);
+    if (!isAttacked(P, kingSq(P, us), them)) out.push(pseudo[i]);
+    unmakeMove(P);
+  }
+  return out;
+}
+function countLegal(P) {
+  var pseudo = genPseudo(P, []), n = 0, us = P.side, them = (us === WHITE ? BLACK : WHITE);
+  for (var i = 0; i < pseudo.length; i++) {
+    makeMove(P, pseudo[i]);
+    if (!isAttacked(P, kingSq(P, us), them)) n++;
+    unmakeMove(P);
+  }
+  return n;
+}
+function isLegal(P, m) {
+  var us = P.side, them = (us === WHITE ? BLACK : WHITE);
+  makeMove(P, m);
+  var ok = !isAttacked(P, kingSq(P, us), them);
+  unmakeMove(P);
+  return ok;
+}
+
+/* ---------------------------------------------------------------- perft --
+   The only honest proof a chess move generator works. Bulk-counted at the
+   last ply, which is the standard and changes none of the numbers. */
+function perft(P, depth) {
+  if (depth <= 0) return 1;
+  if (depth === 1) return countLegal(P);
+  var pseudo = genPseudo(P, []), n = 0, us = P.side, them = (us === WHITE ? BLACK : WHITE);
+  for (var i = 0; i < pseudo.length; i++) {
+    makeMove(P, pseudo[i]);
+    if (!isAttacked(P, kingSq(P, us), them)) n += perft(P, depth - 1);
+    unmakeMove(P);
+  }
+  return n;
+}
+function perftDivide(P, depth) {
+  var out = {}, legal = genLegal(P);
+  for (var i = 0; i < legal.length; i++) {
+    makeMove(P, legal[i]);
+    out[sqName(mFrom(legal[i])) + sqName(mTo(legal[i])) + (mPromo(legal[i]) ? CH_FEN[mPromo(legal[i])] : '')] = perft(P, depth - 1);
+    unmakeMove(P);
+  }
+  return out;
+}
+
+/* ------------------------------------------------------- draw conditions -- */
+function insufficientMaterial(P) {
+  var bishops = [], knights = 0, i, p, t;
+  for (i = 0; i < 128; i++) {
+    if (i & 0x88) { i += 7; continue; }
+    p = P.bd[i];
+    if (!p) continue;
+    t = typeOf(p);
+    if (t === KING) continue;
+    if (t === PAWN || t === ROOK || t === QUEEN) return false;
+    if (t === BISHOP) bishops.push(sqIsLight(i));
+    else knights++;
+  }
+  if (bishops.length === 0) return knights <= 1;          /* K v K, K+N v K */
+  if (knights > 0) return false;                          /* K+B+N is a win */
+  if (bishops.length === 1) return true;                  /* K+B v K */
+  for (i = 1; i < bishops.length; i++) if (bishops[i] !== bishops[0]) return false;
+  return true;                                            /* all bishops one colour */
+}
+
+/* ================================================================= SAN ===
+   Written before the move is played (disambiguation needs the position it
+   was legal in), then the check or mate mark is appended after. */
+var SAN_LETTER = ['', '', 'N', 'B', 'R', 'Q', 'K'];
+function moveSAN(P, m, legal) {
+  var from = mFrom(m), to = mTo(m), promo = mPromo(m), flags = mFlags(m), cap = mCap(m);
+  if (flags & F_CASTLE_K) return 'O-O';
+  if (flags & F_CASTLE_Q) return 'O-O-O';
+  var p = P.bd[from], t = typeOf(p), s = '';
+  var isCap = cap !== 0 || (flags & F_EP) !== 0;
+  if (t === PAWN) {
+    if (isCap) s += String.fromCharCode(97 + fileOf(from)) + 'x';
+    s += sqName(to);
+    if (promo) s += '=' + SAN_LETTER[promo];
+    return s;
+  }
+  s += SAN_LETTER[t];
+  var need = false, sameFile = false, sameRank = false;
+  for (var i = 0; i < legal.length; i++) {
+    var o = legal[i];
+    if (o === m) continue;
+    var of = mFrom(o);
+    if (of === from) continue;
+    if (mTo(o) !== to) continue;
+    if (P.bd[of] !== p) continue;
+    need = true;
+    if (fileOf(of) === fileOf(from)) sameFile = true;
+    if (rankOf(of) === rankOf(from)) sameRank = true;
+  }
+  if (need) {
+    if (!sameFile) s += String.fromCharCode(97 + fileOf(from));
+    else if (!sameRank) s += String(rankOf(from) + 1);
+    else s += sqName(from);
+  }
+  if (isCap) s += 'x';
+  s += sqName(to);
+  return s;
+}
+
+/* =========================================================== evaluation ===
+   Always from WHITE's point of view: positive is good for White. Material
+   plus piece-square tables, with a king table that slides from "hide behind
+   your pawns" to "walk to the middle" as the pieces come off. STATIC never
+   looks at any of it beyond material, which is exactly what a static branch
+   predictor does: one guess, forever. */
+var VAL = [0, 100, 320, 330, 500, 900, 0];
+var MATE = 30000, INF = 1000000;
+
+function T(a) { return a; }
+var PST_P = T([
+   0,  0,  0,  0,  0,  0,  0,  0,
+  50, 50, 50, 50, 50, 50, 50, 50,
+  10, 10, 20, 30, 30, 20, 10, 10,
+   5,  5, 10, 25, 25, 10,  5,  5,
+   0,  0,  0, 20, 20,  0,  0,  0,
+   5, -5,-10,  0,  0,-10, -5,  5,
+   5, 10, 10,-20,-20, 10, 10,  5,
+   0,  0,  0,  0,  0,  0,  0,  0]);
+var PST_N = T([
+ -50,-40,-30,-30,-30,-30,-40,-50,
+ -40,-20,  0,  0,  0,  0,-20,-40,
+ -30,  0, 10, 15, 15, 10,  0,-30,
+ -30,  5, 15, 20, 20, 15,  5,-30,
+ -30,  0, 15, 20, 20, 15,  0,-30,
+ -30,  5, 10, 15, 15, 10,  5,-30,
+ -40,-20,  0,  5,  5,  0,-20,-40,
+ -50,-40,-30,-30,-30,-30,-40,-50]);
+var PST_B = T([
+ -20,-10,-10,-10,-10,-10,-10,-20,
+ -10,  0,  0,  0,  0,  0,  0,-10,
+ -10,  0,  5, 10, 10,  5,  0,-10,
+ -10,  5,  5, 10, 10,  5,  5,-10,
+ -10,  0, 10, 10, 10, 10,  0,-10,
+ -10, 10, 10, 10, 10, 10, 10,-10,
+ -10,  5,  0,  0,  0,  0,  5,-10,
+ -20,-10,-10,-10,-10,-10,-10,-20]);
+var PST_R = T([
+   0,  0,  0,  0,  0,  0,  0,  0,
+   5, 10, 10, 10, 10, 10, 10,  5,
+  -5,  0,  0,  0,  0,  0,  0, -5,
+  -5,  0,  0,  0,  0,  0,  0, -5,
+  -5,  0,  0,  0,  0,  0,  0, -5,
+  -5,  0,  0,  0,  0,  0,  0, -5,
+  -5,  0,  0,  0,  0,  0,  0, -5,
+   0,  0,  0,  5,  5,  0,  0,  0]);
+var PST_Q = T([
+ -20,-10,-10, -5, -5,-10,-10,-20,
+ -10,  0,  0,  0,  0,  0,  0,-10,
+ -10,  0,  5,  5,  5,  5,  0,-10,
+  -5,  0,  5,  5,  5,  5,  0, -5,
+   0,  0,  5,  5,  5,  5,  0, -5,
+ -10,  5,  5,  5,  5,  5,  0,-10,
+ -10,  0,  5,  0,  0,  0,  0,-10,
+ -20,-10,-10, -5, -5,-10,-10,-20]);
+var PST_KM = T([
+ -30,-40,-40,-50,-50,-40,-40,-30,
+ -30,-40,-40,-50,-50,-40,-40,-30,
+ -30,-40,-40,-50,-50,-40,-40,-30,
+ -30,-40,-40,-50,-50,-40,-40,-30,
+ -20,-30,-30,-40,-40,-30,-30,-20,
+ -10,-20,-20,-20,-20,-20,-20,-10,
+  20, 20,  0,  0,  0,  0, 20, 20,
+  20, 30, 10,  0,  0, 10, 30, 20]);
+var PST_KE = T([
+ -50,-40,-30,-20,-20,-30,-40,-50,
+ -30,-20,-10,  0,  0,-10,-20,-30,
+ -30,-10, 20, 30, 30, 20,-10,-30,
+ -30,-10, 30, 40, 40, 30,-10,-30,
+ -30,-10, 30, 40, 40, 30,-10,-30,
+ -30,-10, 20, 30, 30, 20,-10,-30,
+ -30,-30,  0,  0,  0,  0,-30,-30,
+ -50,-30,-30,-30,-30,-30,-30,-50]);
+var PST = [null, PST_P, PST_N, PST_B, PST_R, PST_Q, null];
+
+/* tables above are written a8-first, so map a 0x88 square onto them */
+function pstIdx(sq, white) {
+  var r = rankOf(sq), f = fileOf(sq);
+  return white ? ((7 - r) * 8 + f) : (r * 8 + f);
+}
+var PASSED_BONUS = [0, 8, 14, 24, 44, 78, 120, 0];
+
+function evaluate(P, level) {
+  var bd = P.bd, s = 0, i, p, t, white;
+  var wp = [0, 0, 0, 0, 0, 0, 0, 0], bp = [0, 0, 0, 0, 0, 0, 0, 0];
+  var wPawnSq = [], bPawnSq = [];
+  var wb = 0, bb = 0, phase = 0;
+  for (i = 0; i < 128; i++) {
+    if (i & 0x88) { i += 7; continue; }
+    p = bd[i];
+    if (!p) continue;
+    t = typeOf(p);
+    white = colorOf(p) === WHITE;
+    s += white ? VAL[t] : -VAL[t];
+    if (t === PAWN) {
+      if (white) { wp[fileOf(i)]++; wPawnSq.push(i); } else { bp[fileOf(i)]++; bPawnSq.push(i); }
+    } else if (t === BISHOP) { if (white) wb++; else bb++; phase += 1; }
+    else if (t === KNIGHT) phase += 1;
+    else if (t === ROOK) phase += 2;
+    else if (t === QUEEN) phase += 4;
+  }
+  if (level === 0) return s;                       /* STATIC: bare material */
+
+  for (i = 0; i < 128; i++) {
+    if (i & 0x88) { i += 7; continue; }
+    p = bd[i];
+    if (!p) continue;
+    t = typeOf(p);
+    white = colorOf(p) === WHITE;
+    var v;
+    if (t === KING) {
+      var eg = clamp((24 - phase) / 24, 0, 1);
+      var a = PST_KM[pstIdx(i, white)], b = PST_KE[pstIdx(i, white)];
+      v = a + (b - a) * eg;
+    } else v = PST[t][pstIdx(i, white)];
+    s += white ? v : -v;
+  }
+  if (level === 1) return Math.round(s);           /* BIMODAL: + position */
+
+  /* PERCEPTRON also weighs the pawn skeleton, the bishop pair and rooks
+     that have found an open file — the slow features that decide endings. */
+  if (wb >= 2) s += 32;
+  if (bb >= 2) s -= 32;
+  for (i = 0; i < 8; i++) {
+    if (wp[i] > 1) s -= (wp[i] - 1) * 14;
+    if (bp[i] > 1) s += (bp[i] - 1) * 14;
+    if (wp[i] > 0 && (i === 0 || wp[i - 1] === 0) && (i === 7 || wp[i + 1] === 0)) s -= 15;
+    if (bp[i] > 0 && (i === 0 || bp[i - 1] === 0) && (i === 7 || bp[i + 1] === 0)) s += 15;
+  }
+  for (i = 0; i < wPawnSq.length; i++) {
+    var f = fileOf(wPawnSq[i]), r = rankOf(wPawnSq[i]), pass = true;
+    for (var k = Math.max(0, f - 1); k <= Math.min(7, f + 1); k++) {
+      for (var j = 0; j < bPawnSq.length; j++) {
+        if (fileOf(bPawnSq[j]) === k && rankOf(bPawnSq[j]) > r) { pass = false; break; }
+      }
+      if (!pass) break;
+    }
+    if (pass) s += PASSED_BONUS[r];
+  }
+  for (i = 0; i < bPawnSq.length; i++) {
+    var f2 = fileOf(bPawnSq[i]), r2 = rankOf(bPawnSq[i]), pass2 = true;
+    for (var k2 = Math.max(0, f2 - 1); k2 <= Math.min(7, f2 + 1); k2++) {
+      for (var j2 = 0; j2 < wPawnSq.length; j2++) {
+        if (fileOf(wPawnSq[j2]) === k2 && rankOf(wPawnSq[j2]) < r2) { pass2 = false; break; }
+      }
+      if (!pass2) break;
+    }
+    if (pass2) s -= PASSED_BONUS[7 - r2];
+  }
+  for (i = 0; i < 128; i++) {
+    if (i & 0x88) { i += 7; continue; }
+    p = bd[i];
+    if (!p || typeOf(p) !== ROOK) continue;
+    var ff = fileOf(i);
+    if (colorOf(p) === WHITE) { if (wp[ff] === 0) s += (bp[ff] === 0 ? 22 : 11); }
+    else { if (bp[ff] === 0) s -= (wp[ff] === 0 ? 22 : 11); }
+  }
+  return Math.round(s);
+}
+
+/* ================================================================ search ==
+   Negamax with alpha-beta, iterative deepening inside a time budget, and a
+   quiescence search that keeps looking while captures are still on the
+   board. Without quiescence an engine at any depth cheerfully hangs its
+   queen on the horizon; with it, the same depth plays real chess.
+
+   The whole thing runs in slices. jobStep() takes one root move at a time
+   and hands the frame back, so the board never freezes mid-think. */
+var STRENGTH = {
+  static: { key: 'static', name: 'STATIC', depth: 2, budget: 200, level: 0, blurb:
+    'Always predicts the same way: counts material, nothing else. Good for a first game.' },
+  bimodal: { key: 'bimodal', name: 'BIMODAL', depth: 5, budget: 600, level: 1, blurb:
+    'Keeps a counter. Searches several moves deep and knows where pieces belong.' },
+  perceptron: { key: 'perceptron', name: 'PERCEPTRON', depth: 24, budget: 1500, level: 2, blurb:
+    'Learns the shape of the position — pawn structure, the bishop pair, open files. It will take anything you leave loose.' }
+};
+var STR_ORDER = ['static', 'bimodal', 'perceptron'];
+
+var rngState = 20260822 >>> 0;
+function setSeed(s) { rngState = (s >>> 0) || 1; }
+function rnd01() { rngState = (rngState * 1664525 + 1013904223) >>> 0; return rngState / 4294967296; }
+
+function mvvlva(P, m) {
+  var cap = mCap(m);
+  if (!cap && !mPromo(m)) return 0;
+  var v = cap ? VAL[typeOf(cap)] * 10 - VAL[typeOf(P.bd[mFrom(m)])] : 0;
+  if (mPromo(m)) v += VAL[mPromo(m)] * 8;
+  return v + 100000;
+}
+function scoreMove(P, m, job, ply) {
+  var s = mvvlva(P, m);
+  if (s) return s;
+  if (job) {
+    if (job.killers[ply * 2] === m) return 90000;
+    if (job.killers[ply * 2 + 1] === m) return 89000;
+    return job.hist[(mFrom(m) & 127) * 128 + (mTo(m) & 127)] | 0;
+  }
+  return 0;
+}
+function orderMoves(P, list, job, ply) {
+  var sc = [], i;
+  for (i = 0; i < list.length; i++) sc.push(scoreMove(P, list[i], job, ply));
+  /* insertion sort — lists are short and this keeps it stable */
+  for (i = 1; i < list.length; i++) {
+    var m = list[i], v = sc[i], j = i - 1;
+    while (j >= 0 && sc[j] < v) { list[j + 1] = list[j]; sc[j + 1] = sc[j]; j--; }
+    list[j + 1] = m; sc[j + 1] = v;
+  }
+}
+
+/* undo[i] holds the hash of the position BEFORE move i, so the sequence of
+   positions along the search path is undo[0], undo[1] ... undo[n-1], then
+   the live one. Only every second step back can have the same side to move,
+   and nothing before the last irreversible move can repeat — which is
+   exactly what the halfmove clock counts. */
+function repetitionInSearch(P) {
+  if (P.half < 4) return false;
+  var u = P.undo, n = u.length, back = Math.min(P.half, n), i;
+  for (i = n - 2; i >= 0 && (n - i) <= back; i -= 2) {
+    if (u[i].h1 === P.h1 && u[i].h2 === P.h2) return true;
+  }
+  return false;
+}
+
+function quiesce(P, alpha, beta, job, ply) {
+  job.nodes++;
+  if ((job.nodes & 255) === 0 && nowMs() > job.sliceEnd) { job.abort = true; return 0; }
+  var side = P.side === WHITE ? 1 : -1;
+  var stand = side * evaluate(P, job.level);
+  if (stand >= beta) return stand;
+  if (stand > alpha) alpha = stand;
+  if (ply > 24) return stand;
+  var moves = genPseudo(P, [], true);
+  orderMoves(P, moves, null, 0);
+  var us = P.side, them = (us === WHITE ? BLACK : WHITE), best = stand;
+  for (var i = 0; i < moves.length; i++) {
+    var m = moves[i];
+    /* delta pruning: a capture that cannot possibly reach alpha is noise */
+    var gain = mCap(m) ? VAL[typeOf(mCap(m))] : 0;
+    if (mPromo(m)) gain += VAL[mPromo(m)];
+    if (job.level > 0 && stand + gain + 200 < alpha) continue;
+    makeMove(P, m);
+    if (isAttacked(P, kingSq(P, us), them)) { unmakeMove(P); continue; }
+    var v = -quiesce(P, -beta, -alpha, job, ply + 1);
+    unmakeMove(P);
+    if (job.abort) return 0;
+    if (v > best) best = v;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+
+function negamax(P, depth, alpha, beta, job, ply) {
+  job.nodes++;
+  if ((job.nodes & 255) === 0 && nowMs() > job.sliceEnd) { job.abort = true; return 0; }
+  if (ply > 0) {
+    if (P.half >= 100) return 0;
+    if (insufficientMaterial(P)) return 0;
+    if (repetitionInSearch(P)) return 0;
+  }
+  var us = P.side, them = (us === WHITE ? BLACK : WHITE);
+  var checked = isAttacked(P, kingSq(P, us), them);
+  if (checked && ply < 32) depth++;           /* never stop counting in check */
+  if (depth <= 0) return quiesce(P, alpha, beta, job, ply);
+
+  var moves = genPseudo(P, []);
+  orderMoves(P, moves, job, ply);
+  var best = -INF, legalCount = 0, bestMove = 0;
+  for (var i = 0; i < moves.length; i++) {
+    var m = moves[i];
+    makeMove(P, m);
+    if (isAttacked(P, kingSq(P, us), them)) { unmakeMove(P); continue; }
+    legalCount++;
+    var v = -negamax(P, depth - 1, -beta, -alpha, job, ply + 1);
+    unmakeMove(P);
+    if (job.abort) return 0;
+    if (v > best) { best = v; bestMove = m; }
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) {
+      if (!mCap(m) && !mPromo(m)) {
+        if (job.killers[ply * 2] !== m) { job.killers[ply * 2 + 1] = job.killers[ply * 2]; job.killers[ply * 2] = m; }
+        job.hist[(mFrom(m) & 127) * 128 + (mTo(m) & 127)] += depth * depth;
+      }
+      break;
+    }
+  }
+  if (legalCount === 0) return checked ? (-MATE + ply) : 0;
+  return best;
+}
+
+function makeJob(P, cfg, budgetOverride) {
+  var pos = clonePos(P);
+  var roots = genLegal(pos);
+  orderMoves(pos, roots, null, 0);
+  /* seeded shuffle inside the quiet tail so two games are not identical */
+  for (var i = roots.length - 1; i > 0; i--) {
+    var j = Math.floor(rnd01() * (i + 1));
+    if (!mCap(roots[i]) && !mCap(roots[j]) && !mPromo(roots[i]) && !mPromo(roots[j])) {
+      var t = roots[i]; roots[i] = roots[j]; roots[j] = t;
+    }
+  }
+  var budget = budgetOverride > 0 ? budgetOverride : cfg.budget;
+  return {
+    P: pos, cfg: cfg, level: cfg.level,
+    roots: roots, order: roots.slice(),
+    depth: 1, rootIdx: 0, alpha: -INF, iterBest: roots.length ? roots[0] : 0, iterScore: -INF,
+    scored: [],
+    best: roots.length ? roots[0] : 0, bestScore: 0, bestDepth: 0,
+    deadline: nowMs() + budget, budget: budget,
+    slice: 70, sliceEnd: 0,
+    killers: new Int32Array(128), hist: new Int32Array(128 * 128),
+    nodes: 0, abort: false, done: false
+  };
+}
+
+/* One slice of work. Returns true when the job has a final answer.
+   A single root move that overruns its slice is retried with a bigger one
+   (capped well under a third of a second) so the search always makes
+   progress without ever holding the frame hostage. */
+var SLICE_MAX = 210;
+function jobStep(job) {
+  if (job.done) return true;
+  if (job.roots.length === 0) { job.best = 0; job.done = true; return true; }
+  if (job.roots.length === 1) { job.best = job.roots[0]; job.done = true; return true; }
+  job.sliceEnd = nowMs() + job.slice;
+  var P = job.P;
+  while (job.rootIdx < job.roots.length) {
+    if (nowMs() >= job.sliceEnd) return false;
+    var m = job.roots[job.rootIdx];
+    makeMove(P, m);
+    var v = -negamax(P, job.depth - 1, -INF, -job.alpha, job, 1);
+    unmakeMove(P);
+    if (job.abort) {
+      job.abort = false;
+      job.slice = Math.min(SLICE_MAX, Math.round(job.slice * 1.7));
+      if (nowMs() > job.deadline) { job.done = true; return true; }
+      return false;                      /* same root move, bigger slice */
+    }
+    job.scored.push({ m: m, v: v });
+    if (v > job.iterScore) { job.iterScore = v; job.iterBest = m; }
+    if (job.iterScore > job.alpha) job.alpha = job.iterScore;
+    job.rootIdx++;
+  }
+  /* iteration finished cleanly — commit it */
+  job.best = job.iterBest;
+  job.bestScore = job.iterScore;
+  job.bestDepth = job.depth;
+  job.scored.sort(function (a, b) { return b.v - a.v; });
+  var nr = [];
+  for (var i = 0; i < job.scored.length; i++) nr.push(job.scored[i].m);
+  job.roots = nr;
+  if (job.bestScore > MATE - 200 || job.bestScore < -MATE + 200) { job.done = true; return true; }
+  if (job.depth >= job.cfg.depth || nowMs() > job.deadline) { job.done = true; return true; }
+  job.depth++;
+  job.rootIdx = 0; job.alpha = -INF; job.iterScore = -INF; job.scored = [];
+  return false;
+}
+
+function bestMoveSync(P, cfg, budget) {
+  var job = makeJob(P, cfg, budget), guard = 0;
+  while (!jobStep(job) && guard++ < 4000) { /* keep slicing */ }
+  return job.best || (job.roots.length ? job.roots[0] : 0);
+}
+
+/* Headless engine-vs-engine, used by the test harness to prove the three
+   strengths are genuinely different players and not a random handicap. */
+function selfPlay(whiteKey, blackKey, seed, budget, maxPly) {
+  setSeed(seed >>> 0 || 1);
+  var P = newPos();
+  setFEN(P, START_FEN);
+  var keys = {}, cap = maxPly || 200;
+  keys[posKey(P)] = 1;
+  for (var ply = 0; ply < cap; ply++) {
+    var legal = genLegal(P);
+    if (legal.length === 0) {
+      if (inCheck(P, P.side)) return { result: P.side === WHITE ? -1 : 1, plies: ply, reason: 'checkmate' };
+      return { result: 0, plies: ply, reason: 'stalemate' };
+    }
+    if (P.half >= 100) return { result: 0, plies: ply, reason: 'fifty' };
+    if (insufficientMaterial(P)) return { result: 0, plies: ply, reason: 'material' };
+    var cfg = STRENGTH[P.side === WHITE ? whiteKey : blackKey];
+    var m = bestMoveSync(P, cfg, budget) || legal[0];
+    makeMove(P, m);
+    var k = posKey(P);
+    keys[k] = (keys[k] || 0) + 1;
+    if (keys[k] >= 3) return { result: 0, plies: ply, reason: 'repetition' };
+  }
+  /* ran out of plies: score it on material so the test still has a verdict */
+  var s = evaluate(P, 2);
+  return { result: s > 150 ? 1 : (s < -150 ? -1 : 0), plies: cap, reason: 'plycap', eval: s };
+}
+
+/* ============================================================ game state == */
+function blankRec() { return { w: 0, l: 0, d: 0 }; }
+function loadRec() {
+  var raw = loadJSON(K_SAVE, null), out = {};
+  for (var i = 0; i < STR_ORDER.length; i++) {
+    var k = STR_ORDER[i], r = blankRec();
+    if (raw && typeof raw === 'object' && raw[k] && typeof raw[k] === 'object') {
+      var s = raw[k];
+      r.w = (typeof s.w === 'number' && isFinite(s.w) && s.w >= 0) ? Math.floor(s.w) : 0;
+      r.l = (typeof s.l === 'number' && isFinite(s.l) && s.l >= 0) ? Math.floor(s.l) : 0;
+      r.d = (typeof s.d === 'number' && isFinite(s.d) && s.d >= 0) ? Math.floor(s.d) : 0;
+    }
+    out[k] = r;
+  }
+  return out;
+}
+function saveRec() { saveJSON(K_SAVE, G.rec); }
+
+var G = {
+  state: 'title',
+  mode: 'cpu', strength: 'bimodal',
+  P: newPos(),
+  legal: [],
+  sel: -1, dests: [],
+  last: null, lastSan: '',
+  anim: null,
+  thinking: false, aiDone: false, aiReady: 0, thinkMin: 0,
+  hist: [], san: [], taken: [], keys: {},
+  winner: 0, overReason: '', overHead: '',
+  msg: '', msgT: 0, msgBad: false,
+  shake: 0, checkPulse: 0,
+  flip: false,
+  cur: 20, curOn: false,
+  pendingPromo: null,
+  rec: loadRec()
+};
+setFEN(G.P, START_FEN);
+
+function HUMAN() { return WHITE; }
+function isCpuTurn() { return G.mode === 'cpu' && G.P.side !== HUMAN(); }
+function canInput() {
+  return G.state === 'play' && !G.anim && !G.thinking && !G.pendingPromo &&
+         (G.mode === 'two' || G.P.side === HUMAN());
+}
+function flash(t, bad) { G.msg = t; G.msgT = 2.4; G.msgBad = !!bad; }
+function sideName(c) { return c === WHITE ? 'WHITE' : 'BLACK'; }
+
+function refreshLegal() { G.legal = genLegal(G.P); }
+function movesFrom(sq) {
+  var out = [];
+  for (var i = 0; i < G.legal.length; i++) if (mFrom(G.legal[i]) === sq) out.push(G.legal[i]);
+  return out;
+}
+
+function materialCount(P) {
+  var w = 0, b = 0, i, p;
+  for (i = 0; i < 128; i++) {
+    if (i & 0x88) { i += 7; continue; }
+    p = P.bd[i];
+    if (!p || typeOf(p) === KING) continue;
+    if (colorOf(p) === WHITE) w += VAL[typeOf(p)]; else b += VAL[typeOf(p)];
+  }
+  return { w: w, b: b, adv: Math.round((w - b) / 100) };
+}
+
+/* ------------------------------------------------------------- history --- */
+function pushHistory() {
+  G.hist.push({
+    fen: toFEN(G.P),
+    sanLen: G.san.length,
+    takenLen: G.taken.length,
+    keys: null,
+    last: G.last ? { from: G.last.from, to: G.last.to } : null
+  });
+  if (G.hist.length > 400) G.hist.shift();
+}
+function bumpKey() {
+  var k = posKey(G.P);
+  G.keys[k] = (G.keys[k] || 0) + 1;
+  return G.keys[k];
+}
+function rebuildKeys() {
+  /* replaying from the start is the only way to keep the repetition count
+     honest after an undo, and it is a handful of microseconds */
+  G.keys = {};
+  var Q = newPos();
+  setFEN(Q, G.startFen || START_FEN);
+  G.keys[posKey(Q)] = 1;
+  for (var i = 0; i < G.moveInts.length; i++) {
+    makeMove(Q, G.moveInts[i]);
+    var k = posKey(Q);
+    G.keys[k] = (G.keys[k] || 0) + 1;
+  }
+}
+
+/* --------------------------------------------------------------- flow ---- */
+function beginTurn() {
+  G.sel = -1; G.dests = [];
+  refreshLegal();
+  var P = G.P;
+  if (G.legal.length === 0) {
+    if (inCheck(P, P.side)) {
+      endGame(P.side === WHITE ? -1 : 1, 'CHECKMATE', sideName(P.side) + ' is checkmated.');
+    } else {
+      endGame(0, 'STALEMATE', sideName(P.side) + ' has no legal move and is not in check. Drawn.');
+    }
+    return;
+  }
+  if (P.half >= 100) { endGame(0, 'FIFTY-MOVE DRAW', 'Fifty moves each with no capture and no pawn move.'); return; }
+  if ((G.keys[posKey(P)] || 0) >= 3) { endGame(0, 'THREEFOLD REPETITION', 'The same position has come up three times. Drawn.'); return; }
+  if (insufficientMaterial(P)) { endGame(0, 'INSUFFICIENT MATERIAL', 'Neither side has enough left to force mate. Drawn.'); return; }
+  if (inCheck(P, P.side)) {
+    G.checkPulse = 1.4;
+    sfx.check();
+    flash(sideName(P.side) + ' IS IN CHECK');
+  }
+  if (isCpuTurn()) startThink();
+}
+
+function applyMove(m) {
+  var P = G.P;
+  var san = moveSAN(P, m, G.legal);
+  var cap = mCap(m), flags = mFlags(m);
+  pushHistory();
+  if (cap) G.taken.push(cap);
+  makeMove(P, m);
+  G.moveInts.push(m);
+  if (inCheck(P, P.side)) san += (genLegal(P).length === 0 ? '#' : '+');
+  G.san.push(san);
+  G.lastSan = san;
+  G.last = { from: mFrom(m), to: mTo(m), flags: flags, promo: mPromo(m), cap: cap };
+  bumpKey();
+  G.anim = { m: m, t: 0, dur: 0.16 };
+  if (flags & (F_CASTLE_K | F_CASTLE_Q)) sfx.castle();
+  else if (cap || (flags & F_EP)) { sfx.cap(); G.shake = 5; }
+  else sfx.move();
+  if (mPromo(m)) sfx.promo();
+  G.sel = -1; G.dests = [];
+}
+
+function finishAnim() {
+  G.anim = null;
+  beginTurn();
+}
+
+function endGame(w, head, reason) {
+  cancelThink();
+  G.state = 'over';
+  G.winner = w; G.overHead = head; G.overReason = reason || '';
+  G.sel = -1; G.dests = []; G.anim = null; G.pendingPromo = null;
+  document.body.classList.remove('playing');
+  if (G.mode === 'cpu') {
+    var r = G.rec[G.strength] || (G.rec[G.strength] = blankRec());
+    var humanScore = (HUMAN() === WHITE) ? w : -w;
+    if (humanScore > 0) r.w++; else if (humanScore < 0) r.l++; else r.d++;
+    saveRec();
+  }
+  if (w === 0) sfx.draw();
+  else if (G.mode === 'two') sfx.win();
+  else if ((HUMAN() === WHITE ? w : -w) > 0) sfx.win();
+  else sfx.lose();
+  overScreen();
+}
+
+/* ------------------------------------------------------------------- AI -- */
+var aiJob = null, aiTimer = null;
+function cancelThink() {
+  if (aiTimer) { clearTimeout(aiTimer); aiTimer = null; }
+  aiJob = null; G.thinking = false; G.aiDone = false; G.aiReady = 0;
+}
+function startThink() {
+  cancelThink();
+  G.thinking = true; G.aiDone = false; G.aiReady = 0; G.thinkMin = 0.3;
+  aiJob = makeJob(G.P, STRENGTH[G.strength] || STRENGTH.bimodal, 0);
+  aiTimer = setTimeout(aiTick, 0);
+}
+function aiTick() {
+  aiTimer = null;
+  if (!aiJob) return;
+  if (G.state === 'pause') return;
+  var done = false;
+  try { done = jobStep(aiJob); } catch (e) { done = true; }
+  if (!done) { aiTimer = setTimeout(aiTick, 0); return; }
+  G.aiReady = aiJob.best || (aiJob.roots.length ? aiJob.roots[0] : 0);
+  G.aiDepth = aiJob.bestDepth;
+  G.aiNodes = aiJob.nodes;
+  G.aiDone = true;
+  aiJob = null;
+}
+
+/* -------------------------------------------------------------- new game -- */
+function startGame(mode, strength) {
+  initAudio();
+  cancelThink();
+  G.mode = mode;
+  if (strength && STRENGTH[strength]) G.strength = strength;
+  G.startFen = START_FEN;
+  G.P = newPos(); setFEN(G.P, START_FEN);
+  G.moveInts = [];
+  G.hist = []; G.san = []; G.taken = []; G.keys = {};
+  G.keys[posKey(G.P)] = 1;
+  G.sel = -1; G.dests = []; G.anim = null; G.last = null; G.lastSan = '';
+  G.winner = 0; G.overReason = ''; G.overHead = '';
+  G.msg = ''; G.msgT = 0; G.shake = 0; G.checkPulse = 0;
+  G.pendingPromo = null;
+  G.flip = false;
+  G.cur = nameToSq('e2');
+  G.state = 'play';
+  document.body.classList.add('playing');
+  hideOverlay();
+  setSeed((Date.now() ^ 2654435761) >>> 0);
+  refreshLegal();
+  flash(mode === 'two' ? 'WHITE MOVES FIRST' : 'YOUR MOVE — WHITE');
+}
+
+function undo() {
+  if (G.state !== 'play' && G.state !== 'over' && G.state !== 'pause') return;
+  if (!G.hist.length) { flash('NOTHING TO UNDO', true); sfx.deny(); return; }
+  cancelThink();
+  G.anim = null; G.pendingPromo = null;
+  var steps = (G.mode === 'cpu' && G.hist.length >= 2 && G.san.length >= 2) ? 2 : 1;
+  for (var s = 0; s < steps; s++) {
+    var h = G.hist.pop();
+    if (!h) break;
+    setFEN(G.P, h.fen);
+    G.san.length = h.sanLen;
+    G.taken.length = h.takenLen;
+    G.moveInts.length = h.sanLen;
+    G.last = h.last;
+  }
+  rebuildKeys();
+  G.state = 'play'; G.winner = 0; G.overReason = ''; G.overHead = '';
+  G.sel = -1; G.dests = [];
+  document.body.classList.add('playing');
+  hideOverlay();
+  refreshLegal();
+  sfx.undo();
+  flash('ROLLED BACK');
+  if (G.legal.length === 0) { beginTurn(); return; }
+  if (isCpuTurn()) startThink();
+}
+
+/* ------------------------------------------------------------ tap logic --
+   Tap a piece, its legal squares light up, tap one to move. When a tap is
+   refused the game says WHY — that one line is the difference between
+   learning chess and guessing at it. */
+function whyNot(from, to) {
+  var P = G.P, us = P.side;
+  var pseudo = genPseudo(P, []), i, found = 0;
+  for (i = 0; i < pseudo.length; i++) {
+    if (mFrom(pseudo[i]) === from && mTo(pseudo[i]) === to) { found = pseudo[i]; break; }
+  }
+  if (!found) {
+    var t = typeOf(P.bd[from]);
+    if (t === KING && Math.abs(fileOf(to) - fileOf(from)) === 2) return 'YOU CANNOT CASTLE THERE RIGHT NOW';
+    return 'A ' + PIECE_WORD[t] + ' DOES NOT MOVE LIKE THAT';
+  }
+  if (inCheck(P, us)) return 'YOUR KING IS IN CHECK — YOU MUST DEAL WITH THAT FIRST';
+  return 'THAT WOULD LEAVE YOUR KING IN CHECK';
+}
+var PIECE_WORD = ['', 'PAWN', 'KNIGHT', 'BISHOP', 'ROOK', 'QUEEN', 'KING'];
+
+function onSquareTap(sq) {
+  if (!canInput()) return false;
+  if (!onBoard(sq)) return false;
+  var P = G.P, p = P.bd[sq], k;
+
+  if (G.sel !== -1) {
+    var opts = [];
+    for (k = 0; k < G.legal.length; k++) {
+      if (mFrom(G.legal[k]) === G.sel && mTo(G.legal[k]) === sq) opts.push(G.legal[k]);
+    }
+    if (opts.length > 1 && mPromo(opts[0])) {
+      G.pendingPromo = { from: G.sel, to: sq, opts: opts };
+      promoScreen();
+      return true;
+    }
+    if (opts.length === 1) { applyMove(opts[0]); return true; }
+    if (p && colorOf(p) === P.side && sq !== G.sel) { /* fall through: reselect */ }
+    else {
+      if (p === 0 || colorOf(p) !== P.side) {
+        flash(whyNot(G.sel, sq), true);
+        sfx.deny(); G.shake = 4;
+        return false;
+      }
+    }
+  }
+
+  if (p && colorOf(p) === P.side) {
+    var mine = movesFrom(sq);
+    if (mine.length) {
+      G.sel = sq; G.dests = mine;
+      sfx.tap();
+      return true;
+    }
+    var pseudo = genPseudo(P, []), any = false;
+    for (k = 0; k < pseudo.length; k++) if (mFrom(pseudo[k]) === sq) { any = true; break; }
+    if (!any) flash('THAT ' + PIECE_WORD[typeOf(p)] + ' HAS NOWHERE TO GO', true);
+    else if (inCheck(P, P.side)) flash('YOUR KING IS IN CHECK — THAT PIECE CANNOT HELP', true);
+    else flash('THAT ' + PIECE_WORD[typeOf(p)] + ' IS PINNED — MOVING IT EXPOSES YOUR KING', true);
+    sfx.deny(); G.shake = 4; G.sel = -1; G.dests = [];
+    return false;
+  }
+  if (G.sel !== -1) { G.sel = -1; G.dests = []; return false; }
+  return false;
+}
+function choosePromo(t) {
+  if (!G.pendingPromo) return false;
+  var opts = G.pendingPromo.opts;
+  for (var i = 0; i < opts.length; i++) {
+    if (mPromo(opts[i]) === t) {
+      G.pendingPromo = null;
+      hideOverlay();
+      applyMove(opts[i]);
+      return true;
+    }
+  }
+  return false;
+}
+
+/* ================================================================ view === */
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var satop = document.getElementById('satop');
+var sabot = document.getElementById('sabot');
+var view = { w: 900, h: 600, dpr: 1, saTop: 0, saBot: 0 };
+
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(220, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  view.saTop = satop ? satop.offsetHeight : 0;
+  view.saBot = sabot ? sabot.offsetHeight : 0;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+  bgCache = null;
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+/* The board is a square that letterboxes into whatever shape the phone is.
+   Tall: HUD strip on top, board under it, action buttons below.
+   Wide (a landscape iPhone has about 342px of real height): the board takes
+   the full height and the HUD moves out into the side gutters. That is the
+   only way to keep every square at 40px or more, which is the whole point. */
+function metrics() {
+  var w = view.w, h = view.h;
+  var hudTop = 62 + view.saTop;
+  var botRes = 74 + view.saBot;
+  var wide = w > h * 1.12;
+  var size, ox, oy;
+  if (wide) {
+    size = Math.max(110, Math.min(h - 14, w - 250, 660));
+    ox = (w - size) / 2;
+    oy = Math.max(7, (h - size) / 2);
+  } else {
+    var availW = w - 14, availH = h - hudTop - botRes;
+    size = Math.max(110, Math.min(availW, availH, 660));
+    ox = (w - size) / 2;
+    /* bias the board upward rather than dead-centring it: on a tall phone a
+       square board leaves ~160px spare and it is worth far more under the
+       board (move list) than as a blank band above it */
+    oy = hudTop + Math.max(0, (availH - size) * 0.26);
+  }
+  return { size: size, cell: size / 8, ox: ox, oy: oy, wide: wide, hudTop: hudTop, botRes: botRes };
+}
+/* display row/col <-> 0x88 square, honouring the flip */
+function sqToRC(sq) {
+  var r = rankOf(sq), f = fileOf(sq);
+  return G.flip ? { r: r, c: 7 - f } : { r: 7 - r, c: f };
+}
+function rcToSq(r, c) {
+  if (r < 0 || r > 7 || c < 0 || c > 7) return -1;
+  return G.flip ? sq88(7 - c, r) : sq88(c, 7 - r);
+}
+function sqFromXY(x, y) {
+  var m = metrics();
+  var c = Math.floor((x - m.ox) / m.cell), r = Math.floor((y - m.oy) / m.cell);
+  return rcToSq(r, c);
+}
+function cxOf(m, sq) { return m.ox + (sqToRC(sq).c + 0.5) * m.cell; }
+function cyOf(m, sq) { return m.oy + (sqToRC(sq).r + 0.5) * m.cell; }
+function sqRect(m, sq) {
+  var rc = sqToRC(sq);
+  return { x: m.ox + rc.c * m.cell, y: m.oy + rc.r * m.cell, s: m.cell };
+}
+
+/* ------------------------------------------------------- board backdrop -- */
+var bgCache = null;
+function hashf(i, s) { var x = Math.sin(i * 127.1 + s * 311.7) * 43758.5453; return x - Math.floor(x); }
+function boardBG(size, flip) {
+  if (bgCache && bgCache.size === size && bgCache.dpr === view.dpr && bgCache.flip === flip) return bgCache.cv;
+  var d = view.dpr;
+  var c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(size * d));
+  c.height = Math.max(1, Math.round(size * d));
+  var g = c.getContext('2d');
+  g.setTransform(d, 0, 0, d, 0, 0);
+  var cell = size / 8, r, cc;
+  g.fillStyle = '#080c19'; g.fillRect(0, 0, size, size);
+  for (r = 0; r < 8; r++) for (cc = 0; cc < 8; cc++) {
+    var x = cc * cell, y = r * cell, i = r * 8 + cc;
+    var light = ((r + cc) & 1) === 0;
+    var gr = g.createLinearGradient(x, y, x + cell, y + cell);
+    if (light) { gr.addColorStop(0, '#9dabd0'); gr.addColorStop(1, '#8e9cc2'); }
+    else { gr.addColorStop(0, '#3d4d72'); gr.addColorStop(1, '#354363'); }
+    g.fillStyle = gr; g.fillRect(x, y, cell, cell);
+    /* etched traces, so the board reads as silicon rather than wood */
+    g.strokeStyle = light ? 'rgba(11,15,30,0.10)' : 'rgba(125,226,255,0.10)';
+    g.lineWidth = Math.max(1, cell * 0.024);
+    var n = 2;
+    for (var k = 0; k < n; k++) {
+      var a = hashf(i, k + 2), b2 = hashf(i, k + 9);
+      var px = x + cell * (0.18 + a * 0.64), py = y + cell * (0.18 + b2 * 0.64);
+      g.beginPath();
+      g.moveTo(x + cell * 0.06, py);
+      g.lineTo(px, py);
+      g.lineTo(px, y + cell * (b2 > 0.5 ? 0.94 : 0.06));
+      g.stroke();
+      g.fillStyle = light ? 'rgba(11,15,30,0.16)' : 'rgba(125,226,255,0.16)';
+      g.beginPath(); g.arc(px, py, Math.max(1, cell * 0.03), 0, TAU); g.fill();
+    }
+    g.strokeStyle = 'rgba(0,0,0,0.16)';
+    g.lineWidth = 1;
+    g.strokeRect(x + 0.5, y + 0.5, cell - 1, cell - 1);
+  }
+  /* coordinates, so a beginner can read the move list against the board */
+  g.font = 'bold ' + Math.max(7, Math.round(cell * 0.20)) + 'px "Segoe UI", system-ui, sans-serif';
+  g.textBaseline = 'alphabetic';
+  for (cc = 0; cc < 8; cc++) {
+    var fileCh = String.fromCharCode(97 + (flip ? 7 - cc : cc));
+    var lightB = ((7 + cc) & 1) === 0;
+    g.fillStyle = lightB ? 'rgba(11,15,30,0.55)' : 'rgba(234,242,255,0.55)';
+    g.textAlign = 'right';
+    g.fillText(fileCh, (cc + 1) * cell - cell * 0.09, 8 * cell - cell * 0.07);
+  }
+  for (r = 0; r < 8; r++) {
+    var rankCh = String(flip ? r + 1 : 8 - r);
+    var lightL = ((r + 0) & 1) === 0;
+    g.fillStyle = lightL ? 'rgba(11,15,30,0.55)' : 'rgba(234,242,255,0.55)';
+    g.textAlign = 'left';
+    g.fillText(rankCh, cell * 0.08, r * cell + cell * 0.24);
+  }
+  bgCache = { size: size, dpr: view.dpr, flip: flip, cv: c };
+  return c;
+}
+
+/* =============================================================== pieces ===
+   Every man is drawn by hand out of arcs and beziers. No glyphs: a chess
+   font renders differently on every phone, and half of them do not have one
+   at all. Unit box is 1 wide, origin at the piece's centre, y down. */
+function rr(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+  g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y);
+  g.closePath();
+}
+function fs(g) { g.fill(); g.stroke(); }
+
+function pathPawn(g) {
+  g.beginPath(); g.arc(0, -0.215, 0.118, 0, TAU); fs(g);
+  rr(g, -0.145, -0.115, 0.29, 0.062, 0.028); fs(g);
+  g.beginPath();
+  g.moveTo(-0.115, -0.052);
+  g.bezierCurveTo(-0.125, 0.06, -0.175, 0.16, -0.205, 0.215);
+  g.lineTo(0.205, 0.215);
+  g.bezierCurveTo(0.175, 0.16, 0.125, 0.06, 0.115, -0.052);
+  g.closePath(); fs(g);
+  rr(g, -0.255, 0.212, 0.51, 0.115, 0.036); fs(g);
+}
+function pathRook(g) {
+  g.beginPath();
+  g.moveTo(-0.245, -0.325); g.lineTo(-0.245, -0.20); g.lineTo(0.245, -0.20); g.lineTo(0.245, -0.325);
+  g.lineTo(0.135, -0.325); g.lineTo(0.135, -0.255); g.lineTo(0.055, -0.255); g.lineTo(0.055, -0.325);
+  g.lineTo(-0.055, -0.325); g.lineTo(-0.055, -0.255); g.lineTo(-0.135, -0.255); g.lineTo(-0.135, -0.325);
+  g.closePath(); fs(g);
+  rr(g, -0.215, -0.205, 0.43, 0.062, 0.02); fs(g);
+  g.beginPath();
+  g.moveTo(-0.155, -0.145);
+  g.bezierCurveTo(-0.17, 0.0, -0.185, 0.10, -0.205, 0.165);
+  g.lineTo(0.205, 0.165);
+  g.bezierCurveTo(0.185, 0.10, 0.17, 0.0, 0.155, -0.145);
+  g.closePath(); fs(g);
+  rr(g, -0.235, 0.16, 0.47, 0.062, 0.02); fs(g);
+  rr(g, -0.275, 0.215, 0.55, 0.112, 0.034); fs(g);
+}
+function pathBishop(g) {
+  g.beginPath(); g.arc(0, -0.365, 0.052, 0, TAU); fs(g);
+  g.beginPath();
+  g.moveTo(0, -0.325);
+  g.bezierCurveTo(0.135, -0.245, 0.175, -0.08, 0.125, 0.025);
+  g.lineTo(-0.125, 0.025);
+  g.bezierCurveTo(-0.175, -0.08, -0.135, -0.245, 0, -0.325);
+  g.closePath(); fs(g);
+  rr(g, -0.165, 0.02, 0.33, 0.058, 0.024); fs(g);
+  g.beginPath();
+  g.moveTo(-0.125, 0.078);
+  g.bezierCurveTo(-0.145, 0.13, -0.185, 0.17, -0.205, 0.215);
+  g.lineTo(0.205, 0.215);
+  g.bezierCurveTo(0.185, 0.17, 0.145, 0.13, 0.125, 0.078);
+  g.closePath(); fs(g);
+  rr(g, -0.265, 0.212, 0.53, 0.115, 0.036); fs(g);
+}
+function pathBishopSlit(g) {
+  g.beginPath();
+  g.moveTo(0.015, -0.245);
+  g.lineTo(0.105, -0.115);
+  g.stroke();
+}
+function pathKnight(g) {
+  g.beginPath();
+  g.moveTo(-0.30, 0.02);                                      /* muzzle tip */
+  g.lineTo(-0.295, 0.088);                                    /* squared-off nose */
+  g.quadraticCurveTo(-0.225, 0.142, -0.115, 0.152);           /* under the jaw */
+  g.quadraticCurveTo(-0.01, 0.155, 0.045, 0.215);             /* throat */
+  g.lineTo(0.235, 0.215);                                     /* neck, base */
+  g.quadraticCurveTo(0.262, 0.01, 0.208, -0.155);             /* back of neck */
+  g.quadraticCurveTo(0.192, -0.265, 0.128, -0.325);           /* mane up to ear */
+  g.lineTo(0.163, -0.462); g.lineTo(0.052, -0.322);           /* rear ear */
+  g.lineTo(0.028, -0.462); g.lineTo(-0.042, -0.305);          /* front ear */
+  g.quadraticCurveTo(-0.168, -0.262, -0.245, -0.118);         /* forehead */
+  g.quadraticCurveTo(-0.312, -0.04, -0.30, 0.02);             /* nose bridge */
+  g.closePath(); fs(g);
+  rr(g, -0.265, 0.212, 0.53, 0.115, 0.036); fs(g);
+}
+function pathQueen(g) {
+  g.beginPath();
+  g.moveTo(-0.255, -0.31); g.lineTo(-0.19, -0.075);
+  g.lineTo(-0.125, -0.295); g.lineTo(-0.06, -0.075);
+  g.lineTo(0, -0.345); g.lineTo(0.06, -0.075);
+  g.lineTo(0.125, -0.295); g.lineTo(0.19, -0.075);
+  g.lineTo(0.255, -0.31);
+  g.lineTo(0.225, 0.015); g.lineTo(-0.225, 0.015);
+  g.closePath(); fs(g);
+  var pts = [[-0.255, -0.31], [-0.125, -0.295], [0, -0.345], [0.125, -0.295], [0.255, -0.31]];
+  for (var i = 0; i < 5; i++) { g.beginPath(); g.arc(pts[i][0], pts[i][1], 0.048, 0, TAU); fs(g); }
+  rr(g, -0.205, 0.01, 0.41, 0.058, 0.022); fs(g);
+  g.beginPath();
+  g.moveTo(-0.165, 0.068);
+  g.bezierCurveTo(-0.185, 0.12, -0.215, 0.17, -0.235, 0.215);
+  g.lineTo(0.235, 0.215);
+  g.bezierCurveTo(0.215, 0.17, 0.185, 0.12, 0.165, 0.068);
+  g.closePath(); fs(g);
+  rr(g, -0.285, 0.212, 0.57, 0.115, 0.036); fs(g);
+}
+function pathKing(g) {
+  /* The cross has to be BOLD. Drawn thin it disappears at phone size and
+     the king reads as a pawn — which is exactly what happened first time. */
+  g.beginPath();
+  g.moveTo(-0.062, -0.285); g.lineTo(-0.062, -0.345);
+  g.lineTo(-0.185, -0.345); g.lineTo(-0.185, -0.442);
+  g.lineTo(-0.062, -0.442); g.lineTo(-0.062, -0.532);
+  g.lineTo(0.062, -0.532); g.lineTo(0.062, -0.442);
+  g.lineTo(0.185, -0.442); g.lineTo(0.185, -0.345);
+  g.lineTo(0.062, -0.345); g.lineTo(0.062, -0.285);
+  g.closePath(); fs(g);
+  g.beginPath();
+  g.moveTo(-0.245, -0.145);
+  g.quadraticCurveTo(-0.235, -0.335, -0.055, -0.285);
+  g.lineTo(0.055, -0.285);
+  g.quadraticCurveTo(0.235, -0.335, 0.245, -0.145);
+  g.closePath(); fs(g);
+  rr(g, -0.255, -0.155, 0.51, 0.072, 0.022); fs(g);
+  g.beginPath();
+  g.moveTo(-0.175, -0.09);
+  g.bezierCurveTo(-0.20, 0.05, -0.235, 0.15, -0.255, 0.215);
+  g.lineTo(0.255, 0.215);
+  g.bezierCurveTo(0.235, 0.15, 0.20, 0.05, 0.175, -0.09);
+  g.closePath(); fs(g);
+  rr(g, -0.295, 0.212, 0.59, 0.115, 0.036); fs(g);
+}
+var PIECE_PATH = [null, pathPawn, pathKnight, pathBishop, pathRook, pathQueen, pathKing];
+/* A real set makes pawns visibly smaller than the officers. Drawn all one
+   size, the pawn and the bishop were hard to tell apart at 41px. */
+var PIECE_SCALE = [1, 0.86, 1.0, 1.0, 0.95, 1.02, 1.04];
+
+function drawPiece(g, cx, cy, s0, piece, alpha) {
+  if (!piece) return;
+  var white = colorOf(piece) === WHITE, t = typeOf(piece);
+  var s = s0 * PIECE_SCALE[t];
+  g.save();
+  g.globalAlpha = (alpha === undefined || alpha === null) ? 1 : alpha;
+  g.translate(cx, cy + s0 * 0.03 + (s0 - s) * 0.30);
+  g.scale(s, s);
+  /* contact shadow */
+  g.fillStyle = 'rgba(0,0,0,0.42)';
+  g.beginPath(); g.ellipse(0.02, 0.345, 0.30, 0.072, 0, 0, TAU); g.fill();
+
+  /* Both sides have to sit clear of BOTH square colours: the light side is
+     warmer and lighter than either, the dark side darker than either. The
+     first cut had black pieces the same value as the light squares and they
+     read as hollow outlines on a phone. */
+  var grd = g.createLinearGradient(-0.2, -0.5, 0.24, 0.34);
+  if (white) {
+    grd.addColorStop(0, '#fffbef'); grd.addColorStop(0.45, '#f3e0b0'); grd.addColorStop(1, '#b8944c');
+  } else {
+    grd.addColorStop(0, '#465c86'); grd.addColorStop(0.45, '#18213a'); grd.addColorStop(1, '#060a15');
+  }
+  g.fillStyle = grd;
+  g.strokeStyle = white ? 'rgba(44,30,4,0.92)' : 'rgba(146,214,255,0.85)';
+  g.lineWidth = 0.032;
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  PIECE_PATH[t](g);
+
+  if (t === BISHOP) {
+    g.strokeStyle = white ? 'rgba(48,33,6,0.7)' : 'rgba(125,226,255,0.55)';
+    g.lineWidth = 0.028;
+    pathBishopSlit(g);
+  }
+  if (t === KNIGHT) {
+    g.fillStyle = white ? 'rgba(44,30,4,0.9)' : 'rgba(146,214,255,0.8)';
+    g.beginPath(); g.arc(-0.10, -0.155, 0.026, 0, TAU); g.fill();
+    g.beginPath(); g.arc(-0.255, 0.058, 0.017, 0, TAU); g.fill();
+    g.strokeStyle = white ? 'rgba(44,30,4,0.42)' : 'rgba(146,214,255,0.40)';
+    g.lineWidth = 0.026;
+    g.beginPath(); g.moveTo(0.045, -0.215); g.lineTo(0.135, -0.185); g.stroke();
+    g.beginPath(); g.moveTo(0.068, -0.105); g.lineTo(0.16, -0.078); g.stroke();
+    g.beginPath(); g.moveTo(-0.215, 0.108); g.lineTo(-0.125, 0.098); g.stroke();
+  }
+  /* one specular sweep so the piece has a top */
+  g.globalAlpha = (alpha === undefined || alpha === null ? 1 : alpha) * (white ? 0.35 : 0.22);
+  g.fillStyle = white ? '#ffffff' : '#a9d8ff';
+  g.beginPath(); g.ellipse(-0.09, -0.20, 0.055, 0.115, -0.35, 0, TAU); g.fill();
+  g.restore();
+}
+
+/* ================================================================= HUD === */
+function statusText() {
+  if (G.state === 'over') return G.overHead;
+  if (G.state === 'title') return '';
+  if (G.pendingPromo) return 'CHOOSE A PIECE';
+  if (G.thinking) return (STRENGTH[G.strength] || STRENGTH.bimodal).name + ' IS PREDICTING...';
+  if (inCheck(G.P, G.P.side)) return sideName(G.P.side) + ' IS IN CHECK';
+  if (G.mode === 'cpu') return G.P.side === HUMAN() ? 'YOUR MOVE' : 'CPU TO MOVE';
+  return sideName(G.P.side) + ' TO MOVE';
+}
+/* Captured material, drawn with the same pieces as the board and sorted by
+   value so it reads as a stack rather than a smear. */
+function drawTakenRow(g, x, y, list, want, maxw) {
+  var items = [], i;
+  for (i = 0; i < list.length; i++) if (colorOf(list[i]) === want) items.push(list[i]);
+  if (!items.length) return 0;
+  items.sort(function (a, b) { return VAL[typeOf(a)] - VAL[typeOf(b)]; });
+  var per = clamp(maxw / items.length, 9, 15);
+  for (i = 0; i < items.length; i++) drawPiece(g, x + 10 + i * per, y, 19, items[i], 0.95);
+  return items.length * per + 14;
+}
+function drawSideTag(g, x, y, c, active, adv) {
+  var col = c === WHITE ? '#f0dca8' : '#7de2ff';
+  g.save();
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  if (active) {
+    g.globalAlpha = 0.15; g.fillStyle = col;
+    rr(g, x - 7, y - 12, 108, 24, 6); g.fill();
+    g.globalAlpha = 1;
+  }
+  g.fillStyle = col;
+  g.beginPath(); g.arc(x + 5, y, 5.5, 0, TAU); g.fill();
+  g.font = 'bold 11.5px "Segoe UI", system-ui, sans-serif';
+  g.fillStyle = active ? col : 'rgba(234,242,255,0.62)';
+  g.fillText(sideName(c), x + 16, y + 0.5);
+  if (adv > 0) {
+    g.font = 'bold 12.5px "Segoe UI", system-ui, sans-serif';
+    g.fillStyle = '#ffcc4d';
+    g.fillText('+' + adv, x + 66, y + 0.5);
+  }
+  g.restore();
+}
+/* Refusals like "THAT KNIGHT IS PINNED — MOVING IT EXPOSES YOUR KING" are the
+   whole point of the game for a beginner, and they are far too long for the
+   HUD strip — in the HUD they ran under the reserved top-right buttons. They
+   get their own pill, laid over the board where the player is already
+   looking, in both orientations. */
+function wrapLines(g, txt, maxw) {
+  var words = String(txt).split(' '), lines = [], line = '';
+  for (var i = 0; i < words.length; i++) {
+    var tryl = line ? line + ' ' + words[i] : words[i];
+    if (g.measureText(tryl).width > maxw && line) { lines.push(line); line = words[i]; }
+    else line = tryl;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+function drawBanner(g, m) {
+  if (!(G.msgT > 0 && G.msg)) return;
+  var a = clamp(G.msgT / 0.45, 0, 1);
+  var fsz = m.cell < 44 ? 11 : 12.5;
+  g.save();
+  g.globalAlpha = a;
+  g.font = 'bold ' + fsz + 'px "Segoe UI", system-ui, sans-serif';
+  var maxw = m.size - 40;
+  var lines = wrapLines(g, G.msg, maxw);
+  if (lines.length > 3) lines = lines.slice(0, 3);
+  var wdt = 0;
+  for (var i = 0; i < lines.length; i++) wdt = Math.max(wdt, g.measureText(lines[i]).width);
+  var lh = fsz + 4;
+  var bw = Math.min(m.size - 8, wdt + 26), bh = lines.length * lh + 14;
+  var bx = m.ox + (m.size - bw) / 2;
+  var by = m.oy + m.size - bh - 6;
+  g.fillStyle = 'rgba(5,8,18,0.90)';
+  rr(g, bx, by, bw, bh, 10); g.fill();
+  g.strokeStyle = G.msgBad ? 'rgba(255,124,90,0.85)' : 'rgba(255,204,77,0.75)';
+  g.lineWidth = 1.5;
+  rr(g, bx + 0.75, by + 0.75, bw - 1.5, bh - 1.5, 10); g.stroke();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = G.msgBad ? '#ff9f80' : '#ffcc4d';
+  for (i = 0; i < lines.length; i++) g.fillText(lines[i], bx + bw / 2, by + 7 + lh * (i + 0.5));
+  g.restore();
+}
+function wrapText(g, txt, x, y, maxw, lh, maxLines) {
+  var words = String(txt).split(' '), line = '', n = 0;
+  for (var i = 0; i < words.length; i++) {
+    var tryl = line ? line + ' ' + words[i] : words[i];
+    if (g.measureText(tryl).width > maxw && line) {
+      g.fillText(line, x, y); y += lh; line = words[i]; n++;
+      if (maxLines && n >= maxLines) return y;
+    } else line = tryl;
+  }
+  if (line) { g.fillText(line, x, y); y += lh; }
+  return y;
+}
+function recentMoves(count) {
+  var out = [], start = Math.max(0, G.san.length - count);
+  for (var i = start; i < G.san.length; i++) {
+    var num = Math.floor(i / 2) + 1;
+    out.push((i % 2 === 0 ? num + '. ' : (i === start ? num + '... ' : '')) + G.san[i]);
+  }
+  return out;
+}
+function drawHUD(g, m, t) {
+  var mode = G.mode === 'cpu' ? ('VS ' + (STRENGTH[G.strength] || STRENGTH.bimodal).name) : '2 PLAYERS';
+  var st = statusText();
+  var stCol = inCheck(G.P, G.P.side) && G.state === 'play' ? '#ff8f6a' : 'rgba(234,242,255,0.74)';
+  var mat = materialCount(G.P);
+  g.save();
+  if (!m.wide) {
+    var y1 = view.saTop + 20, y2 = view.saTop + 44;
+    drawSideTag(g, 12, y1, WHITE, G.P.side === WHITE, mat.adv > 0 ? mat.adv : 0);
+    drawSideTag(g, 126, y1, BLACK, G.P.side === BLACK, mat.adv < 0 ? -mat.adv : 0);
+    g.textAlign = 'right'; g.textBaseline = 'middle';
+    g.font = 'bold 10.5px "Segoe UI", system-ui, sans-serif';
+    g.fillStyle = 'rgba(234,242,255,0.5)';
+    g.fillText(mode, view.w - 108, y1);
+    /* the top-right 100x52 belongs to the icon buttons — the status line
+       must never grow into it */
+    g.textAlign = 'left';
+    g.fillStyle = stCol;
+    var maxSt = view.w - 12 - 112;
+    var szs = [12, 11, 10, 9];
+    for (var z = 0; z < szs.length; z++) {
+      g.font = 'bold ' + szs[z] + 'px "Segoe UI", system-ui, sans-serif';
+      if (g.measureText(st).width <= maxSt || z === szs.length - 1) break;
+    }
+    while (st.length > 4 && g.measureText(st).width > maxSt) st = st.slice(0, -2);
+    g.fillText(st, 12, y2);
+    /* captured material, drawn with the same pieces as the board */
+    var ty = m.oy - 13;
+    if (m.oy - m.hudTop >= 18) {
+      drawTakenRow(g, m.ox, ty, G.taken, BLACK, m.size * 0.45);
+      drawTakenRow(g, m.ox + m.size * 0.52, ty, G.taken, WHITE, m.size * 0.45);
+    }
+    /* A square board on a 390px phone leaves a lot of room underneath.
+       Spend it on the move list — the thing a learner most wants to look
+       back at — rather than leaving a dead band. */
+    var py0 = m.oy + m.size + 12;
+    var avail = (view.h - view.saBot - 74) - py0;
+    if (avail > 34) {
+      var ph = Math.min(avail - 6, 216);
+      g.save();
+      g.fillStyle = 'rgba(255,255,255,0.045)';
+      rr(g, m.ox, py0, m.size, ph, 12); g.fill();
+      g.strokeStyle = 'rgba(255,255,255,0.10)'; g.lineWidth = 1;
+      rr(g, m.ox + 0.5, py0 + 0.5, m.size - 1, ph - 1, 12); g.stroke();
+      g.textAlign = 'left'; g.textBaseline = 'middle';
+      g.font = 'bold 9px "Segoe UI", system-ui, sans-serif';
+      g.fillStyle = 'rgba(255,204,77,0.65)';
+      g.fillText('MOVE LIST', m.ox + 12, py0 + 13);
+      var pairs = [], i;
+      for (i = 0; i < G.san.length; i += 2) {
+        pairs.push({ n: i / 2 + 1, a: G.san[i], b: G.san[i + 1] || '', last: (i + 1 >= G.san.length - 1) });
+      }
+      var lh = 15, rows = Math.max(1, Math.floor((ph - 24) / lh));
+      var cols = m.size > 300 ? 2 : 1, cw = m.size / cols;
+      var capN = rows * cols, from = Math.max(0, pairs.length - capN);
+      g.font = 'bold 12px "Segoe UI", system-ui, sans-serif';
+      for (i = from; i < pairs.length; i++) {
+        var k2 = i - from, col = Math.floor(k2 / rows), row = k2 % rows;
+        var tx = m.ox + 12 + col * cw, ty2 = py0 + 28 + row * lh;
+        var p2 = pairs[i];
+        g.fillStyle = 'rgba(234,242,255,0.32)';
+        g.fillText(p2.n + '.', tx, ty2);
+        g.fillStyle = (i === pairs.length - 1) ? '#ffcc4d' : 'rgba(234,242,255,0.78)';
+        g.fillText(p2.a, tx + 24, ty2);
+        if (p2.b) g.fillText(p2.b, tx + 24 + Math.max(38, cw * 0.28), ty2);
+      }
+      if (!pairs.length) {
+        g.font = 'bold 11.5px "Segoe UI", system-ui, sans-serif';
+        g.fillStyle = 'rgba(234,242,255,0.3)';
+        g.fillText('Every move you play is written here in chess notation.', m.ox + 12, py0 + 32);
+      }
+      g.restore();
+    }
+  } else {
+    var px = 12, pw = Math.max(74, m.ox - 22);
+    var py = Math.max(14, m.oy + 4);
+    g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.font = 'bold 13px "Segoe UI", system-ui, sans-serif';
+    g.fillStyle = '#ffcc4d';
+    g.fillText('BRANCH', px, py);
+    g.font = 'bold 9.5px "Segoe UI", system-ui, sans-serif';
+    g.fillStyle = 'rgba(234,242,255,0.42)';
+    g.fillText(mode, px, py + 15);
+    drawSideTag(g, px, py + 42, WHITE, G.P.side === WHITE, mat.adv > 0 ? mat.adv : 0);
+    drawSideTag(g, px, py + 68, BLACK, G.P.side === BLACK, mat.adv < 0 ? -mat.adv : 0);
+    drawTakenRow(g, px - 4, py + 92, G.taken, BLACK, pw - 12);
+    drawTakenRow(g, px - 4, py + 114, G.taken, WHITE, pw - 12);
+    g.font = 'bold 11px "Segoe UI", system-ui, sans-serif';
+    g.fillStyle = stCol;
+    wrapText(g, st, px, py + 140, Math.min(pw, 170), 14, 4);
+    /* right gutter: the move list, kept clear of the top-right buttons */
+    var rx = m.ox + m.size + 12;
+    var rw = view.w - rx - 8;
+    if (rw > 62) {
+      var ry = Math.max(62, m.oy + 4);
+      g.textAlign = 'left'; g.textBaseline = 'middle';
+      g.font = 'bold 9px "Segoe UI", system-ui, sans-serif';
+      g.fillStyle = 'rgba(255,204,77,0.6)';
+      g.fillText('MOVES', rx, ry);
+      g.font = 'bold 11px "Segoe UI", system-ui, sans-serif';
+      var lines = [], i;
+      for (i = 0; i < G.san.length; i += 2) {
+        lines.push((i / 2 + 1) + '. ' + G.san[i] + (G.san[i + 1] ? ' ' + G.san[i + 1] : ''));
+      }
+      var maxLines = Math.max(1, Math.floor((m.oy + m.size - ry - 14) / 14));
+      var from = Math.max(0, lines.length - maxLines);
+      for (i = from; i < lines.length; i++) {
+        g.fillStyle = (i === lines.length - 1) ? 'rgba(234,242,255,0.9)' : 'rgba(234,242,255,0.44)';
+        g.fillText(lines[i], rx, ry + 16 + (i - from) * 14);
+      }
+    }
+  }
+  g.restore();
+}
+
+/* ============================================================== render === */
+function render(t) {
+  var g = ctx, m = metrics(), i, k;
+  g.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  var bg = g.createLinearGradient(0, 0, 0, view.h);
+  bg.addColorStop(0, '#0d1224'); bg.addColorStop(1, '#070a16');
+  g.fillStyle = bg; g.fillRect(0, 0, view.w, view.h);
+  g.strokeStyle = 'rgba(125,226,255,0.04)'; g.lineWidth = 1;
+  for (i = 0; i < view.w; i += 44) { g.beginPath(); g.moveTo(i + 0.5, 0); g.lineTo(i + 0.5, view.h); g.stroke(); }
+  for (i = 0; i < view.h; i += 44) { g.beginPath(); g.moveTo(0, i + 0.5); g.lineTo(view.w, i + 0.5); g.stroke(); }
+
+  if (G.state === 'title') { drawTitleArt(g, m, t); return; }
+
+  g.save();
+  if (G.shake > 0.05) g.translate((Math.random() - 0.5) * G.shake, (Math.random() - 0.5) * G.shake);
+
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,0.75)'; g.shadowBlur = 26; g.shadowOffsetY = 8;
+  g.fillStyle = '#05070f';
+  g.fillRect(m.ox - 6, m.oy - 6, m.size + 12, m.size + 12);
+  g.restore();
+  g.drawImage(boardBG(m.size, G.flip), m.ox, m.oy, m.size, m.size);
+  g.strokeStyle = 'rgba(255,204,77,0.30)'; g.lineWidth = 2;
+  g.strokeRect(m.ox - 3.5, m.oy - 3.5, m.size + 7, m.size + 7);
+
+  var cell = m.cell, P = G.P;
+  var showHints = G.state === 'play' && !G.anim && !G.thinking && !G.pendingPromo &&
+                  (G.mode === 'two' || P.side === HUMAN());
+
+  /* the last move, marked at both ends */
+  if (G.last) {
+    g.save();
+    g.fillStyle = 'rgba(125,226,255,0.20)';
+    var ra = sqRect(m, G.last.from), rb = sqRect(m, G.last.to);
+    g.fillRect(ra.x, ra.y, ra.s, ra.s);
+    g.fillRect(rb.x, rb.y, rb.s, rb.s);
+    g.strokeStyle = 'rgba(125,226,255,0.5)'; g.lineWidth = 2;
+    g.strokeRect(rb.x + 1, rb.y + 1, rb.s - 2, rb.s - 2);
+    g.restore();
+  }
+
+  /* a king in check is impossible to miss */
+  var ck = P.side;
+  if (G.state === 'play' && inCheck(P, ck)) {
+    var kr = sqRect(m, kingSq(P, ck));
+    var pulse = 0.55 + 0.45 * Math.sin(t * 6.0);
+    g.save();
+    g.fillStyle = 'rgba(255,80,72,' + (0.24 + pulse * 0.24) + ')';
+    g.fillRect(kr.x, kr.y, kr.s, kr.s);
+    g.strokeStyle = 'rgba(255,124,90,' + (0.6 + pulse * 0.4) + ')';
+    g.lineWidth = 3;
+    g.strokeRect(kr.x + 1.5, kr.y + 1.5, kr.s - 3, kr.s - 3);
+    g.restore();
+  }
+
+  /* selection */
+  if (G.sel !== -1 && showHints) {
+    var sr = sqRect(m, G.sel);
+    g.save();
+    g.fillStyle = 'rgba(255,204,77,0.22)';
+    g.fillRect(sr.x, sr.y, sr.s, sr.s);
+    g.strokeStyle = '#ffcc4d'; g.lineWidth = 2.5;
+    g.strokeRect(sr.x + 1.5, sr.y + 1.5, sr.s - 3, sr.s - 3);
+    g.restore();
+  }
+
+  /* pieces */
+  var skipFrom = -1, skipTo = -1;
+  if (G.anim) { skipTo = mTo(G.anim.m); }
+  var pieceScale = cell * 0.92;
+  for (i = 0; i < 128; i++) {
+    if (i & 0x88) { i += 7; continue; }
+    var pc = P.bd[i];
+    if (!pc) continue;
+    if (i === skipTo && G.anim) continue;
+    drawPiece(g, cxOf(m, i), cyOf(m, i), pieceScale, pc, 1);
+  }
+
+  /* legal destinations: a dot on an empty square, a ring around a capture */
+  if (showHints && G.dests.length) {
+    var bob = 0.5 + 0.5 * Math.sin(t * 5.0);
+    for (k = 0; k < G.dests.length; k++) {
+      var dsq = mTo(G.dests[k]);
+      var dx = cxOf(m, dsq), dy = cyOf(m, dsq);
+      var isCap = mCap(G.dests[k]) !== 0 || (mFlags(G.dests[k]) & F_EP) !== 0;
+      g.save();
+      if (isCap) {
+        g.strokeStyle = 'rgba(255,124,90,0.92)';
+        g.lineWidth = Math.max(3, cell * 0.085);
+        g.beginPath(); g.arc(dx, dy, cell * 0.42, 0, TAU); g.stroke();
+      } else {
+        g.shadowColor = 'rgba(255,204,77,0.85)'; g.shadowBlur = 10;
+        g.fillStyle = 'rgba(255,204,77,0.92)';
+        g.beginPath(); g.arc(dx, dy, cell * (0.135 + bob * 0.022), 0, TAU); g.fill();
+      }
+      if (mFlags(G.dests[k]) & (F_CASTLE_K | F_CASTLE_Q)) {
+        g.shadowBlur = 0;
+        g.fillStyle = 'rgba(255,204,77,0.9)';
+        g.font = 'bold ' + Math.round(cell * 0.22) + 'px "Segoe UI", system-ui, sans-serif';
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText('O-O' + ((mFlags(G.dests[k]) & F_CASTLE_Q) ? '-O' : ''), dx, dy - cell * 0.30);
+      }
+      g.restore();
+    }
+  }
+
+  /* the piece in flight */
+  if (G.anim) {
+    var am = G.anim.m;
+    var lt = ease(clamp(G.anim.t / G.anim.dur, 0, 1));
+    var ax = lerp(cxOf(m, mFrom(am)), cxOf(m, mTo(am)), lt);
+    var ay = lerp(cyOf(m, mFrom(am)), cyOf(m, mTo(am)), lt);
+    var hop = Math.sin(lt * Math.PI) * cell * 0.10;
+    drawPiece(g, ax, ay - hop, pieceScale * (1 + hop / cell * 0.22), P.bd[mTo(am)], 1);
+  }
+
+  /* keyboard / gamepad cursor */
+  if (G.curOn && showHints) {
+    var cr = sqRect(m, G.cur);
+    g.save();
+    g.strokeStyle = 'rgba(234,242,255,0.88)'; g.lineWidth = 2;
+    g.strokeRect(cr.x + 2, cr.y + 2, cr.s - 4, cr.s - 4);
+    g.restore();
+  }
+
+  g.restore();
+  drawBanner(g, m);
+  drawHUD(g, m, t);
+}
+
+/* The title keeps a live board behind the card so the arcade never shows a
+   dead rectangle. */
+var titlePos = null;
+function drawTitleArt(g, m, t) {
+  if (!titlePos) { titlePos = newPos(); setFEN(titlePos, START_FEN); }
+  g.save();
+  g.globalAlpha = 0.5;
+  g.drawImage(boardBG(m.size, false), m.ox, m.oy, m.size, m.size);
+  var saveFlip = G.flip; G.flip = false;
+  for (var i = 0; i < 128; i++) {
+    if (i & 0x88) { i += 7; continue; }
+    var p = titlePos.bd[i];
+    if (!p) continue;
+    var wob = Math.sin(t * 1.1 + i * 0.31) * 1.6;
+    drawPiece(g, cxOf(m, i), cyOf(m, i) + wob, m.cell * 0.9, p, 0.85);
+  }
+  G.flip = saveFlip;
+  g.restore();
+}
+
+/* ============================================================= overlays == */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+function recLine(k) {
+  var r = G.rec[k] || blankRec();
+  return r.w + '&ndash;' + r.l + (r.d ? '&ndash;' + r.d : '');
+}
+function moveListHTML() {
+  if (!G.san.length) return '<div class="movelist"><i>No moves yet.</i></div>';
+  var s = '', i;
+  for (i = 0; i < G.san.length; i += 2) {
+    s += '<i>' + (i / 2 + 1) + '.</i> <b>' + G.san[i] + '</b> ';
+    if (G.san[i + 1]) s += '<b>' + G.san[i + 1] + '</b> ';
+  }
+  return '<div class="movelist">' + s + '</div>';
+}
+function titleScreen() {
+  G.state = 'title';
+  cancelThink();
+  document.body.classList.remove('playing');
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>BRANCH</h1>' +
+      '<div class="tagline">Chess, running inside the machine. Every move opens a branch &mdash; the CPU walks the tree and tries to <b>predict</b> which one you take.' +
+        '<span class="ext"> Full rules: castling, en passant, promotion, the fifty-move rule and threefold repetition. ' +
+        'Tap a piece and every legal square lights up; if a move is refused the machine tells you why.</span></div>' +
+      '<div class="keys">' +
+        '<div class="hdr">Play</div><div class="hdr">Keys</div>' +
+        '<div>Pick a piece, then a lit square<span>Tap / click</span></div><div>Move the cursor<span>Arrows</span></div>' +
+        '<div>Gold dot = you can move there<span>Legal</span></div><div>Select / confirm<span>Enter</span></div>' +
+        '<div>Red ring = you can take that<span>Capture</span></div><div>Undo a move<span>U</span></div>' +
+        '<div>Red square = your king is in check<span>Check</span></div><div>Flip the board<span>F</span></div>' +
+        '<div>Cyan squares = the last move played<span>History</span></div><div>Pause / mute<span>Esc / M</span></div>' +
+      '</div>' +
+      '<div class="lbl">Play the CPU &mdash; you are White</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn sm" data-act="s_static">STATIC</button>' +
+        '<button class="btn sm" data-act="s_bimodal">BIMODAL</button>' +
+        '<button class="btn sm" data-act="s_perceptron">PERCEPTRON</button>' +
+      '</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Static W&ndash;L</div><div class="v">' + recLine('static') + '</div></div>' +
+        '<div class="stat"><div class="k">Bimodal W&ndash;L</div><div class="v">' + recLine('bimodal') + '</div></div>' +
+        '<div class="stat"><div class="k">Perceptron W&ndash;L</div><div class="v accent">' + recLine('perceptron') + '</div></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn ghost" data-act="two">2 PLAYERS</button>' +
+      '</div>' +
+      '<div class="best">Two players share one device &mdash; White moves first, FLIP turns the board around.</div>' +
+    '</div>');
+}
+function pauseScreen() {
+  var mat = materialCount(G.P);
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Move</div><div class="v accent">' + G.P.full + '</div></div>' +
+        '<div class="stat"><div class="k">Material</div><div class="v">' + (mat.adv === 0 ? 'level' : (mat.adv > 0 ? 'W +' + mat.adv : 'B +' + (-mat.adv))) + '</div></div>' +
+        '<div class="stat"><div class="k">50-move</div><div class="v">' + G.P.half + '</div></div>' +
+      '</div>' +
+      moveListHTML() +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="undo">UNDO</button>' +
+        '<button class="btn ghost" data-act="restart">RESTART</button>' +
+        '<button class="btn ghost" data-act="quit">QUIT</button>' +
+      '</div>' +
+    '</div>');
+}
+function overScreen() {
+  var head = G.overHead, sub = G.overReason, col = 'var(--fg)';
+  if (G.mode === 'cpu') {
+    var hs = (HUMAN() === WHITE) ? G.winner : -G.winner;
+    if (hs > 0) { head = 'BRANCH TAKEN'; sub = 'You beat ' + STRENGTH[G.strength].name + '. ' + G.overReason; col = 'var(--accent)'; }
+    else if (hs < 0) { head = 'MISPREDICTED'; sub = STRENGTH[G.strength].name + ' got you. ' + G.overReason; col = 'var(--dark)'; }
+    else { head = 'PIPELINE STALL'; sub = G.overReason; }
+  } else if (G.winner !== 0) {
+    head = sideName(G.winner > 0 ? WHITE : BLACK) + ' WINS';
+    col = G.winner > 0 ? 'var(--light)' : 'var(--dark)';
+  }
+  var r = G.rec[G.strength] || blankRec();
+  var mat = materialCount(G.P);
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">' + (G.mode === 'cpu' ? 'vs ' + STRENGTH[G.strength].name : '2 players') + ' &middot; ' + G.overHead + '</div>' +
+      '<h2 style="color:' + col + '">' + head + '</h2>' +
+      '<div class="tagline">' + sub + '</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Moves</div><div class="v accent">' + Math.ceil(G.san.length / 2) + '</div></div>' +
+        '<div class="stat"><div class="k">Material</div><div class="v">' + (mat.adv === 0 ? 'level' : (mat.adv > 0 ? 'W +' + mat.adv : 'B +' + (-mat.adv))) + '</div></div>' +
+        '<div class="stat"><div class="k">Taken</div><div class="v">' + G.taken.length + '</div></div>' +
+      '</div>' +
+      moveListHTML() +
+      (G.mode === 'cpu' ? '<div class="best">Record vs ' + STRENGTH[G.strength].name + ': <b>' + r.w + ' W</b> &middot; ' + r.l + ' L' + (r.d ? ' &middot; ' + r.d + ' D' : '') + '</div>' : '') +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="again">REMATCH</button>' +
+        '<button class="btn ghost" data-act="undo">UNDO</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>');
+}
+function promoScreen() {
+  var side = G.P.side;
+  var names = [['q', QUEEN, 'Queen'], ['r', ROOK, 'Rook'], ['b', BISHOP, 'Bishop'], ['n', KNIGHT, 'Knight']];
+  var h = '<div class="card">' +
+    '<div class="eyebrow">Promotion</div>' +
+    '<h2>PICK A PIECE</h2>' +
+    '<div class="tagline">Your pawn reached the far rank. It becomes whatever you choose &mdash; a knight is sometimes better than a queen.</div>' +
+    '<div id="promoCv">';
+  for (var i = 0; i < names.length; i++) {
+    h += '<button class="promobtn" data-act="p_' + names[i][0] + '" data-pt="' + names[i][1] + '">' + names[i][2] + '</button>';
+  }
+  h += '</div></div>';
+  showOverlay(h);
+  var btns = overlay.querySelectorAll('.promobtn');
+  for (var k = 0; k < btns.length; k++) {
+    var c = document.createElement('canvas');
+    var sz = 56, d = Math.min(window.devicePixelRatio || 1, 2);
+    c.width = sz * d; c.height = sz * d;
+    c.style.width = sz + 'px'; c.style.height = sz + 'px';
+    var gg = c.getContext('2d');
+    gg.setTransform(d, 0, 0, d, 0, 0);
+    drawPiece(gg, sz / 2, sz / 2, sz * 0.92, side | parseInt(btns[k].getAttribute('data-pt'), 10), 1);
+    btns[k].insertBefore(c, btns[k].firstChild);
+  }
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 's_static') startGame('cpu', 'static');
+  else if (act === 's_bimodal') startGame('cpu', 'bimodal');
+  else if (act === 's_perceptron') startGame('cpu', 'perceptron');
+  else if (act === 'two') startGame('two');
+  else if (act === 'again' || act === 'restart') startGame(G.mode, G.strength);
+  else if (act === 'undo') undo();
+  else if (act === 'resume') togglePause();
+  else if (act === 'quit' || act === 'title') titleScreen();
+  else if (act === 'p_q') choosePromo(QUEEN);
+  else if (act === 'p_r') choosePromo(ROOK);
+  else if (act === 'p_b') choosePromo(BISHOP);
+  else if (act === 'p_n') choosePromo(KNIGHT);
+});
+function togglePause() {
+  if (G.state === 'play') { G.state = 'pause'; pauseScreen(); }
+  else if (G.state === 'pause') {
+    G.state = 'play';
+    if (G.pendingPromo) promoScreen(); else hideOverlay();
+    if (aiJob && !aiTimer) { aiJob.deadline = nowMs() + aiJob.budget; aiTimer = setTimeout(aiTick, 0); }
+  }
+}
+
+/* =============================================================== input === */
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { initAudio(); togglePause(); });
+document.getElementById('undoBtn').addEventListener('click', function () { initAudio(); undo(); });
+document.getElementById('flipBtn').addEventListener('click', function () { initAudio(); G.flip = !G.flip; bgCache = null; sfx.tap(); });
+
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+cv.addEventListener('pointerdown', function (e) {
+  initAudio();
+  if (e.pointerType === 'touch' && !document.body.classList.contains('touch')) document.body.classList.add('touch');
+  e.preventDefault();
+  if (G.state !== 'play') return;
+  var sq = sqFromXY(e.clientX, e.clientY);
+  if (sq < 0) { if (G.sel !== -1) { G.sel = -1; G.dests = []; } return; }
+  G.curOn = false;
+  G.cur = sq;
+  onSquareTap(sq);
+});
+
+function moveCursor(dr, dc) {
+  G.curOn = true;
+  var rc = sqToRC(G.cur);
+  var r = clamp(rc.r + dr, 0, 7), c = clamp(rc.c + dc, 0, 7);
+  var s = rcToSq(r, c);
+  if (s >= 0) G.cur = s;
+}
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+  initAudio();
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'escape' || k === 'p') { if (G.state === 'play' || G.state === 'pause') togglePause(); return; }
+  if (k === 'u') { if (G.state === 'play' || G.state === 'over') undo(); return; }
+  if (k === 'f') { if (G.state === 'play') { G.flip = !G.flip; bgCache = null; } return; }
+  if (G.state === 'title') { if (k === 'enter' || k === ' ') startGame('cpu', G.strength); return; }
+  if (G.state === 'over') {
+    if (k === 'enter' || k === ' ' || k === 'r') startGame(G.mode, G.strength);
+    if (k === 't') titleScreen();
+    return;
+  }
+  if (G.state !== 'play') return;
+  if (G.pendingPromo) {
+    if (k === 'q') choosePromo(QUEEN);
+    else if (k === 'r') choosePromo(ROOK);
+    else if (k === 'b') choosePromo(BISHOP);
+    else if (k === 'n') choosePromo(KNIGHT);
+    return;
+  }
+  if (k === 'arrowup') moveCursor(-1, 0);
+  else if (k === 'arrowdown') moveCursor(1, 0);
+  else if (k === 'arrowleft') moveCursor(0, -1);
+  else if (k === 'arrowright') moveCursor(0, 1);
+  else if (k === 'enter' || k === ' ') { G.curOn = true; onSquareTap(G.cur); }
+  else if (k === 'backspace') { G.sel = -1; G.dests = []; }
+});
+window.addEventListener('blur', function () { if (G.state === 'play') togglePause(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden && G.state === 'play') togglePause(); });
+
+/* gamepad: d-pad drives the same cursor, A taps, X undoes */
+var padPrev = {}, padRepeat = 0;
+function pollPad(dt) {
+  if (!navigator.getGamepads) return;
+  var gps = navigator.getGamepads(), gp = null;
+  for (var i = 0; i < gps.length; i++) if (gps[i]) { gp = gps[i]; break; }
+  if (!gp) return;
+  var ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
+  var b = gp.buttons;
+  function bd2(n) { return b[n] && b[n].pressed; }
+  var up = bd2(12) || ay < -0.55, dn = bd2(13) || ay > 0.55, lf = bd2(14) || ax < -0.55, rt = bd2(15) || ax > 0.55;
+  padRepeat = Math.max(0, padRepeat - dt);
+  if (G.state === 'play' && padRepeat <= 0) {
+    if (up) { moveCursor(-1, 0); padRepeat = 0.16; }
+    else if (dn) { moveCursor(1, 0); padRepeat = 0.16; }
+    else if (lf) { moveCursor(0, -1); padRepeat = 0.16; }
+    else if (rt) { moveCursor(0, 1); padRepeat = 0.16; }
+  }
+  var a = bd2(0), x = bd2(2), st = bd2(9);
+  if (a && !padPrev.a) {
+    initAudio();
+    if (G.state === 'title') startGame('cpu', G.strength);
+    else if (G.state === 'over') startGame(G.mode, G.strength);
+    else if (G.state === 'play' && !G.pendingPromo) { G.curOn = true; onSquareTap(G.cur); }
+  }
+  if (x && !padPrev.x && (G.state === 'play' || G.state === 'over')) undo();
+  if (st && !padPrev.st && (G.state === 'play' || G.state === 'pause')) togglePause();
+  padPrev.a = a; padPrev.x = x; padPrev.st = st;
+}
+
+/* ================================================================ loop === */
+var lastT = 0, TT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  if (G.state !== 'pause') {
+    TT += dt;
+    if (G.msgT > 0) G.msgT = Math.max(0, G.msgT - dt);
+    if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 22);
+    if (G.checkPulse > 0) G.checkPulse = Math.max(0, G.checkPulse - dt);
+    if (G.anim) { G.anim.t += dt; if (G.anim.t >= G.anim.dur) finishAnim(); }
+    if (G.thinking) {
+      if (G.thinkMin > 0) G.thinkMin -= dt;
+      if (G.aiDone && G.thinkMin <= 0) {
+        var mv = G.aiReady;
+        G.thinking = false; G.aiDone = false; G.aiReady = 0;
+        if (mv) { refreshLegal(); applyMove(mv); }
+        else beginTurn();
+      }
+    }
+    pollPad(dt);
+  }
+  render(TT);
+}
+
+/* ======================================================== test harness === */
+function testSetup(fen, mode, strength, autoTurn) {
+  cancelThink();
+  G.mode = mode || 'two';
+  if (strength && STRENGTH[strength]) G.strength = strength;
+  G.startFen = fen;
+  G.P = newPos(); setFEN(G.P, fen);
+  G.moveInts = [];
+  G.hist = []; G.san = []; G.taken = []; G.keys = {};
+  G.keys[posKey(G.P)] = 1;
+  G.sel = -1; G.dests = []; G.anim = null; G.last = null; G.lastSan = '';
+  G.winner = 0; G.overReason = ''; G.overHead = '';
+  G.msg = ''; G.msgT = 0; G.shake = 0;
+  G.pendingPromo = null;
+  G.state = 'play';
+  document.body.classList.add('playing');
+  hideOverlay();
+  refreshLegal();
+  if (autoTurn) beginTurn();
+  return G.legal.length;
+}
+function sanList() {
+  var out = [], L = genLegal(G.P);
+  for (var i = 0; i < L.length; i++) out.push(moveSAN(G.P, L[i], L));
+  return out;
+}
+function uciList() {
+  var out = [], L = genLegal(G.P);
+  for (var i = 0; i < L.length; i++) {
+    out.push(sqName(mFrom(L[i])) + sqName(mTo(L[i])) + (mPromo(L[i]) ? CH_FEN[mPromo(L[i])] : ''));
+  }
+  return out;
+}
+function playUCI(u) {
+  var L = genLegal(G.P);
+  for (var i = 0; i < L.length; i++) {
+    var s = sqName(mFrom(L[i])) + sqName(mTo(L[i])) + (mPromo(L[i]) ? CH_FEN[mPromo(L[i])] : '');
+    if (s === u) { applyMove(L[i]); return true; }
+  }
+  return false;
+}
+window.__BRANCH = {
+  G: G, STRENGTH: STRENGTH,
+  WHITE: WHITE, BLACK: BLACK,
+  newPos: newPos, setFEN: setFEN, toFEN: toFEN, START_FEN: START_FEN,
+  perft: function (fen, depth) { var P = newPos(); setFEN(P, fen || START_FEN); return perft(P, depth); },
+  divide: function (fen, depth) { var P = newPos(); setFEN(P, fen || START_FEN); return perftDivide(P, depth); },
+  genLegal: genLegal, insufficientMaterial: insufficientMaterial, evaluate: evaluate,
+  selfPlay: selfPlay, bestMoveSync: bestMoveSync, setSeed: setSeed,
+  setup: testSetup, start: startGame, title: titleScreen, undo: undo,
+  beginTurn: beginTurn,
+  moves: sanList, uci: uciList, playUCI: playUCI,
+  tap: function (name) { var s = nameToSq(name); if (s < 0) return false; return onSquareTap(s); },
+  promote: function (t) { return choosePromo(t); },
+  settle: function () { var n = 0; while (G.anim && n++ < 30) { G.anim.t = G.anim.dur; finishAnim(); } return !G.anim; },
+  center: function (name) {
+    var m = metrics(), s = nameToSq(name);
+    if (s < 0) return null;
+    return { x: cxOf(m, s), y: cyOf(m, s), cell: m.cell };
+  },
+  metrics: metrics,
+  fen: function () { return toFEN(G.P); },
+  state: function () {
+    return {
+      state: G.state, side: G.P.side === WHITE ? 'w' : 'b', mode: G.mode, strength: G.strength,
+      winner: G.winner, head: G.overHead, reason: G.overReason,
+      legal: G.legal.length, sel: G.sel < 0 ? null : sqName(G.sel),
+      dests: (function () { var o = []; for (var i = 0; i < G.dests.length; i++) o.push(sqName(mTo(G.dests[i]))); return o; })(),
+      check: inCheck(G.P, G.P.side),
+      msg: G.msg, thinking: G.thinking, anim: !!G.anim, promo: !!G.pendingPromo,
+      fen: toFEN(G.P), san: G.san.slice(), half: G.P.half, full: G.P.full,
+      taken: G.taken.length, mat: materialCount(G.P).adv, rec: G.rec,
+      hist: G.hist.length, keyCount: G.keys[posKey(G.P)] || 0,
+      aiDepth: G.aiDepth || 0
+    };
+  }
+};
+
+/* ================================================================ boot === */
+G.moveInts = [];
+G.startFen = START_FEN;
+G.keys[posKey(G.P)] = 1;
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

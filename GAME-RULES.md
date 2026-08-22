@@ -174,3 +174,118 @@ made it work, and one that had to be learned:
   3-profile matrix, `ui-audit.js`, and its own look at the screenshots.
   A builder's report is a claim, not evidence; the point of the second
   pass is that it cannot inherit the first pass's mistakes.
+
+---
+
+## 12. ADAPTIVE LEARNING GAMES — the ladder rules
+
+Every learning game here places the learner by playing with her rather than
+asking her. Char, Echo, Tally and the rest all use the same engine, and every
+rule below was paid for by a game that passed its own tests while placing a
+learner wrong.
+
+- **Never ask for a difficulty. Never design against an age or a grade.**
+  Start at the floor, climb on success, and let the ladder find her. Age tells
+  you nothing about the rung — a child can be eleven and working several years
+  below, and be nowhere near the same rung in two different subjects.
+- **Low floor, high ceiling.** The bottom rung must be gettable by someone who
+  is genuinely struggling; the top must be real work. A game she can exhaust
+  has told her she is finished.
+- **Promote on a run, demote fast, clear the recent window on any move.**
+  Demoting fast protects confidence; clearing the window is the hysteresis that
+  stops it yo-yoing.
+- **A probe must confirm itself.** Ask one rung up periodically, and require
+  TWO consecutive correct probes before promoting. One lucky tap must never
+  hand her a level. (Char and Echo both shipped promoting on one.)
+- **MIND THE GUESS FLOOR — this is the one that keeps getting missed.** Two
+  choices means half of all wrong answers come back right; three means a third.
+  So "N in a row" is not the same evidence at every rung. Most activities widen
+  from two buttons to four as they climb, so the floor falls from 50% to 25%
+  and quietly brakes the climb — but any activity that *cannot* widen (Tally's
+  WHICH HAS MORE: comparing five piles at once is a worse question) sits at a
+  50% floor the whole way up, and a flat gate drifts a floor-level learner a
+  full rung above her true ability on luck alone. **Make the gate harder where
+  the guess floor is higher** — one more in a row, one more confirming probe.
+  Prefer typed or constructed answers wherever the content allows; they have no
+  guess floor at all.
+- **RESUME the found rung between sessions.** Re-testing her every time is its
+  own small insult.
+- **Teach on a miss, do not just reveal.** Name the rule, then walk the answer
+  out step by step saying what is being done and why. A HINT gives the next
+  step, not the answer.
+- **Zero failure language.** No red, no buzzer, no shake, no "wrong", no
+  "incorrect", no "try again". Assert this in the tests — grep the generated
+  scripts for it — because it creeps back in.
+- **Show growth to the grown-ups**: rung per skill, moved over time.
+
+### How to actually verify a ladder
+
+Tests that ask "does promote() promote?" pass on a broken ladder. The only
+thing that finds the real bug is to **simulate a learner of known ability and
+see where the ladder settles**:
+
+- Model ability as a **SMOOTH curve, not a cliff**. A sharp cliff (95% at her
+  rung, 67% one above) puts the 75-85% target band *between* rungs, where
+  nothing can ever land, and makes a healthy game look unfixable. That has cost
+  a session already.
+- **Model the learner you mean.** Centre the curve so "ability = rung N" means
+  she is genuinely competent at N (~85%), not half-mastered (~50%). Getting
+  that wrong makes a healthy ladder read as far too harsh — it happened again
+  on Tally and cost a round of pointless tuning.
+- Model the **guess floor** explicitly from the number of choices each rung
+  shows.
+- Run several abilities x several seeds. Report **settled level vs true
+  ability**, **accuracy at level** (want 75-85%), and **level moves per 100
+  items**. Settling more than about a rung from true ability is a bug.
+- Tune against that rig, and be willing to revert: a slower demote was tried on
+  both Char and Tally and measured **worse** both times.
+
+## 13. MORE THINGS NOT TO RELEARN
+
+- **An `<svg>` with `width: 100%` and a viewBox computes its own HEIGHT from
+  the viewBox ratio.** A 730px-wide card silently became 245px tall and shoved
+  an unshrinkable button on top of it. Height has to be handed DOWN by the
+  layout: let the row take the leftover space, the card fill the row, and give
+  the svg `height: 0; flex: 1 1 auto` so the flex algorithm decides and the art
+  letterboxes inside it.
+- **Art that scales to fill its own container can answer the question for
+  you.** In Tally's WHICH HAS MORE, each pile stretched to fill its own card,
+  so a pile of two drew things twice the size of a pile of five — and "which
+  has more?" gained a second, wrong answer: whichever things look bigger.
+  Anything being *compared* must be drawn to a common scale.
+- **Check that the position you are measuring is one the game can reach.** A
+  first pass at Dunk's difficulty curve sampled a shooting spot 7.2 m out and
+  reported that 97% of the release meter scored — `SPOT_MAX` is 6.60, so that
+  was a spot no player can ever stand on. On legal spots the curve was a clean
+  38% at the deepest to 75% point blank.
+- **`parseBoard`-style text position parsers usually skip blank lines**, so a
+  row of eight spaces collapses the board and shifts every square. Use dots for
+  empty squares. Three apparent rule failures in Checksum's integration were
+  entirely this — the game was right and the test was reading a different
+  position than it had written.
+- **Check the field names on a test hook before believing a failure.** Two
+  "failures" today were assertions reading `G.perfect` where the game exposes
+  `G.perf`, and `r.boardHits` where the probe returns `r.board`.
+- **The hub peeks into every game's private save format, so its readers drift
+  silently.** Char's card read a `.ok` field Char has never written, so it said
+  "Unplayed" no matter how much she played — and nothing failed, because a
+  reader that returns nothing looks exactly like a game nobody has played. Play
+  each game for real, then read its card back off the hub; same origin, so
+  localStorage survives the navigation.
+- **Reconcile registrations against disk, not against the running tally.**
+  Greedy shipped without being registered in either harness file and was
+  silently skipped by every matrix run for days. `comm` the sorted folder list
+  against the hub ids and both harness maps.
+- **For a rules game, write a second implementation.** Checksum's draughts
+  generator was compared move-for-move against an independently written one
+  over 934 positions from fourteen seeded games — and the positions were then
+  checked to actually contain the interesting cases (233 forced captures, 43
+  multi-jumps, 17 crown-ends-chain, 559 backward king moves), because agreement
+  on quiet shuffling proves nothing. For chess the equivalent is **perft**, and
+  it is not optional.
+- **WebKit no longer launches on the Windows machine.** Smart App Control
+  blocks Playwright's `WebKit2.dll` ("An Application Control policy has blocked
+  this file", exit `0xC0000142`). Do not turn Smart App Control off — it is a
+  one-way change. The harness falls back to Chromium in iPhone emulation and
+  says so; layout, overflow, tap-target and console findings still hold, and
+  **real Safari behaviour now belongs to the iOS Simulator on the Mac.**

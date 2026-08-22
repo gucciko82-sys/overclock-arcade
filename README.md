@@ -1524,3 +1524,109 @@ a card that size. Solid shapes, sized off the tile.
 
 Hub reconciled against disk: **49 cards, 49 game folders**, every cover paints
 something, every link resolves.
+
+### Built and play-tested 2026-08-22 — Branch, Solve and Break (games 50, 51 and 52)
+
+Three builders in parallel under §11; the integrator did the hub cards, the
+README, both harness registrations and an independent verification pass on
+each. Everything below was re-checked from scratch rather than taken from the
+builders' reports.
+
+**Branch — chess, all of it.** Castling with every condition, en passant that
+expires, promotion, pins, checkmate, stalemate, threefold repetition, the
+fifty-move rule and insufficient material. Three opponents named for real
+branch predictors — STATIC (depth 2, material only), BIMODAL (depth 5, plus
+piece-square tables), PERCEPTRON (iterative deepening in a 1.5s budget, plus
+pawn structure and open files) — or two players on one screen. Legal moves
+light up, the last move is marked, undo works, and a refused move says why.
+
+**Perft is the standard proof that a chess move generator is correct, and the
+expected node counts exist independently of this repo**, so this is a real
+external check rather than the game grading itself. Six positions, every
+number exact:
+
+| position | d1 | d2 | d3 | d4 | d5 |
+|---|---|---|---|---|---|
+| initial | 20 | 400 | 8,902 | 197,281 | 4,865,609 |
+| Kiwipete | 48 | 2,039 | 97,862 | 4,085,603 | — |
+| position 3 | 14 | 191 | 2,812 | 43,238 | 674,624 |
+| position 4 | 6 | 264 | 9,467 | 422,333 | — |
+| position 5 | 44 | 1,486 | 62,379 | 2,103,487 | — |
+| position 6 | 46 | 2,079 | 89,890 | 3,894,594 | — |
+
+Plus the cases perft cannot express as a game: stalemate is zero legal moves
+and is not called checkmate; a pinned piece has no move where the same piece
+unpinned has ten; and insufficient material gets the two that people get wrong
+— **K+B v K+B on opposite colours is NOT a draw, and K+N+N v K is NOT
+insufficient**. PERCEPTRON beat STATIC 6/6 from both colours, all by
+checkmate, and the search never blocked a frame longer than 220ms.
+
+**Solve — algebra, built for a fourteen-year-old.** Eight rungs from order of
+operations to brackets, both-sides equations and fractions. Typed keypad
+entry, so there is no guess floor to launder a lucky answer. Every miss names
+the rule from a 21-rule table, says what the specific slip was where it can
+recognise it, then reveals the worked solution one line at a time with what
+was done and why. HINT gives the next instruction, never a result.
+
+**Content re-derived independently, per the Sum rule — never trust the
+builder's own answer table.** The integrator wrote its own exact-rational
+evaluator (BigInt fractions, its own tokeniser and parser, its own precedence
+including right-associative exponentiation) and checked **5,600 generated items
+across all eight rungs with zero failures and zero unparseable**: 2,100
+expressions and substitutions evaluated from the question text alone, 2,800
+equations verified by substituting the claimed root back in and comparing both
+sides exactly, and 700 multiple-choice sets checked for algebraic equivalence
+at five different points — the correct option identical to the question at
+every point, every distractor different at at least one, every distractor
+separately explained.
+
+Its ladder measured better than Tally's: a simulated learner settles within
+**0.31 rungs** of true ability at every ability tested, 70% to 85% accuracy at
+level, 4-6% level churn. The builder found two real bugs with the same rig
+before shipping — a run at his own rung was promoting him half a rung high, so
+now a run only *earns a probe*; and a failed probe now ends the run, without
+which the rig caught a simulated learner sitting through **55 wrong answers in
+a row**.
+
+**Break — eight-ball pool.** Open table, called groups, ball in hand on any
+foul, the 8 last, draw/follow/side spin, and a CPU that searches every legal
+ball against every pocket rather than firing at random. Two players on one
+screen as well.
+
+**Physics measured from the raw ball positions rather than the engine's own
+counters**: 120 full-power breaks with wild spin, settled, then every pair of
+balls and every cushion checked by hand — **worst ball-ball overlap 0.0000
+units, worst distance outside the rails 0.0000**, over 4,194 ball collisions
+and 1,921 cushion hits, and no collision anywhere created energy. Substeps are
+a distance budget rather than a count, which is the Spare lesson applied
+correctly the first time.
+
+A judgement call worth recording: **the 8 on the break is re-spotted, not a
+loss.** The brief said "potting the 8 early loses" and also "full 8-ball rules,
+correctly", and those conflict on the break; BCA rules re-spot it. At any other
+time an early 8 loses immediately, and both are tested.
+
+**Three integrator test bugs worth writing down, because all three had the same
+shape — reading a representation instead of checking it:**
+
+- `selfPlay` returns `result`, not `winner`. Six decisive chess games read as
+  six draws until that was checked.
+- Break's groups are the **strings** `solid` / `stripe` / `null`, not indices.
+  Passing `[0, 1]` made `remaining()` count zero balls in a group that does not
+  exist, so the game believed the player had cleared and an early 8 read as a
+  clean win — a *rules failure that was entirely the fixture's*.
+- Aiming a test shot at the middle of a rail pots nothing and proves nothing.
+  Aim along a line that genuinely ends in a pocket.
+
+Also: a first pass at Break's physics flagged balls 0.94 units outside the
+cushion line. Pockets are cut into the rails, so a ball sitting in a pocket
+mouth is legitimately past it — judge only balls out in open rail.
+
+**Two covers were rebuilt after looking at them.** Branch's first cover drew a
+whole board, which shrank the knight to about twenty pixels and it stopped
+reading as a knight at all — the same failure as Dunk's stick figure. Board as
+backdrop, one big piece as the subject. The cover tile is wide and short; size
+the subject off that, not off a whole board.
+
+Hub reconciled against disk: **52 cards, 52 game folders**, every cover paints
+something, every link resolves.
