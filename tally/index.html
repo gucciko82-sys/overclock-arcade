@@ -121,6 +121,7 @@
     flex: 0 0 auto; display: grid; gap: 14px; align-items: stretch;
     grid-template-columns: repeat(2, 1fr);
   }
+  .choices.c1 { grid-template-columns: 1fr; }
   .choices.c3 { grid-template-columns: repeat(3, 1fr); }
   .choices.c4 { grid-template-columns: repeat(2, 1fr); }
   .choice {
@@ -172,6 +173,26 @@
     font-size: 11px; font-weight: 800; letter-spacing: 0.18em; color: var(--dim);
     text-transform: uppercase; cursor: pointer;
   }
+
+  /* ---- who is reading to you ---- */
+  .voicegrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; width: 100%; max-width: 520px; }
+  .voicecard {
+    min-height: 118px; border-radius: 22px; border: 4px solid var(--line);
+    background: var(--card); cursor: pointer; padding: 8px 4px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    box-shadow: 0 4px 0 rgba(47,64,48,0.13);
+  }
+  .voicecard:active { transform: translateY(3px); box-shadow: none; }
+  .voicecard.on { border-color: #43a047; background: #e8f5e9; }
+  .voicecard svg { width: clamp(46px, 9vh, 74px); height: clamp(46px, 9vh, 74px); display: block; }
+  .voicecard .vname { font-size: 16px; font-weight: 800; color: var(--ink); }
+  .voicecard .vhint { font-size: 11.5px; font-weight: 700; color: var(--dim); }
+  .menufoot { flex: 0 0 auto; display: flex; gap: 10px; justify-content: center; align-items: center; margin-top: 2px; flex-wrap: wrap; }
+  .voicelink { display: inline-flex; align-items: center; gap: 7px; text-transform: none; letter-spacing: 0.06em; font-size: 12px; }
+  .voicelink svg { width: 26px; height: 26px; display: block; }
+  .vgrown { font-size: 11.5px; color: var(--dim); line-height: 1.5; max-width: 520px; text-align: center; }
+  .vgrown select { font: inherit; font-size: 12px; padding: 4px 6px; border-radius: 8px;
+                   border: 2px solid var(--line); background: #fff; color: var(--ink); max-width: 190px; }
 
   /* ---- title / finish ---- */
   .center { align-items: center; justify-content: center; text-align: center; gap: 14px; }
@@ -264,6 +285,10 @@
     .bigbtn { min-width: 116px; min-height: 116px; }
     .bigbtn svg { width: 58px; height: 58px; }
     .grownup { display: none; }
+    .voicegrid { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .voicecard { min-height: 92px; border-radius: 16px; }
+    .voicecard .vhint { display: none; }
+    .vgrown { display: none; }
     .hintword { min-height: 20px; }
     .seq span { font-size: clamp(26px, 13vh, 52px); }
   }
@@ -334,14 +359,15 @@ function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === nul
 function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
 
 /* ============================================================ numbers == */
-var MAXN = 20;     /* the numbers she is asked to recognise and count */
-var MAXKEY = 60;   /* the numbers the save file will track — counting by ten
+var MAXN = 100;    /* the numbers she is asked to recognise and count */
+var MAXKEY = 200;  /* the numbers the save file will track — counting by ten
                       walks past twenty, and dropping those stats on load
                       would silently lose her practice on that rung */
 var WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
              'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen',
              'eighteen', 'nineteen', 'twenty'];
-var TENS = { 30: 'thirty', 40: 'forty', 50: 'fifty', 60: 'sixty' };
+var TENS = { 20: 'twenty', 30: 'thirty', 40: 'forty', 50: 'fifty',
+             60: 'sixty', 70: 'seventy', 80: 'eighty', 90: 'ninety', 100: 'one hundred' };
 /* Speech reads a bare numeral well enough, but not reliably and not at the
    same pace as the rest of the sentence — "ten, twenty, 30" was audibly a
    different voice mid-count. Every number this game can say has a word. */
@@ -476,23 +502,55 @@ function layoutDice(n) {
 /* Ten-frames: how ten-and-some is actually taught. One frame for 1-10, a
    full frame plus a second for 11-20, so "fourteen" reads as ten and four. */
 function layoutFrame(n) {
-  var cell = 40, frames = n > 10 ? 2 : 1;
-  var fw = cell * 5, fh = cell * 2;
-  var w = fw + 16, h = frames * fh + (frames - 1) * 14 + 16;
-  var pts = [], i, f, k, col, row;
+  /* Up to twenty: ten-frames stacked, which is how ten-and-some is taught.
+   *
+   * Past twenty they must NOT keep stacking. Ten frames in a column is a block
+   * ten times taller than it is wide, and the slot is short, so the whole
+   * thing scales down to a stripe of unreadable specks — ninety flowers came
+   * out roughly the size of this sentence. Nobody can count that.
+   *
+   * So above twenty it becomes a HUNDRED SQUARE: ten to a row, rows stacked,
+   * with a wider gutter every five columns and every five rows so it stays
+   * countable in fives. That is both the readable aspect ratio and the thing
+   * a hundred square is for. */
+  var perRow = n > 20 ? 10 : 5;
+  var rows = Math.ceil(n / perRow);
+  var cell = 40;
+  if (n > 60) cell = 22;
+  else if (n > 40) cell = 26;
+  else if (n > 20) cell = 30;
+  var GUT = Math.round(cell * 0.32);          /* the every-five breathing space */
+  function cx(col) { return 8 + col * cell + (col >= 5 ? GUT : 0) + cell / 2; }
+  function cy(row) { return 8 + row * cell + Math.floor(row / 5) * GUT + cell / 2; }
+
+  var pts = [], i, col, row;
   for (i = 0; i < n; i++) {
-    f = Math.floor(i / 10); k = i % 10;
-    col = k % 5; row = Math.floor(k / 5);
-    pts.push({
-      x: 8 + col * cell + cell / 2,
-      y: 8 + f * (fh + 14) + row * cell + cell / 2,
-      r: 15
-    });
+    col = i % perRow; row = Math.floor(i / perRow);
+    pts.push({ x: cx(col), y: cy(row), r: cell * 0.375 });
   }
-  var cells = [];
-  for (f = 0; f < frames; f++) cells.push({ x: 8, y: 8 + f * (fh + 14), w: fw, h: fh, cell: cell });
+  var w = 16 + perRow * cell + (perRow > 5 ? GUT : 0);
+  var h = 16 + rows * cell + Math.floor(Math.max(0, rows - 1) / 5) * GUT;
+
+  /* the frame outlines: one box per block of five columns x five rows */
+  var cells = [], bc, br;
+  for (br = 0; br * 5 < rows; br++) {
+    for (bc = 0; bc * 5 < perRow; bc++) {
+      var rowsHere = Math.min(5, rows - br * 5);
+      var colsHere = Math.min(5, perRow - bc * 5);
+      cells.push({
+        x: cx(bc * 5) - cell / 2,
+        y: cy(br * 5) - cell / 2,
+        w: colsHere * cell,
+        h: rowsHere * cell,
+        cell: cell,
+        cols: colsHere,
+        rows: rowsHere
+      });
+    }
+  }
   return { w: w, h: h, pts: pts, cells: cells };
 }
+
 /* Scattered, but never overlapping and never touching the edge: counting a
    real pile without losing your place is the skill, being unable to see two
    of them is not. */
@@ -566,13 +624,15 @@ function groupSvg(g, thing, cls) {
       c = g.cells[i];
       inner += '<rect x="' + c.x + '" y="' + c.y + '" width="' + c.w + '" height="' + c.h +
         '" fill="#ffffff" stroke="rgba(47,64,48,0.3)" stroke-width="2.5"/>';
-      var k;
-      for (k = 1; k < 5; k++) {
+      var k, nc = c.cols || 5, nr = c.rows || 2;
+      for (k = 1; k < nc; k++) {
         inner += '<line x1="' + (c.x + k * c.cell) + '" y1="' + c.y + '" x2="' + (c.x + k * c.cell) + '" y2="' + (c.y + c.h) +
           '" stroke="rgba(47,64,48,0.18)" stroke-width="1.5"/>';
       }
-      inner += '<line x1="' + c.x + '" y1="' + (c.y + c.cell) + '" x2="' + (c.x + c.w) + '" y2="' + (c.y + c.cell) +
-        '" stroke="rgba(47,64,48,0.18)" stroke-width="1.5"/>';
+      for (k = 1; k < nr; k++) {
+        inner += '<line x1="' + c.x + '" y1="' + (c.y + k * c.cell) + '" x2="' + (c.x + c.w) + '" y2="' + (c.y + k * c.cell) +
+          '" stroke="rgba(47,64,48,0.18)" stroke-width="1.5"/>';
+      }
     }
   }
   for (i = 0; i < g.pts.length; i++) inner += thing.art(g.pts[i].x, g.pts[i].y, g.pts[i].r);
@@ -650,6 +710,86 @@ var ACTS = [
     }
   }
 ];
+/* ============================================ growing the ladder upward == */
+/* Elizabeth topped out all four of these ladders in a day. That is the game's
+   fault, not hers: a game she can exhaust has told her she is finished, and
+   the whole point of building for her is that she is never capped.
+ *
+ * So the rungs above the hand-tuned six are GENERATED. Each activity gets a
+ * growth function that takes a tier number and returns a harder rung, and the
+ * ladder is built by running it until TOP_TIER. Raising that one number gives
+ * her more ladder — nobody has to hand-write another rung, and nothing below
+ * her current level moves, so her saved place is untouched.
+ *
+ * The numbers climb 20 -> 30 -> 50 -> 100 while the SHAPE of the question also
+ * changes, because bigger numbers alone is not harder thinking. Ten-frames
+ * become tens-and-ones (place value), comparison drops the pictures and then
+ * flips to smaller, and counting on becomes counting back and counting in
+ * fives and tens from a number that is not a multiple of ten. */
+var TOP_TIER = 5;                 /* how many generated rungs each ladder gets */
+var TIER_MAX = [30, 50, 70, 100, 100];   /* the ceiling each tier counts to */
+
+function tierName(t, verb) {
+  var n = TIER_MAX[Math.min(t, TIER_MAX.length - 1)];
+  return verb + ' ' + (n === 100 ? 'a hundred' : word(n));
+}
+function growLadders() {
+  var i, t, hi, prevHi;
+  for (i = 0; i < ACTS.length; i++) {
+    var a = ACTS[i];
+    for (t = 0; t < TOP_TIER; t++) {
+      hi = TIER_MAX[Math.min(t, TIER_MAX.length - 1)];
+      prevHi = t === 0 ? 20 : TIER_MAX[Math.min(t - 1, TIER_MAX.length - 1)];
+      if (a.id === 'howmany') {
+        /* Always on ten-frames up here: one frame per ten, so twenty-seven
+           reads as two full tens and a seven. That IS the place-value idea. */
+        a.rungs.push({
+          name: t === 1 ? 'Tens and ones' : tierName(t, 'Count to'),
+          nLo: Math.max(11, Math.floor(prevHi * 0.8)), nHi: hi,
+          layout: 'frame', choices: 4,
+          cLo: Math.max(1, Math.floor(prevHi * 0.6)), cHi: hi, tight: true
+        });
+      } else if (a.id === 'find') {
+        a.rungs.push({
+          name: t === 2 ? 'The tricky pairs' : tierName(t, 'Numbers to'),
+          trickyPairs: t === 2,
+          /* the tricky-pairs rung draws teens and whole tens on purpose, so its
+             declared range has to say so rather than quietly disagreeing with
+             what it generates */
+          nLo: t === 2 ? 11 : Math.max(11, Math.floor(prevHi * 0.7)),
+          nHi: t === 2 ? 90 : hi,
+          choices: 4,
+          cLo: Math.max(1, Math.floor(prevHi * 0.5)), cHi: hi, tight: true
+        });
+      } else if (a.id === 'more') {
+        /* no pictures up here — comparing numerals is the real skill, and it
+           alternates bigger / smaller so she cannot answer on autopilot */
+        a.rungs.push({
+          name: (t % 2 ? 'Smaller to ' : 'Bigger to ') + (hi === 100 ? 'a hundred' : word(hi)),
+          groups: 3, max: hi, gap: 1,
+          mode: (t % 2) ? 'smallnum' : 'bignum', layout: 'row'
+        });
+      } else {
+        var shapes = [
+          { name: 'Counting by five',    mode: 'twos', step: 5,  span: 3 },
+          { name: 'Counting back',       mode: 'back', step: 1,  span: 3 },
+          { name: 'Tens from anywhere',  mode: 'tens', anyStart: true, span: 3 },
+          { name: 'Counting back by two',mode: 'back', step: 2,  span: 3 },
+          { name: 'Fives from anywhere', mode: 'twos', step: 5,  span: 3 }
+        ];
+        var sh = shapes[Math.min(t, shapes.length - 1)];
+        a.rungs.push({
+          name: sh.name, mode: sh.mode, step: sh.step, anyStart: sh.anyStart,
+          lo: 2, hi: Math.min(hi, sh.mode === 'tens' ? hi - 30 : hi),
+          span: sh.span, choices: 4,
+          cLo: 1, cHi: hi, tight: true
+        });
+      }
+    }
+  }
+}
+growLadders();
+
 function actIndex(id) { var i; for (i = 0; i < ACTS.length; i++) if (ACTS[i].id === id) return i; return -1; }
 function actById(id) { var i = actIndex(id); return i < 0 ? ACTS[0] : ACTS[i]; }
 function maxRung(id) { return actById(id).rungs.length - 1; }
@@ -714,7 +854,66 @@ function setMuted(v) {
 }
 
 /* ============================================================= speech == */
-var SPEECH = { api: false, voices: 0, voice: null, ok: false, spoken: 0, failed: 0, last: '' };
+var SPEECH = { api: false, voices: 0, voice: null, ok: false, spoken: 0, failed: 0, last: '', list: [] };
+
+/* ===================================================== who is talking == */
+/* The browser will not give us a custom voice: speechSynthesis can only use
+   the voices already installed on the device, and this arcade ships no audio
+   files and calls no APIs. What it CAN do is choose among the device's own
+   voices and shape them — pitch and speed are honest levers, and they change
+   the character a lot more than the name of the voice does.
+ *
+ * So: four characters she picks by EAR, not by reading a list of voice names.
+ * Each one previews itself when tapped. On a phone or an iPad there are
+ * usually several real voices to sit underneath them; on a bare Windows box
+ * there may be only one, and the characters still sound different because the
+ * pitch and rate differ. Nothing here is allowed to be required — if speech is
+ * missing entirely the game plays on in silence exactly as before. */
+var CHARACTERS = [
+  { id: 'sunny', name: 'Sunny',  pitch: 1.08, rate: 0.85, hint: 'warm and steady',
+    line: 'Hello. I am Sunny. I will read everything to you.',
+    face: function () { return '<circle cx="50" cy="50" r="34" fill="#ffd54f"/>' +
+      '<circle cx="39" cy="43" r="4.5" fill="#4a3520"/><circle cx="61" cy="43" r="4.5" fill="#4a3520"/>' +
+      '<path d="M36 60 q14 12 28 0" stroke="#4a3520" stroke-width="4" fill="none" stroke-linecap="round"/>'; } },
+  { id: 'chip',  name: 'Chip',   pitch: 0.62, rate: 0.8,  hint: 'a deep robot',
+    line: 'Greetings. I am Chip. I am a computer.',
+    face: function () { return '<rect x="20" y="24" width="60" height="52" rx="8" fill="#90a4ae"/>' +
+      '<rect x="32" y="40" width="12" height="8" rx="2" fill="#1b2748"/><rect x="56" y="40" width="12" height="8" rx="2" fill="#1b2748"/>' +
+      '<rect x="34" y="60" width="32" height="5" rx="2.5" fill="#1b2748"/>' +
+      '<line x1="50" y1="24" x2="50" y2="12" stroke="#90a4ae" stroke-width="4"/><circle cx="50" cy="9" r="5" fill="#ef6c00"/>'; } },
+  { id: 'pip',   name: 'Pip',    pitch: 1.5,  rate: 1.0,  hint: 'quick and squeaky',
+    line: 'Hi hi! I am Pip! Lets go!',
+    face: function () { return '<circle cx="50" cy="52" r="30" fill="#f06292"/>' +
+      '<circle cx="40" cy="46" r="5" fill="#fff"/><circle cx="60" cy="46" r="5" fill="#fff"/>' +
+      '<circle cx="41" cy="47" r="2.5" fill="#3e2723"/><circle cx="61" cy="47" r="2.5" fill="#3e2723"/>' +
+      '<path d="M40 63 q10 9 20 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+      '<path d="M28 30 l8 12 M72 30 l-8 12" stroke="#f06292" stroke-width="5" stroke-linecap="round"/>'; } },
+  { id: 'moss',  name: 'Moss',   pitch: 0.95, rate: 0.62, hint: 'slow and calm',
+    line: 'Hello. I am Moss. I will take my time.',
+    face: function () { return '<circle cx="50" cy="52" r="31" fill="#66bb6a"/>' +
+      '<path d="M38 46 q4 -4 8 0 M54 46 q4 -4 8 0" stroke="#1b3a1e" stroke-width="3.5" fill="none" stroke-linecap="round"/>' +
+      '<path d="M38 62 q12 8 24 0" stroke="#1b3a1e" stroke-width="4" fill="none" stroke-linecap="round"/>'; } }
+];
+var K_VOICE = 'tally_voice_v1';
+var VOICE = { charId: 'sunny', uri: '' };
+function charById(id) { var i; for (i = 0; i < CHARACTERS.length; i++) if (CHARACTERS[i].id === id) return CHARACTERS[i]; return CHARACTERS[0]; }
+function curChar() { return charById(VOICE.charId); }
+function loadVoicePref() {
+  var raw = loadStr(K_VOICE, ''), o = null;
+  if (!raw) return;
+  try { o = JSON.parse(raw); } catch (e) { return; }
+  if (!o || typeof o !== 'object') return;
+  if (typeof o.charId === 'string' && charById(o.charId).id === o.charId) VOICE.charId = o.charId;
+  if (typeof o.uri === 'string') VOICE.uri = o.uri;
+}
+function saveVoicePref() { saveStr(K_VOICE, JSON.stringify({ charId: VOICE.charId, uri: VOICE.uri })); }
+/* the device voice sitting under the character, if she picked a particular one */
+function pickedVoice() {
+  var i;
+  if (!VOICE.uri) return SPEECH.voice;
+  for (i = 0; i < SPEECH.list.length; i++) if (SPEECH.list[i].voiceURI === VOICE.uri) return SPEECH.list[i];
+  return SPEECH.voice;
+}
 var SAY_RATE = 0.85;   /* slow and even — she needs time to take it in */
 function speechApi() {
   try {
@@ -730,6 +929,11 @@ function refreshVoices() {
     try {
       var vs = window.speechSynthesis.getVoices() || [];
       SPEECH.voices = vs.length;
+      /* English voices only — the game speaks English, and a Polish voice
+         reading "seventeen" helps nobody. */
+      SPEECH.list = [];
+      for (var q = 0; q < vs.length; q++) if (vs[q] && /^en/i.test(vs[q].lang || '')) SPEECH.list.push(vs[q]);
+      if (!SPEECH.list.length) SPEECH.list = vs.slice(0, 8);
       var i;
       for (i = 0; i < vs.length; i++) if (vs[i] && /^en[-_]US/i.test(vs[i].lang || '')) { SPEECH.voice = vs[i]; break; }
       if (!SPEECH.voice) for (i = 0; i < vs.length; i++) if (vs[i] && /^en/i.test(vs[i].lang || '')) { SPEECH.voice = vs[i]; break; }
@@ -752,10 +956,12 @@ function say(text, rate) {
   try {
     window.speechSynthesis.cancel();
     var u = new window.SpeechSynthesisUtterance(String(text));
-    u.rate = rate || SAY_RATE;
-    u.pitch = 1.08;
+    var C = curChar();
+    u.rate = rate || C.rate;
+    u.pitch = C.pitch;
     u.lang = 'en-US';
-    if (SPEECH.voice) u.voice = SPEECH.voice;
+    var pv = pickedVoice();
+    if (pv) u.voice = pv;
     window.speechSynthesis.speak(u);
     SPEECH.spoken++;
     return true;
@@ -976,8 +1182,24 @@ function buildItem(actId, lvlIn, isProbe) {
     it.choices = c.list; it.correct = c.idx; it.kind = 'num'; it.key = it.n;
 
   } else if (id === 'find') {
-    it.n = pickTarget(rand, R.nLo, R.nHi);
-    var c2 = numChoices(it.n, R.choices, R.cLo, R.cHi, R.tight, rand);
+    var c2;
+    if (R.trickyPairs) {
+      /* thirteen vs thirty, fourteen vs forty. They sound alike and they look
+         alike, and telling them apart is the whole of early place value —
+         so this rung puts the confusable twin ON the screen deliberately. */
+      var teen = pickInt(rand, 3, 9);
+      it.n = (rand() < 0.5) ? (10 + teen) : (teen * 10);
+      var twin = (it.n < 20) ? ((it.n - 10) * 10) : (10 + it.n / 10);
+      var pool = [it.n, twin], guard2 = 0, extra;
+      while (pool.length < R.choices && guard2++ < 200) {
+        extra = (rand() < 0.5) ? pickInt(rand, 11, 19) : pickInt(rand, 2, 9) * 10;
+        if (!has(pool, extra)) pool.push(extra);
+      }
+      c2 = shuffleWithCorrect(pool, it.n, rand);
+    } else {
+      it.n = pickTarget(rand, R.nLo, R.nHi);
+      c2 = numChoices(it.n, R.choices, R.cLo, R.cHi, R.tight, rand);
+    }
     it.choices = c2.list; it.correct = c2.idx; it.kind = 'num'; it.key = it.n;
 
   } else if (id === 'more') {
@@ -989,15 +1211,40 @@ function buildItem(actId, lvlIn, isProbe) {
        different question and it does not have a tappable answer here. */
     for (tries = 0; tries < 400; tries++) {
       vals = [];
-      for (j = 0; j < gN; j++) {
-        v2 = pickInt(rand, 1, R.max);
-        vals.push(v2);
+      if (R.mode === 'bignum' || R.mode === 'smallnum') {
+        /* Comparing numerals is only a skill when the numerals are CLOSE.
+           Uniform picks from 1..100 hand her "nine versus forty-three", which
+           she can do at a glance and learns nothing from. Three shapes, mixed:
+           a tight cluster, a digit-reversal trap (38 vs 83 — the classic
+           place-value error), and same-tens (47 vs 42, where only the ones
+           digit decides it). */
+        var shape = Math.floor(rand() * 3), base, tens, ones;
+        if (shape === 0) {                       /* tight cluster */
+          base = pickInt(rand, Math.max(1, Math.floor(R.max * 0.15)), Math.max(2, R.max - 6));
+          for (j = 0; j < gN; j++) vals.push(base + j * (1 + Math.floor(rand() * 3)));
+        } else if (shape === 1 && R.max >= 30) { /* digit reversal */
+          tens = pickInt(rand, 1, Math.min(9, Math.floor(R.max / 10)));
+          ones = pickInt(rand, 1, 9);
+          while (ones === tens) ones = pickInt(rand, 1, 9);
+          vals.push(tens * 10 + ones);
+          vals.push(ones * 10 + tens);
+          while (vals.length < gN) vals.push(pickInt(rand, Math.min(tens, ones) * 10, R.max));
+        } else {                                 /* same tens, ones decide it */
+          tens = pickInt(rand, 1, Math.max(1, Math.floor(R.max / 10) - 1));
+          for (j = 0; j < gN; j++) vals.push(tens * 10 + pickInt(rand, 0, 9));
+        }
+        for (j = 0; j < vals.length; j++) if (vals[j] > R.max) vals[j] = R.max - j;
+      } else {
+        for (j = 0; j < gN; j++) {
+          v2 = pickInt(rand, 1, R.max);
+          vals.push(v2);
+        }
       }
       vals.sort(function (a, b) { return a - b; });
       ok = true;
       for (j = 1; j < vals.length; j++) if (vals[j] === vals[j - 1]) ok = false;
       if (ok && (vals[vals.length - 1] - vals[vals.length - 2]) < R.gap) ok = false;
-      if (ok && R.mode === 'fewer' && (vals[1] - vals[0]) < R.gap) ok = false;
+      if (ok && (R.mode === 'fewer' || R.mode === 'smallnum') && (vals[1] - vals[0]) < R.gap) ok = false;
       if (ok) break;
     }
     if (!ok) { vals = []; for (j = 0; j < gN; j++) vals.push(j * Math.max(1, R.gap) + 1); }
@@ -1006,9 +1253,9 @@ function buildItem(actId, lvlIn, isProbe) {
     for (i2 = order.length - 1; i2 > 0; i2--) { k2 = Math.floor(rand() * (i2 + 1)); tmp = order[i2]; order[i2] = order[k2]; order[k2] = tmp; }
     var thing = Math.floor(rand() * THINGS.length);
     var rFix = radiusFor(Math.max.apply(null, order), R.layout);
-    var want = (R.mode === 'fewer') ? Math.min.apply(null, order) : Math.max.apply(null, order);
+    var want = (R.mode === 'fewer' || R.mode === 'smallnum') ? Math.min.apply(null, order) : Math.max.apply(null, order);
     for (i2 = 0; i2 < order.length; i2++) {
-      if (R.mode === 'bignum') {
+      if (R.mode === 'bignum' || R.mode === 'smallnum') {
         it.groups.push({ n: order[i2] });
       } else {
         /* Same thing in every panel: if one side is ducks and the other is
@@ -1018,9 +1265,9 @@ function buildItem(actId, lvlIn, isProbe) {
       }
       if (order[i2] === want) it.correct = i2;
     }
-    if (R.mode !== 'bignum') normalizeGroups(it.groups);
+    if (R.mode !== 'bignum' && R.mode !== 'smallnum') normalizeGroups(it.groups);
     it.choices = order;
-    it.kind = (R.mode === 'bignum') ? 'num' : 'group';
+    it.kind = (R.mode === 'bignum' || R.mode === 'smallnum') ? 'num' : 'group';
     it.n = want; it.key = want;
 
   } else {
@@ -1028,8 +1275,25 @@ function buildItem(actId, lvlIn, isProbe) {
     it.mode = R.mode;
     var step = 1, start;
     if (R.mode === 'tens') step = 10;
-    if (R.mode === 'twos') step = (rand() < 0.5) ? 2 : 5;
-    if (R.mode === 'tens') {
+    if (R.mode === 'twos') step = R.step || ((rand() < 0.5) ? 2 : 5);
+    if (R.mode === 'back') step = -(R.step || 1);
+    if (R.mode === 'back') {
+      /* Counting down is a genuinely different skill from counting up, and it
+         is the one that makes taking-away make sense later. */
+      start = pickInt(rand, R.lo + Math.abs(step) * R.span, R.hi);
+      it.seq = [];
+      var sb;
+      for (sb = 0; sb < R.span; sb++) it.seq.push(start + step * sb);
+      it.answer = start + step * R.span;
+      it.blank = R.span;
+    } else if (R.mode === 'tens' && R.anyStart) {
+      /* Counting by ten from a number that is NOT a multiple of ten:
+         twenty-three, thirty-three, forty-three... the ones digit never moves. */
+      start = pickInt(rand, R.lo, R.hi);
+      it.seq = [start, start + 10, start + 20];
+      it.answer = start + 30;
+      it.blank = 3;
+    } else if (R.mode === 'tens') {
       start = 10;
       it.seq = [10, 20, 30];
       it.answer = 40;
@@ -1069,8 +1333,8 @@ function buildItem(actId, lvlIn, isProbe) {
       it.blank = R.span;
     }
     var c3;
-    if (R.mode === 'tens') {
-      c3 = stepChoices(it.answer, R.choices, 10, rand);
+    if (R.mode === 'tens' || R.mode === 'back' || (R.mode === 'twos' && R.step >= 5)) {
+      c3 = stepChoices(it.answer, R.choices, Math.abs(step) || 10, rand);
     } else {
       var cl = Math.max(0, Math.min(R.cLo, it.answer));
       var ch = Math.max(R.cHi, it.answer);
@@ -1198,6 +1462,7 @@ function promptScript(it) {
   }
   if (it.act === 'more') {
     if (it.mode === 'bignum') return 'Which is the bigger number? Tap the bigger number.';
+    if (it.mode === 'smallnum') return 'Which is the smaller number? Tap the smaller number.';
     if (it.mode === 'fewer') return 'Which one has less? Tap the one with less.';
     if (it.mode === 'most') return 'Which one has the most? Tap the one with the most.';
     return 'Which one has more? Tap the one with more.';
@@ -1215,6 +1480,7 @@ function echoScript(it) {
   if (it.act === 'find') return word(it.n) + '.';
   if (it.act === 'more') {
     if (it.mode === 'bignum') return 'The bigger number.';
+    if (it.mode === 'smallnum') return 'The smaller number.';
     if (it.mode === 'fewer') return 'Which has less?';
     if (it.mode === 'most') return 'Which has the most?';
     return 'Which has more?';
@@ -1231,6 +1497,7 @@ function answerPhrase(it) {
   if (it.act === 'find') return 'That is ' + word(it.n) + '.';
   if (it.act === 'more') {
     if (it.mode === 'bignum') return word(it.n) + ' is the bigger number.';
+    if (it.mode === 'smallnum') return word(it.n) + ' is the smaller number.';
     t = thingAt(it.groups[it.correct].thing);
     if (it.mode === 'fewer') return 'That one has ' + word(it.n) + ' ' + plural(it.n, t) + ', and that is less.';
     return 'That one has ' + word(it.n) + ' ' + plural(it.n, t) + '.';
@@ -1251,6 +1518,7 @@ function gentleScript(it) {
   if (it.act === 'find') return 'This one is ' + word(it.n) + '.';
   if (it.act === 'more') {
     if (it.mode === 'bignum') return word(it.n) + ' is the bigger number.';
+    if (it.mode === 'smallnum') return word(it.n) + ' is the smaller number.';
     return 'This one is the one. ' + answerPhrase(it);
   }
   if (it.mode === 'before') return word(it.answer) + ' comes before ' + word(it.seq[0]) + '.';
@@ -1284,6 +1552,7 @@ function render() {
   else if (state.screen === 'menu') renderMenu();
   else if (state.screen === 'done') renderDone();
   else if (state.screen === 'grown') renderGrown();
+  else if (state.screen === 'voice') renderVoice();
   else renderPlay();
   document.body.classList.toggle('playing', state.screen !== 'title');
 }
@@ -1310,7 +1579,13 @@ function renderMenu() {
     h += '<button class="tile" type="button" data-act="pick" data-id="' + ACTS[i].id + '" aria-label="' + ACTS[i].label + '">' +
       svgWrap(ACTS[i].icon(), 'ic') + '<span class="word">' + ACTS[i].label + '</span></button>';
   }
-  h += '</div><button class="grownlink" type="button" data-act="grown">Grown-ups</button></div>';
+  h += '</div>' +
+    '<div class="menufoot">' +
+      '<button class="grownlink voicelink" type="button" data-act="voicescreen">' +
+        svgWrap(curChar().face(), 'vmini') + '<span>' + curChar().name + '</span>' +
+      '</button>' +
+      '<button class="grownlink" type="button" data-act="grown">Grown-ups</button>' +
+    '</div></div>';
   app.innerHTML = h;
 }
 
@@ -1345,8 +1620,9 @@ function renderPlay() {
     slot = '<div class="bignum">?</div>';
     clue = 'listen, then find it';
   } else if (it.act === 'more') {
-    slot = '<div class="bignum">' + (it.mode === 'fewer' ? '&#8722;' : '&#43;') + '</div>';
-    clue = it.mode === 'bignum' ? 'tap the bigger number'
+    slot = '<div class="bignum">' + ((it.mode === 'fewer' || it.mode === 'smallnum') ? '&#8722;' : '&#43;') + '</div>';
+    clue = it.mode === 'smallnum' ? 'tap the smaller number'
+         : it.mode === 'bignum' ? 'tap the bigger number'
          : it.mode === 'fewer' ? 'tap the one with less'
          : it.mode === 'most' ? 'tap the one with the most'
          : 'tap the one with more';
@@ -1359,7 +1635,10 @@ function renderPlay() {
     }
     if (it.blank === it.seq.length) parts += '<span class="gap">?</span>';
     slot = parts + '</div>';
-    clue = it.mode === 'before' ? 'what came before?' : (it.mode === 'middle' ? 'which one is missing?' : 'what comes next?');
+    clue = it.mode === 'before' ? 'what came before?'
+         : it.mode === 'middle' ? 'which one is missing?'
+         : it.mode === 'back' ? 'keep counting down'
+         : 'what comes next?';
   }
 
   app.innerHTML = '<div class="screen' + (it.kind === 'group' ? ' grpmode' : '') + '">' + dotsRow() +
@@ -1370,6 +1649,53 @@ function renderPlay() {
       '<div class="hintword"><span>' + clue + '</span></div>' +
     '</div>' +
     choicesHtml(it) + '</div>';
+}
+
+function renderVoice() {
+  /* She cannot read a list of voice names, so she picks by EAR: tap a face,
+     hear it say hello in its own voice, and the one she taps is the one that
+     reads every question from then on. */
+  var h = '<div class="screen">' +
+    '<div class="dots" style="visibility:hidden"></div>' +
+    '<div class="prompt" style="justify-content:flex-start;gap:10px">' +
+      '<div class="eyebrow">Who should read to you?</div>' +
+      '<div class="voicegrid">';
+  var i, c;
+  for (i = 0; i < CHARACTERS.length; i++) {
+    c = CHARACTERS[i];
+    h += '<button class="voicecard' + (c.id === VOICE.charId ? ' on' : '') + '" type="button" ' +
+      'data-act="voice" data-id="' + c.id + '" aria-label="' + c.name + ', ' + c.hint + '">' +
+      svgWrap(c.face(), 'vf') +
+      '<span class="vname">' + c.name + '</span>' +
+      '<span class="vhint">' + c.hint + '</span></button>';
+  }
+  h += '</div>';
+  /* the grown-up lever: which of the device's own voices sits underneath */
+  if (SPEECH.list.length > 1) {
+    h += '<div class="vgrown">Grown-ups: this device has ' + SPEECH.list.length +
+         ' voices. The one underneath is ' +
+         '<select id="voiceSel" aria-label="Device voice">';
+    var cur = pickedVoice();
+    for (i = 0; i < SPEECH.list.length && i < 24; i++) {
+      h += '<option value="' + SPEECH.list[i].voiceURI + '"' +
+           (cur && SPEECH.list[i].voiceURI === cur.voiceURI ? ' selected' : '') + '>' +
+           String(SPEECH.list[i].name).slice(0, 28) + '</option>';
+    }
+    h += '</select>. More voices can be added in the device&rsquo;s own settings.</div>';
+  }
+  h += '</div>' +
+    '<div class="choices c1">' +
+      '<button class="choice" type="button" data-act="home" aria-label="Back to the games" style="min-height:78px">' +
+        '<span class="word" style="font-size:16px">BACK TO GAMES</span></button>' +
+    '</div></div>';
+  app.innerHTML = h;
+  var sel = document.getElementById('voiceSel');
+  if (sel) {
+    sel.addEventListener('change', function () {
+      VOICE.uri = sel.value; saveVoicePref();
+      say(curChar().line);
+    });
+  }
 }
 
 function renderDone() {
@@ -1627,6 +1953,21 @@ app.addEventListener('click', function (e) {
   if (a === 'play')   { SFX.open(); goMenu(); return; }
   if (a === 'replay') { replay(); return; }
   if (a === 'grown')  { SFX.tap(); goGrown(); return; }
+  if (a === 'voicescreen') {
+    SFX.open(); clearTimers(); stopSpeech(); hideBanner();
+    state.screen = 'voice'; state.busy = false; render();
+    window.setTimeout(function () { say('Who should read to you? Tap a face to hear it.'); }, 80);
+    return;
+  }
+  if (a === 'voice') {
+    var vid = b.getAttribute('data-id');
+    VOICE.charId = charById(vid).id;
+    saveVoicePref();
+    SFX.tap();
+    render();
+    window.setTimeout(function () { say(curChar().line); }, 60);
+    return;
+  }
   if (a === 'home')   { SFX.tap(); goMenu(); return; }
   if (a === 'again')  { SFX.open(); startActivity(state.act); return; }
   if (a === 'pick') {
@@ -1694,6 +2035,7 @@ function boot() {
   state.item = null; state.busy = false;
   state.roundN = 0; state.roundStars = 0;
   setMuted(loadStr(K_MUTED, '0') === '1');
+  loadVoicePref();
   refreshVoices();
   try { if (speechApi()) window.speechSynthesis.onvoiceschanged = refreshVoices; } catch (e) {}
   window.setTimeout(refreshVoices, 350);
