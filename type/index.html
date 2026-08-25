@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Type — Learn The Board</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="A touch-typing trainer for the Overclock arcade. Nine lessons from the home row to real code, a keyboard that shows you the next key and which finger owns it, live WPM and accuracy, and no clock chasing you.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Type">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eaf2ff;
+    --dim: rgba(234,242,255,0.56);
+    --panel: rgba(9,13,30,0.62);
+    --line: rgba(255,255,255,0.13);
+    --good: #64e3a1;
+    --bad: #ff6b7a;
+    --u: 26px;
+    --gap: 4px;
+    --keyh: 44px;
+    --drillsize: 26px;
+  }
+  /* the eight fingers + thumbs, home-row anchored */
+  .f0 { --fc: #f45d7a; }  /* left pinky   */
+  .f1 { --fc: #f89b3c; }  /* left ring    */
+  .f2 { --fc: #f2d34e; }  /* left middle  */
+  .f3 { --fc: #7ddc6a; }  /* left index   */
+  .f4 { --fc: #4fd1c5; }  /* right index  */
+  .f5 { --fc: #4aa8ff; }  /* right middle */
+  .f6 { --fc: #9b7dff; }  /* right ring   */
+  .f7 { --fc: #e56ce0; }  /* right pinky  */
+  .f8 { --fc: #9aa8c4; }  /* thumbs       */
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: manipulation;
+  }
+  #stage {
+    position: fixed; inset: 0; overflow: hidden;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(255,204,77,0.07), rgba(255,204,77,0) 60%),
+      radial-gradient(100% 60% at 50% 110%, rgba(79,209,197,0.09), rgba(79,209,197,0) 65%),
+      var(--bg);
+  }
+
+  /* ------------------------------------------------------------- top bar -- */
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.22); }
+  body:not(.playing) #topbtns { display: none; }
+
+  /* --------------------------------------------------------------- play --- */
+  #play {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column; align-items: center;
+    padding: 6px max(6px, env(safe-area-inset-left)) max(4px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-right));
+  }
+  body.playing #play { display: flex; }
+
+  #hud {
+    width: 100%; max-width: 620px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 108px 0 2px;
+    height: 46px; flex: 0 0 auto;
+  }
+  #lesson {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  #lessonNo {
+    font-size: 8.5px; letter-spacing: 0.26em; font-weight: 800;
+    color: var(--dim); text-transform: uppercase;
+  }
+  #lessonName {
+    font-size: 13px; letter-spacing: 0.15em; font-weight: 800;
+    color: var(--accent); text-shadow: 0 0 16px rgba(255,204,77,0.32);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #hudstats { display: flex; gap: 5px; flex: 0 0 auto; }
+  .hs {
+    min-width: 50px; text-align: center;
+    background: rgba(255,255,255,0.045);
+    border: 1px solid var(--line); border-radius: 9px;
+    padding: 3px 5px;
+  }
+  .hs .k { font-size: 7.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+  .hs .v { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .hs .v.accent { color: var(--accent); }
+  .hs .v.good { color: var(--good); }
+
+  #barwrap {
+    width: 100%; max-width: 620px; height: 4px; flex: 0 0 auto;
+    background: rgba(255,255,255,0.09); border-radius: 3px; overflow: hidden;
+    margin-bottom: 4px;
+  }
+  #bar { height: 100%; width: 0; background: var(--accent); transition: width 90ms linear; }
+
+  /* ------------------------------------------------------------- drill --- */
+  #drillwrap {
+    flex: 1 1 auto; min-height: 0; width: 100%;
+    display: flex; align-items: center; justify-content: center;
+    padding: 4px 2px;
+  }
+  #drill {
+    width: 100%; max-width: 620px;
+    font-family: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
+    font-size: var(--drillsize);
+    line-height: 1.62;
+    text-align: center;
+    color: var(--dim);
+    letter-spacing: 0.01em;
+  }
+  .word { display: inline-block; white-space: pre; overflow-wrap: anywhere; }
+  .ch {
+    display: inline-block;
+    position: relative;
+    border-bottom: 3px solid transparent;
+    padding: 0 0.5px;
+    transition: color 70ms linear;
+  }
+  .ch.sp::after {
+    content: ''; position: absolute; left: 50%; bottom: 34%;
+    width: 4px; height: 4px; margin-left: -2px; border-radius: 50%;
+    background: rgba(234,242,255,0.16);
+  }
+  .ch.ok { color: var(--good); }
+  .ch.ok.sp::after { background: rgba(100,227,161,0.5); }
+  .ch.err { color: var(--bad); border-bottom-color: var(--bad); background: rgba(255,107,122,0.13); }
+  .ch.err.sp::after { background: var(--bad); }
+  .ch.cur {
+    color: #16110a; background: var(--accent);
+    border-bottom-color: var(--accent);
+    border-radius: 3px;
+    box-shadow: 0 0 18px rgba(255,204,77,0.5);
+  }
+  .ch.cur.sp::after { background: #16110a; }
+  .ch.cur::before {
+    content: ''; position: absolute; left: -3px; top: 4%; bottom: 4%;
+    width: 3px; background: var(--accent); border-radius: 2px;
+    box-shadow: 0 0 10px var(--accent);
+  }
+
+  /* ---------------------------------------------------------- fingers ---- */
+  #fingers {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+    gap: 4px; padding: 2px 0 5px; flex-wrap: nowrap;
+    font-size: 8px; font-weight: 800; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--dim);
+    max-width: 100%;
+  }
+  #fingers .fg { color: var(--fc); white-space: nowrap; }
+  #fingers .sep { color: rgba(234,242,255,0.25); }
+
+  /* --------------------------------------------------------- keyboard ---- */
+  #kb {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; align-items: center;
+    gap: var(--gap);
+    width: 100%;
+  }
+  .kbrow { display: flex; gap: var(--gap); justify-content: center; }
+  #kb.nonum .kbrow.numrow { display: none; }
+  .key {
+    width: calc(var(--u) * var(--span) + var(--gap) * (var(--span) - 1));
+    height: var(--keyh);
+    flex: 0 0 auto;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.055);
+    color: var(--fg);
+    font-family: inherit; font-weight: 800;
+    font-size: calc(var(--u) * 0.5);
+    line-height: 1;
+    padding: 0; cursor: pointer;
+    overflow: hidden;
+  }
+  .key::after {
+    content: ''; position: absolute; left: 12%; right: 12%; bottom: 2px;
+    height: 3px; border-radius: 2px; background: var(--fc); opacity: 0.85;
+  }
+  .key .lab { pointer-events: none; }
+  .key .sub {
+    position: absolute; top: 2px; left: 0; right: 0;
+    font-size: calc(var(--u) * 0.3); font-weight: 700;
+    color: var(--dim); pointer-events: none; display: none;
+  }
+  #kb.showsub .key.dual .sub { display: block; }
+  #kb.showsub .key.dual .lab { margin-top: calc(var(--u) * 0.24); }
+  .key.wide { font-size: calc(var(--u) * 0.34); letter-spacing: 0.05em; }
+  .key.home::before {
+    content: ''; position: absolute; left: 50%; bottom: 7px;
+    width: 30%; height: 2px; margin-left: -15%; border-radius: 2px;
+    background: rgba(234,242,255,0.4);
+  }
+  .key.locked { opacity: 0.3; }
+  .key.locked::after { background: rgba(234,242,255,0.3); }
+  .key.next {
+    background: var(--fc); color: #08101c;
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 2px rgba(255,204,77,0.35), 0 0 22px var(--fc);
+    opacity: 1;
+    z-index: 2;
+  }
+  .key.next .sub { color: rgba(8,16,28,0.72); }
+  .key.next::after { opacity: 0; }
+  .key.next::before { background: rgba(8,16,28,0.5); }
+  .key.shiftnext {
+    background: rgba(255,204,77,0.2);
+    border: 2px solid var(--accent);
+    color: var(--accent);
+  }
+  .key.hit { background: rgba(255,204,77,0.4); }
+  .key.miss { background: rgba(255,107,122,0.45); }
+  .key:active { background: rgba(255,204,77,0.32); }
+  .key.stuck { border-color: var(--accent); color: var(--accent); }
+
+  /* landscape phones: drill left, keyboard right is too cramped — instead
+     the drill shrinks and the keyboard keeps its full width underneath */
+  body.land #hud { height: 40px; }
+  body.land #fingers { padding: 1px 0 3px; }
+
+  /* -------------------------------------------------------------- overlay */
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(11,15,30,0.86), rgba(6,8,18,0.97));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(500px, 100%);
+    background: rgba(10,14,30,0.88);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 18px 16px 16px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(30px, 9vw, 52px);
+    letter-spacing: 0.3em; font-weight: 800; line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 24px rgba(255,204,77,0.45);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(18px, 5.6vw, 26px); letter-spacing: 0.1em; font-weight: 800; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.03em; margin-bottom: 10px; line-height: 1.5; }
+  .tagline b { color: var(--accent); }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 340px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(255,255,255,0.09); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0 4px; }
+  .stat { background: rgba(255,255,255,0.045); border: 1px solid var(--line); border-radius: 10px; padding: 7px 3px; }
+  .stat .k { font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(15px, 4.6vw, 21px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .stat .v.good { color: var(--good); }
+
+  .badge {
+    display: inline-block; margin: 4px 3px 0;
+    padding: 5px 12px; border-radius: 999px;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase;
+    border: 1px solid rgba(100,227,161,0.55); color: var(--good);
+    background: rgba(100,227,161,0.12);
+  }
+  .badge.gold { border-color: rgba(255,204,77,0.6); color: var(--accent); background: rgba(255,204,77,0.13); }
+
+  .misstitle { font-size: 9px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--dim); margin: 12px 0 5px; }
+  .misslist { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .misskey {
+    min-width: 40px; padding: 5px 7px; border-radius: 8px;
+    border: 1px solid rgba(255,107,122,0.45); background: rgba(255,107,122,0.12);
+    font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+    font-size: 15px; font-weight: 800; color: var(--bad);
+  }
+  .misskey small { display: block; font-size: 8px; color: var(--dim); font-family: inherit; letter-spacing: 0.1em; }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+    margin: 10px 0 4px;
+  }
+  .lsn {
+    min-height: 56px; padding: 6px 4px;
+    border-radius: 11px; border: 1px solid var(--line);
+    background: rgba(255,255,255,0.045); color: var(--fg);
+    font-family: inherit; cursor: pointer; text-align: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  }
+  .lsn .n { font-size: 8px; letter-spacing: 0.18em; color: var(--dim); font-weight: 800; }
+  .lsn .t { font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; line-height: 1.15; }
+  .lsn .b { font-size: 8.5px; color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 700; }
+  .lsn.locked { opacity: 0.42; cursor: default; }
+  .lsn.locked .t { color: var(--dim); }
+  .lsn.done { border-color: rgba(100,227,161,0.4); }
+  .lsn.cur { border-color: rgba(255,204,77,0.65); background: rgba(255,204,77,0.1); }
+
+  .btn {
+    margin-top: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; padding: 0 22px;
+    border-radius: 14px; border: 1px solid rgba(255,204,77,0.55);
+    background: rgba(255,204,77,0.13); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.14em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,204,77,0.3); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(255,255,255,0.05); }
+  .btnrow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(24px, 8vw, 42px); font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+
+  .fingerkey { display: flex; flex-wrap: wrap; gap: 4px 8px; justify-content: center; margin: 8px 0 2px; }
+  .fingerkey div { font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fc); }
+
+  @media (max-height: 620px) {
+    .card { padding: 12px 14px 12px; border-radius: 14px; }
+    .keys { display: none; }
+    .stats { margin: 8px 0 2px; }
+    .misstitle { margin: 8px 0 4px; }
+    .btn { margin-top: 10px; min-height: 46px; }
+    .tagline { margin-bottom: 6px; }
+    .lsn { min-height: 48px; }
+  }
+  /* a landscape iPhone really gives about 342px of height — everything on
+     every card has to live inside that */
+  @media (max-height: 430px) {
+    .card { padding: 9px 13px 9px; }
+    .eyebrow { font-size: 9px; letter-spacing: 0.22em; }
+    h1 { font-size: 28px; margin: 1px 0; letter-spacing: 0.24em; }
+    h2 { font-size: 17px; margin: 0 0 3px; letter-spacing: 0.06em; }
+    .tagline { font-size: 11px; margin-bottom: 4px; line-height: 1.38; }
+    .stats { margin: 6px 0 2px; gap: 4px; }
+    .stat { padding: 4px 2px; }
+    .stat .v { font-size: 16px; }
+    .misstitle { margin: 6px 0 3px; }
+    .misskey { font-size: 13px; min-width: 34px; padding: 3px 5px; }
+    .badge { padding: 3px 9px; font-size: 9px; }
+    .grid { gap: 4px; margin: 6px 0 2px; grid-template-columns: repeat(5, 1fr); }
+    .lsn { min-height: 42px; padding: 3px 2px; }
+    .lsn .t { font-size: 8.5px; }
+    .lsn .n { font-size: 7px; }
+    .lsn .b { font-size: 7.5px; }
+    .btn { min-height: 44px; margin-top: 8px; padding: 0 18px; font-size: 13px; }
+    .paused { font-size: 22px; }
+    .fingerkey { display: none; }
+  }
+  @media (max-width: 379px) {
+    #hudstats { gap: 4px; }
+    .hs { min-width: 44px; padding: 2px 3px; }
+    .hs .v { font-size: 14px; }
+    #fingers { font-size: 7px; gap: 3px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="play">
+    <div id="hud">
+      <div id="lesson">
+        <div id="lessonNo">Lesson 1 of 9</div>
+        <div id="lessonName">HOME ROW</div>
+      </div>
+      <div id="hudstats">
+        <div class="hs"><div class="k">WPM</div><div class="v accent" id="sWpm">0</div></div>
+        <div class="hs"><div class="k">Acc</div><div class="v" id="sAcc">100</div></div>
+        <div class="hs"><div class="k">Streak</div><div class="v good" id="sStreak">0</div></div>
+      </div>
+    </div>
+    <div id="barwrap"><div id="bar"></div></div>
+    <div id="drillwrap"><div id="drill"></div></div>
+    <div id="fingers"></div>
+    <div id="kb"></div>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   TYPE — a data type, and a thing you do. The Overclock arcade's typing
+   trainer, built to actually teach a kid to touch-type rather than to
+   score them. Nine lessons climb from the eight home-row anchors to real
+   code, and no lesson ever shows a character the student hasn't been
+   taught — the drill text for level N is drawn only from the union of
+   everything unlocked up to N.
+
+   The on-screen board is the teaching mechanism, not decoration: it
+   lights the NEXT key and paints it in the colour of the finger that
+   owns it (standard touch-typing map, home-row anchored — the one every
+   typing course uses: left pinky owns 1QAZ, left ring 2WSX, left middle
+   3EDC, left index 45RTFGVB, right index 67YUHJNM, right middle 8IK,
+   right ring 9OL. and right pinky 0-=P[];'/ plus the outer keys; thumbs
+   own the space bar).
+
+   Mistake rule, chosen once and applied everywhere: a wrong key is
+   MARKED IN PLACE AND THE DRILL MOVES ON. Nothing blocks, nothing
+   punishes, but the miss counts against accuracy and breaks the streak.
+   Backspace walks back if the student wants to see it again.
+
+   No timer, no death, no pressure. One file, no assets, oscillator audio.
+   ========================================================================= */
+"use strict";
+
+var K_SAVE = 'type_v1';
+var K_MUTE = 'type_muted_v1';
+var UNLOCK_ACC = 90;      /* % accuracy needed to open the next lesson */
+
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* ============================================================== lessons == */
+/* Each lesson names the characters it TEACHES. The pool a lesson may draw
+   from is the union of every `teach` up to and including itself, plus the
+   space bar. Drill chunks are hand-written inside that pool and the
+   guarantee is asserted by the scripted playtest. */
+var LESSONS = [
+  {
+    name: 'HOME ROW',
+    sub: 'ASDF JKL;',
+    teach: 'asdfjkl;',
+    blurb: 'Eight keys, eight fingers. Rest your fingers on them and never look down.',
+    target: 42,
+    chunks: [
+      'fff', 'jjj', 'ddd', 'kkk', 'sss', 'lll', 'aaa', ';;;',
+      'fj fj', 'dk dk', 'sl sl', 'a; a;', 'asdf', 'jkl;', 'asdf jkl;',
+      'fad', 'lad', 'sad', 'dad', 'add', 'all', 'ask', 'asks', 'alas',
+      'fall', 'falls', 'flask', 'salad', 'salads', 'dads', 'lads', 'fads',
+      'adds', 'lass', 'alfalfa', 'jak', 'kad', 'skl', 'lask'
+    ]
+  },
+  {
+    name: 'HOME ROW + E I',
+    sub: 'G H E I',
+    teach: 'ghei',
+    blurb: 'The index fingers stretch in for G and H, then reach up for E and I.',
+    target: 42,
+    chunks: [
+      'de de', 'ki ki', 'ded', 'kik', 'ggg', 'hhh', 'fg fg', 'jh jh',
+      'he', 'she', 'his', 'had', 'has', 'head', 'heal', 'idea', 'ideal',
+      'field', 'shield', 'leash', 'flash', 'gash', 'high', 'hike', 'hail',
+      'jail', 'fake', 'lake', 'shake', 'flake', 'eagle', 'sail', 'said',
+      'like', 'life', 'leaf', 'half', 'hedge', 'glide', 'shade', 'flag',
+      'glass', 'easel', 'aside', 'haggle', 'keg', 'leg', 'led', 'kid',
+      'hid', 'lid', 'hill', 'fill', 'silk', 'gill', 'sigh', 'ledge'
+    ]
+  },
+  {
+    name: 'TOP ROW',
+    sub: 'QWERTY UIOP',
+    teach: 'qwrtyuop',
+    blurb: 'Reach up and come straight back to the home row. Never let a finger camp up there.',
+    target: 44,
+    chunks: [
+      'qq ww', 'rr tt', 'yy uu', 'oo pp', 'fr fr', 'ju ju', 'tg tg', 'yh yh',
+      'the', 'top', 'type', 'tour', 'tore', 'paper', 'quiet', 'quite',
+      'tower', 'power', 'water', 'light', 'right', 'fight', 'route',
+      'hotel', 'letter', 'sport', 'story', 'world', 'purple', 'player',
+      'trail', 'great', 'threw', 'guitar', 'output', 'polite', 'purge',
+      'shirt', 'start', 'study', 'third', 'quart', 'quilt', 'keyword',
+      'helpful', 'portal', 'reptile', 'delight', 'upside', 'together'
+    ]
+  },
+  {
+    name: 'BOTTOM ROW',
+    sub: 'ZXCVB NM',
+    teach: 'zxcvbnm',
+    blurb: 'Curl down and back. The whole alphabet is yours after this one.',
+    target: 44,
+    chunks: [
+      'zz xx', 'cc vv', 'bb nn', 'mm mm', 'zx zx', 'cv cv', 'bn bn',
+      'become', 'number', 'victory', 'zebra', 'complex', 'machine',
+      'banner', 'cabin', 'mixer', 'buzz', 'comb', 'climb', 'van', 'box',
+      'zone', 'mix', 'crumb', 'vivid', 'canvas', 'object', 'excite',
+      'jumble', 'maze', 'nozzle', 'vector', 'cousin', 'branch', 'bronze',
+      'expand', 'fabric', 'gravel', 'hazard', 'impact', 'jacket',
+      'kernel', 'lumber', 'module', 'native', 'oxygen', 'zigzag'
+    ]
+  },
+  {
+    name: 'CAPITALS',
+    sub: 'SHIFT KEYS',
+    teach: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    blurb: 'Shift with the OPPOSITE hand from the letter, and hold it — never tap Caps Lock.',
+    target: 46,
+    chunks: [
+      'Sam', 'Kim', 'Alex', 'Zoe', 'Max', 'Ohio', 'Mars', 'Monday',
+      'Friday', 'April', 'June', 'The Big Dog', 'Red Van', 'Blue Sky',
+      'New York', 'My Name Is Sam', 'Ada Lovelace', 'Grace Hopper',
+      'Alan Turing', 'Type Fast', 'Shift Key', 'Hello World',
+      'Cape Town', 'North Star', 'Quiet Room', 'Every Good Boy',
+      'Jump Over', 'Wild West', 'Green Light', 'Old Dog'
+    ]
+  },
+  {
+    name: 'NUMBERS',
+    sub: '1234 567890',
+    teach: '0123456789',
+    blurb: 'Same fingers, one row higher. Slow is fine — numbers punish guessing.',
+    target: 44,
+    chunks: [
+      '12 34', '56 78', '90 90', '123', '456', '789', '1024', '2026',
+      'level 7', 'code 42', 'row 3', 'seat 12', 'page 8', '1 2 3 4 5',
+      '6 7 8 9 0', 'Room 101', 'Bus 42', 'Year 2026', 'top 10',
+      'base 16', 'port 3020', '8 bits', '64 bytes', '7 days', '365 days'
+    ]
+  },
+  {
+    name: 'PUNCTUATION',
+    sub: 'MARKS + SYMBOLS',
+    teach: ',.\'"!?-_:()[]{}<>=+*/&|#$%@',
+    blurb: 'The small keys that make writing readable and code possible.',
+    target: 40,
+    chunks: [
+      "it's", "don't", "can't", 'well-known', 'yes!', 'why?', 'how?',
+      'a, b, c', '(hello)', '[list]', '{set}', 'a < b', 'b > a', 'x = 1',
+      'n + 2', 'p * 3', 'q / 4', 'one_two', 'fast-lane', '"hi"', "'ok'",
+      'stop!', '3 + 4 = 7', '50%', '#tag', '$5', 'a & b', 'x | y',
+      'name@host', 'Wait...', 'end.', 'top: 10', 'yes: no'
+    ]
+  },
+  {
+    name: 'SENTENCES',
+    sub: 'REAL WRITING',
+    teach: '',
+    blurb: 'Everything at once, in real English. Read a word ahead of your fingers.',
+    target: 40,
+    chunks: [
+      'The quick brown fox jumps over the lazy dog.',
+      'A good keyboard makes the work feel easy.',
+      'Type slowly at first, then let speed arrive.',
+      'My hands stay on the home row all day.',
+      'Practice for ten minutes and you will improve.',
+      'The best typists never look at their hands.',
+      'Every letter has a finger that owns it.',
+      'Keep your wrists up and your shoulders down.',
+      'Small daily practice beats one long session.',
+      'Read the word, then trust your fingers.'
+    ]
+  },
+  {
+    name: 'CODE',
+    sub: 'SNIPPETS',
+    teach: '',
+    blurb: 'Brackets, semicolons and symbols in the shapes a program actually uses.',
+    target: 40,
+    chunks: [
+      'let x = 0;', 'if (a > b) {', '} else {', 'return x + y;',
+      'const name = "Ada";', 'function add(a, b) {', 'arr[0] = 1;',
+      'x *= 2;', 'while (n > 0) {', 'for (i = 0; i < 10; i++)',
+      'print(total);', 'let sum = a + b;', 'if (score >= 90) {',
+      'count = count - 1;', 'let list = [1, 2, 3];', 'let ok = true;'
+    ]
+  }
+];
+
+/* cumulative allowed character set for a lesson index */
+function poolFor(i) {
+  var s = ' ';
+  for (var n = 0; n <= i && n < LESSONS.length; n++) s += LESSONS[n].teach;
+  return s;
+}
+function poolSet(i) {
+  var p = poolFor(i), o = {};
+  for (var n = 0; n < p.length; n++) o[p.charAt(n)] = true;
+  return o;
+}
+
+/* Build a drill: shuffle the lesson's chunks, favour the ones that carry a
+   newly-taught character, and join with single spaces until we hit target. */
+function makeDrill(i) {
+  var L = LESSONS[i];
+  var teach = L.teach, hot = [], cold = [], n, c, isHot, j;
+  for (n = 0; n < L.chunks.length; n++) {
+    c = L.chunks[n];
+    isHot = false;
+    for (j = 0; j < teach.length; j++) if (c.indexOf(teach.charAt(j)) >= 0) { isHot = true; break; }
+    (isHot ? hot : cold).push(c);
+  }
+  shuffle(hot); shuffle(cold);
+  var out = [], len = 0, hi = 0, ci = 0, useHot = hot.length > 0;
+  var guard = 0;
+  while (len < L.target && guard++ < 200) {
+    var pick = null;
+    if (useHot && hi < hot.length) { pick = hot[hi++]; }
+    else if (ci < cold.length) { pick = cold[ci++]; }
+    else if (hi < hot.length) { pick = hot[hi++]; }
+    else { shuffle(hot); shuffle(cold); hi = 0; ci = 0; continue; }
+    useHot = !useHot && hot.length > 0 ? true : (hot.length > 0 ? (out.length % 3 !== 1) : false);
+    out.push(pick);
+    len += pick.length + 1;
+  }
+  if (!out.length) out.push(L.chunks[0]);
+  return out.join(' ');
+}
+function shuffle(a) {
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = (Math.random() * (i + 1)) | 0, t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* ================================================================= save == */
+function readSave() {
+  var d = { v: 1, unlocked: 1, clean: 0, best: {} };
+  try {
+    var raw = localStorage.getItem(K_SAVE);
+    if (!raw) return d;
+    var o = JSON.parse(raw);
+    if (!o || typeof o !== 'object') return d;
+    var u = parseInt(o.unlocked, 10);
+    if (isFinite(u) && u >= 1 && u <= LESSONS.length) d.unlocked = u;
+    var cl = parseInt(o.clean, 10);
+    if (isFinite(cl) && cl >= 0 && cl < 1e7) d.clean = cl;
+    if (o.best && typeof o.best === 'object') {
+      for (var i = 0; i < LESSONS.length; i++) {
+        var b = o.best[i];
+        if (!b || typeof b !== 'object') continue;
+        var w = Number(b.w), a = Number(b.a);
+        if (!isFinite(w) || w < 0) w = 0; if (w > 400) w = 400;
+        if (!isFinite(a) || a < 0) a = 0; if (a > 100) a = 100;
+        if (w > 0 || a > 0) d.best[i] = { w: Math.round(w), a: Math.round(a) };
+      }
+    }
+  } catch (e) {}
+  return d;
+}
+function writeSave() { try { localStorage.setItem(K_SAVE, JSON.stringify(SAVE)); } catch (e) {} }
+var SAVE = readSave();
+
+/* ================================================================ audio == */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.34;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.34;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(28, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+var sfx = {
+  key:   function () { tone('triangle', 620, 520, 0.028, 0.045); },
+  miss:  function () { tone('square', 180, 128, 0.11, 0.05); },
+  back:  function () { tone('square', 300, 220, 0.04, 0.04); },
+  word:  function () { tone('triangle', 780, 900, 0.05, 0.035); },
+  done:  function () { for (var i = 0; i < 5; i++) tone('triangle', 523 * Math.pow(1.19, i), 523 * Math.pow(1.19, i), 0.2, 0.07, i * 0.09); },
+  unlock:function () { for (var i = 0; i < 3; i++) tone('sine', 660 * Math.pow(1.26, i), 900, 0.28, 0.07, i * 0.13); }
+};
+
+/* ============================================================== keyboard = */
+/* span is in key-units; f is the finger index (see the .f0-.f8 colours). */
+var KB_ROWS = [
+  { cls: 'numrow', keys: [
+    { c: '1', s: '!', f: 0 }, { c: '2', s: '@', f: 1 }, { c: '3', s: '#', f: 2 },
+    { c: '4', s: '$', f: 3 }, { c: '5', s: '%', f: 3 }, { c: '6', s: '^', f: 4 },
+    { c: '7', s: '&', f: 4 }, { c: '8', s: '*', f: 5 }, { c: '9', s: '(', f: 6 },
+    { c: '0', s: ')', f: 7 }, { c: '-', s: '_', f: 7 }, { c: '=', s: '+', f: 7 },
+    { k: 'BACK', lab: '⌫', span: 1.5, f: 7, wide: true }
+  ] },
+  { cls: 'toprow', keys: [
+    { c: 'q', f: 0 }, { c: 'w', f: 1 }, { c: 'e', f: 2 }, { c: 'r', f: 3 },
+    { c: 't', f: 3 }, { c: 'y', f: 4 }, { c: 'u', f: 4 }, { c: 'i', f: 5 },
+    { c: 'o', f: 6 }, { c: 'p', f: 7 }, { c: '[', s: '{', f: 7 }, { c: ']', s: '}', f: 7 }
+  ] },
+  { cls: 'homerow', keys: [
+    { c: 'a', f: 0, home: true }, { c: 's', f: 1, home: true }, { c: 'd', f: 2, home: true },
+    { c: 'f', f: 3, home: true }, { c: 'g', f: 3 }, { c: 'h', f: 4 },
+    { c: 'j', f: 4, home: true }, { c: 'k', f: 5, home: true }, { c: 'l', f: 6, home: true },
+    { c: ';', s: ':', f: 7, home: true }, { c: "'", s: '"', f: 7 },
+    { k: 'ENTER', lab: '⏎', span: 1.7, f: 7, wide: true }
+  ] },
+  { cls: 'botrow', keys: [
+    { k: 'LSHIFT', lab: '⇧', span: 1.5, f: 0, wide: true },
+    { c: 'z', f: 0 }, { c: 'x', f: 1 }, { c: 'c', f: 2 }, { c: 'v', f: 3 },
+    { c: 'b', f: 3 }, { c: 'n', f: 4 }, { c: 'm', f: 4 },
+    { c: ',', s: '<', f: 5 }, { c: '.', s: '>', f: 6 }, { c: '/', s: '?', f: 7 },
+    { k: 'RSHIFT', lab: '⇧', span: 1.2, f: 7, wide: true }
+  ] },
+  { cls: 'sprow', keys: [
+    { k: 'SPACE', lab: 'space', span: 6, f: 8, wide: true }
+  ] }
+];
+
+var FINGER_NAMES = ['pinky', 'ring', 'mid', 'index', 'index', 'mid', 'ring', 'pinky', 'thumb'];
+
+/* ================================================================= DOM === */
+var stage = document.getElementById('stage');
+var kbEl = document.getElementById('kb');
+var drillEl = document.getElementById('drill');
+var overlay = document.getElementById('overlay');
+var barEl = document.getElementById('bar');
+var fingersEl = document.getElementById('fingers');
+var elWpm = document.getElementById('sWpm');
+var elAcc = document.getElementById('sAcc');
+var elStreak = document.getElementById('sStreak');
+var elLessonNo = document.getElementById('lessonNo');
+var elLessonName = document.getElementById('lessonName');
+
+var keyByChar = {};    /* character -> { el, shift } */
+var keyEls = [];       /* every .key element */
+var shiftEls = { L: null, R: null };
+var chSpans = [];
+
+function buildKeyboard() {
+  kbEl.innerHTML = '';
+  keyByChar = {}; keyEls = [];
+  for (var r = 0; r < KB_ROWS.length; r++) {
+    var row = KB_ROWS[r];
+    var rowEl = document.createElement('div');
+    rowEl.className = 'kbrow ' + row.cls;
+    for (var i = 0; i < row.keys.length; i++) {
+      var d = row.keys[i];
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'key f' + d.f + (d.wide ? ' wide' : '') + (d.home ? ' home' : '') + (d.s ? ' dual' : '');
+      b.style.setProperty('--span', d.span || 1);
+      b.setAttribute('data-key', d.k || d.c);
+      if (d.s) {
+        var sub = document.createElement('span');
+        sub.className = 'sub'; sub.textContent = d.s;
+        b.appendChild(sub);
+      }
+      var lab = document.createElement('span');
+      lab.className = 'lab';
+      lab.textContent = d.lab || (d.c ? d.c.toUpperCase() : '');
+      b.appendChild(lab);
+      b.setAttribute('aria-label', d.k ? d.k : d.c);
+      rowEl.appendChild(b);
+      keyEls.push(b);
+
+      if (d.k === 'LSHIFT') shiftEls.L = b;
+      if (d.k === 'RSHIFT') shiftEls.R = b;
+      if (d.k === 'SPACE') keyByChar[' '] = { el: b, shift: false, f: d.f };
+      if (d.c) {
+        keyByChar[d.c] = { el: b, shift: false, f: d.f };
+        if (d.s) keyByChar[d.s] = { el: b, shift: true, f: d.f };
+        if (d.c >= 'a' && d.c <= 'z') keyByChar[d.c.toUpperCase()] = { el: b, shift: true, f: d.f };
+      }
+    }
+    kbEl.appendChild(rowEl);
+  }
+}
+
+function buildFingerLegend() {
+  var order = [0, 1, 2, 3, 4, 5, 6, 7];
+  var h = '';
+  for (var i = 0; i < order.length; i++) {
+    if (i === 4) h += '<span class="sep">|</span>';
+    h += '<span class="fg f' + order[i] + '">' + FINGER_NAMES[order[i]] + '</span>';
+  }
+  fingersEl.innerHTML = h;
+}
+
+/* ================================================================ layout = */
+function layout() {
+  var W = window.innerWidth || 360;
+  var H = window.innerHeight || 640;
+  var land = (W > H) && (H < 560);
+  document.body.classList.toggle('land', land);
+
+  var showNum = G.lesson >= 5;
+  kbEl.classList.toggle('nonum', !showNum);
+
+  var gap = W < 380 ? 3 : 4;
+  var cw = Math.min(W < 380 ? W - 10 : W - 16, 600);
+
+  /* the unit is whichever row is tightest — that is what stops any row
+     from ever running past the container at 360px */
+  var u = 1e9;
+  for (var r = 0; r < KB_ROWS.length; r++) {
+    var row = KB_ROWS[r];
+    if (row.cls === 'numrow' && !showNum) continue;
+    if (row.cls === 'sprow') continue;
+    var spans = 0;
+    for (var i = 0; i < row.keys.length; i++) spans += (row.keys[i].span || 1);
+    var avail = cw - gap * (row.keys.length - 1);
+    u = Math.min(u, avail / spans);
+  }
+  if (!isFinite(u) || u <= 0) u = 24;
+  u = Math.max(16, Math.min(u, 56));
+
+  /* key height: at phone widths every key stays at least 40px tall */
+  var rows = showNum ? 5 : 4;
+  var chrome = 46 + 8 + 22 + 14;              /* hud + bar + finger strip + padding */
+  var avH = H - chrome - Math.max(110, H * 0.16);
+  var keyH = Math.floor((avH - gap * (rows - 1)) / rows);
+  var floor = W <= 520 ? 40 : 32;
+  if (!isFinite(keyH)) keyH = floor;
+  keyH = Math.max(floor, Math.min(keyH, 56));
+
+  var ds = Math.max(15, Math.min(Math.round(W * 0.056), land ? 24 : 30));
+
+  var root = document.documentElement.style;
+  root.setProperty('--u', u.toFixed(2) + 'px');
+  root.setProperty('--gap', gap + 'px');
+  root.setProperty('--keyh', keyH + 'px');
+  root.setProperty('--drillsize', ds + 'px');
+  kbEl.classList.toggle('showsub', u >= 27);
+}
+window.addEventListener('resize', layout);
+window.addEventListener('orientationchange', function () { setTimeout(layout, 120); });
+
+/* ================================================================= state = */
+var G = {
+  state: 'title',      /* title | drill | done | paused | lessons */
+  lesson: 0,
+  text: '',
+  pos: 0,
+  marks: [],           /* 0 = untyped, 1 = correct, 2 = missed */
+  typed: 0, correct: 0, wrong: 0,
+  streak: 0, bestStreak: 0,
+  missed: {},
+  elapsed: 0, started: false,
+  recorded: false,
+  finalWpm: 0, finalAcc: 100,
+  clean: false, gotWpm: false, gotAcc: false, unlockedNow: false,
+  shift: false
+};
+
+/* ---------------------------------------------------------------- maths -- */
+/* WPM is the standard word = 5 characters, over correctly typed characters:
+   (correct / 5) / (minutes elapsed). 50 correct characters in 30s = 20. */
+function wpm() {
+  if (!(G.elapsed > 0)) return 0;
+  return Math.round((G.correct / 5) / (G.elapsed / 60));
+}
+/* accuracy = correct keystrokes / total keystrokes, as a percentage */
+function accRaw() { return G.typed > 0 ? (G.correct / G.typed) * 100 : 100; }
+function accPct() { return Math.round(accRaw()); }
+
+/* ================================================================= drill = */
+function startLesson(i, forcedText) {
+  if (i < 0) i = 0;
+  if (i >= LESSONS.length) i = LESSONS.length - 1;
+  if (i + 1 > SAVE.unlocked) i = SAVE.unlocked - 1;
+  G.lesson = i;
+  G.text = forcedText ? String(forcedText) : makeDrill(i);
+  G.pos = 0;
+  G.marks = [];
+  for (var n = 0; n < G.text.length; n++) G.marks.push(0);
+  G.typed = 0; G.correct = 0; G.wrong = 0;
+  G.streak = 0; G.bestStreak = 0;
+  G.missed = {};
+  G.elapsed = 0; G.started = false;
+  G.recorded = false;
+  G.finalWpm = 0; G.finalAcc = 100;
+  G.clean = false; G.gotWpm = false; G.gotAcc = false; G.unlockedNow = false;
+  G.shift = false;
+  G.state = 'drill';
+  document.body.classList.add('playing');
+  hideOverlay();
+  layout();
+  buildDrill();
+  paintLocks();
+  paintHud();
+  highlightNext();
+}
+
+function buildDrill() {
+  drillEl.innerHTML = '';
+  chSpans = [];
+  var words = G.text.split(' ');
+  var idx = 0;
+  for (var w = 0; w < words.length; w++) {
+    var wEl = document.createElement('span');
+    wEl.className = 'word';
+    for (var i = 0; i < words[w].length; i++) {
+      wEl.appendChild(mkCh(words[w].charAt(i), idx++));
+    }
+    if (w < words.length - 1) wEl.appendChild(mkCh(' ', idx++));
+    drillEl.appendChild(wEl);
+  }
+  for (var n = 0; n < chSpans.length; n++) paintCh(n);
+}
+function mkCh(ch, idx) {
+  var s = document.createElement('span');
+  s.className = 'ch' + (ch === ' ' ? ' sp' : '');
+  s.textContent = ch === ' ' ? ' ' : ch;
+  s.setAttribute('data-i', idx);
+  chSpans[idx] = s;
+  return s;
+}
+function paintCh(i) {
+  var s = chSpans[i];
+  if (!s) return;
+  s.classList.toggle('ok', G.marks[i] === 1);
+  s.classList.toggle('err', G.marks[i] === 2);
+  s.classList.toggle('cur', i === G.pos && G.state === 'drill');
+}
+
+/* Which key should light next, and does it need a shift? */
+function highlightNext() {
+  for (var i = 0; i < keyEls.length; i++) keyEls[i].classList.remove('next', 'shiftnext');
+  if (G.state !== 'drill') return;
+  var ch = G.text.charAt(G.pos);
+  if (!ch) return;
+  var m = keyByChar[ch];
+  if (!m) return;
+  m.el.classList.add('next');
+  if (m.shift) {
+    /* shift with the opposite hand: fingers 0-3 are the left hand */
+    var use = m.f <= 3 ? shiftEls.R : shiftEls.L;
+    if (use) use.classList.add('shiftnext');
+  }
+}
+
+/* dim every key the student has not been taught yet */
+function paintLocks() {
+  var ps = poolSet(G.lesson);
+  for (var i = 0; i < keyEls.length; i++) {
+    var k = keyEls[i], id = k.getAttribute('data-key');
+    var open;
+    if (id === 'SPACE') open = true;
+    else if (id === 'BACK' || id === 'ENTER') open = true;
+    else if (id === 'LSHIFT' || id === 'RSHIFT') open = G.lesson >= 4;
+    else {
+      open = !!ps[id];
+      if (!open && id.length === 1 && id >= 'a' && id <= 'z') open = !!ps[id.toUpperCase()];
+      if (!open) {
+        /* a key is open if either of its two characters is unlocked */
+        for (var c in keyByChar) {
+          if (keyByChar.hasOwnProperty(c) && keyByChar[c].el === k && ps[c]) { open = true; break; }
+        }
+      }
+    }
+    k.classList.toggle('locked', !open);
+  }
+}
+
+function flashKey(ch, bad) {
+  var m = keyByChar[ch];
+  if (!m) return;
+  var cls = bad ? 'miss' : 'hit';
+  m.el.classList.add(cls);
+  setTimeout(function () { m.el.classList.remove(cls); }, 110);
+}
+
+/* -------------------------------------------------------- the keystroke -- */
+function handleChar(ch) {
+  if (G.state !== 'drill') return false;
+  if (G.pos >= G.text.length) return false;
+  if (!G.started) { G.started = true; G.elapsed = 0; }
+
+  var want = G.text.charAt(G.pos);
+  var hit = (ch === want);
+  G.typed++;
+  if (hit) {
+    G.correct++;
+    G.marks[G.pos] = 1;
+    G.streak++;
+    if (G.streak > G.bestStreak) G.bestStreak = G.streak;
+    if (want === ' ') sfx.word(); else sfx.key();
+  } else {
+    G.wrong++;
+    G.marks[G.pos] = 2;
+    G.streak = 0;
+    G.missed[want] = (G.missed[want] || 0) + 1;
+    sfx.miss();
+  }
+  flashKey(ch, !hit);
+
+  var old = G.pos;
+  G.pos++;
+  paintCh(old);
+  paintCh(G.pos);
+  paintHud();
+  highlightNext();
+
+  if (G.pos >= G.text.length) finish();
+  return hit;
+}
+
+/* Backspace walks back one character so the student can look at it again.
+   The miss has already been counted — going back never buys accuracy. */
+function handleBack() {
+  if (G.state !== 'drill' || G.pos <= 0) return;
+  var old = G.pos;
+  G.pos--;
+  G.marks[G.pos] = 0;
+  paintCh(old);
+  paintCh(G.pos);
+  sfx.back();
+  paintHud();
+  highlightNext();
+}
+
+function paintHud() {
+  var L = LESSONS[G.lesson];
+  elLessonNo.textContent = 'Lesson ' + (G.lesson + 1) + ' of ' + LESSONS.length;
+  elLessonName.textContent = L.name;
+  elWpm.textContent = wpm();
+  elAcc.textContent = accPct();
+  elStreak.textContent = G.streak;
+  var pct = G.text.length ? (G.pos / G.text.length) * 100 : 0;
+  barEl.style.width = pct.toFixed(1) + '%';
+}
+
+/* =============================================================== finish == */
+function finish() {
+  if (G.state !== 'drill') return;
+  G.state = 'done';
+  G.finalWpm = wpm();
+  G.finalAcc = accPct();
+  G.clean = (G.wrong === 0 && G.typed > 0);
+  record();
+  for (var i = 0; i < keyEls.length; i++) keyEls[i].classList.remove('next', 'shiftnext');
+  paintCh(G.pos - 1);
+  sfx.done();
+  if (G.unlockedNow) setTimeout(function () { sfx.unlock(); }, 420);
+  setTimeout(summaryScreen, 260);
+}
+
+function record() {
+  if (G.recorded) return;
+  G.recorded = true;
+  var b = SAVE.best[G.lesson] || { w: 0, a: 0 };
+  if (G.finalWpm > b.w) { b.w = G.finalWpm; G.gotWpm = true; }
+  if (G.finalAcc > b.a) { b.a = G.finalAcc; G.gotAcc = true; }
+  SAVE.best[G.lesson] = b;
+  if (G.clean) SAVE.clean++;
+  /* the next lesson opens only from the frontier, and only at the bar */
+  if (G.finalAcc >= UNLOCK_ACC &&
+      G.lesson + 1 === SAVE.unlocked &&
+      SAVE.unlocked < LESSONS.length) {
+    SAVE.unlocked++;
+    G.unlockedNow = true;
+  }
+  writeSave();
+}
+
+function missTop(n) {
+  var arr = [], c;
+  for (c in G.missed) if (G.missed.hasOwnProperty(c)) arr.push([c, G.missed[c]]);
+  arr.sort(function (a, b) { return b[1] - a[1]; });
+  return arr.slice(0, n || 5);
+}
+
+/* =============================================================== screens = */
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+
+function fingerKeyHTML() {
+  var h = '<div class="fingerkey">';
+  var names = ['L pinky', 'L ring', 'L middle', 'L index', 'R index', 'R middle', 'R ring', 'R pinky'];
+  for (var i = 0; i < 8; i++) h += '<div class="f' + i + '">' + names[i] + '</div>';
+  return h + '</div>';
+}
+
+function titleScreen() {
+  G.state = 'title';
+  document.body.classList.remove('playing');
+  var next = Math.min(SAVE.unlocked, LESSONS.length);
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>TYPE</h1>' +
+      '<div class="tagline">Nine lessons from the eight home-row keys to real code. The board below lights the next key and paints it in the colour of the finger that owns it. No clock, no dying &mdash; just the keys, in order.</div>' +
+      '<div class="tagline" style="margin:0 0 8px">Miss a key and it turns <b style="color:var(--bad)">red</b> and the drill moves on &mdash; it costs you accuracy, not your place. Reach <b>' + UNLOCK_ACC + '%</b> to open the next lesson.</div>' +
+      fingerKeyHTML() +
+      '<div class="keys">' +
+        '<div>Type<span>Your real keyboard (or tap the board)</span></div>' +
+        '<div>Back up one<span>Backspace</span></div>' +
+        '<div>Pause<span>Esc, or the &#10073;&#10073; button</span></div>' +
+        '<div>Mute<span>The &#9835; button (M on menus)</span></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="start">START TYPING</button>' +
+        '<button class="btn ghost" data-act="lessons">LESSONS</button>' +
+      '</div>' +
+      '<div class="tagline" style="margin:8px 0 0">Up next: lesson ' + next + ' &mdash; ' + esc(LESSONS[next - 1].name) + '</div>' +
+    '</div>');
+}
+
+function lessonScreen() {
+  G.state = 'lessons';
+  document.body.classList.remove('playing');
+  var h = '<div class="card"><div class="eyebrow">Pick a lesson</div><h2>THE LADDER</h2>' +
+    '<div class="tagline">Every lesson only ever uses keys you have already been taught.</div><div class="grid">';
+  for (var i = 0; i < LESSONS.length; i++) {
+    var open = (i + 1) <= SAVE.unlocked;
+    var b = SAVE.best[i];
+    var cls = 'lsn' + (open ? '' : ' locked') + (b ? ' done' : '') + ((i + 1) === SAVE.unlocked ? ' cur' : '');
+    h += '<button class="' + cls + '"' + (open ? ' data-act="pick" data-i="' + i + '"' : ' disabled') + '>' +
+           '<div class="n">' + (i + 1) + '</div>' +
+           '<div class="t">' + esc(open ? LESSONS[i].name : 'LOCKED') + '</div>' +
+           '<div class="b">' + (b ? b.w + ' wpm &middot; ' + b.a + '%' : (open ? '&mdash;' : '')) + '</div>' +
+         '</button>';
+  }
+  h += '</div><div class="btnrow"><button class="btn ghost" data-act="title">BACK</button></div></div>';
+  showOverlay(h);
+}
+
+function summaryScreen() {
+  var L = LESSONS[G.lesson];
+  var miss = missTop(5);
+  var b = SAVE.best[G.lesson] || { w: 0, a: 0 };
+  var h = '<div class="card">' +
+    '<div class="eyebrow">Lesson ' + (G.lesson + 1) + ' &mdash; ' + esc(L.name) + '</div>' +
+    '<h2>' + (G.clean ? 'CLEAN RUN' : 'DRILL COMPLETE') + '</h2>' +
+    '<div class="stats">' +
+      '<div class="stat"><div class="k">WPM</div><div class="v accent">' + G.finalWpm + '</div></div>' +
+      '<div class="stat"><div class="k">Accuracy</div><div class="v ' + (G.finalAcc >= UNLOCK_ACC ? 'good' : '') + '">' + G.finalAcc + '%</div></div>' +
+      '<div class="stat"><div class="k">Streak</div><div class="v">' + G.bestStreak + '</div></div>' +
+      '<div class="stat"><div class="k">Missed</div><div class="v">' + G.wrong + '</div></div>' +
+    '</div>' +
+    '<div>' +
+      (G.clean ? '<span class="badge">Clean run &mdash; no misses</span>' : '') +
+      (G.gotWpm ? '<span class="badge gold">Best WPM</span>' : '') +
+      (G.gotAcc ? '<span class="badge gold">Best accuracy</span>' : '') +
+      (G.unlockedNow ? '<span class="badge gold">Lesson ' + (G.lesson + 2) + ' unlocked</span>' : '') +
+    '</div>';
+
+  if (miss.length) {
+    h += '<div class="misstitle">Keys to practise</div><div class="misslist">';
+    for (var i = 0; i < miss.length; i++) {
+      var c = miss[i][0] === ' ' ? 'space' : miss[i][0];
+      h += '<div class="misskey">' + esc(c) + '<small>&times;' + miss[i][1] + '</small></div>';
+    }
+    h += '</div>';
+  } else {
+    h += '<div class="tagline" style="margin-top:10px">Every single key landed. Same lesson faster, or move up.</div>';
+  }
+
+  h += '<div class="tagline" style="margin-top:10px">Your best here: <b>' + b.w + ' wpm</b> at <b>' + b.a + '%</b>' +
+       (G.finalAcc < UNLOCK_ACC && G.lesson + 1 === SAVE.unlocked && SAVE.unlocked < LESSONS.length
+         ? ' &mdash; ' + UNLOCK_ACC + '% opens lesson ' + (G.lesson + 2) : '') + '</div>';
+
+  h += '<div class="btnrow">' +
+         '<button class="btn" data-act="again">AGAIN</button>' +
+         ((G.lesson + 2) <= SAVE.unlocked ? '<button class="btn" data-act="next">NEXT LESSON</button>' : '') +
+         '<button class="btn ghost" data-act="lessons">LESSONS</button>' +
+       '</div></div>';
+  showOverlay(h);
+}
+
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="tagline" style="margin-top:10px">Lesson ' + (G.lesson + 1) + ' &mdash; ' + esc(LESSONS[G.lesson].name) +
+        '<br>' + G.pos + ' of ' + G.text.length + ' characters</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="lessons">QUIT</button>' +
+      '</div>' +
+    '</div>');
+}
+
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 'start') startLesson(SAVE.unlocked - 1);
+  else if (act === 'again') startLesson(G.lesson);
+  else if (act === 'next') startLesson(G.lesson + 1);
+  else if (act === 'pick') startLesson(parseInt(btn.getAttribute('data-i'), 10) || 0);
+  else if (act === 'lessons') lessonScreen();
+  else if (act === 'title') titleScreen();
+  else if (act === 'resume') togglePause();
+});
+
+function togglePause() {
+  if (G.state === 'drill') { G.state = 'paused'; pauseScreen(); }
+  else if (G.state === 'paused') { G.state = 'drill'; hideOverlay(); highlightNext(); }
+}
+
+/* ================================================================= input = */
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+kbEl.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('.key') : null;
+  if (!b) return;
+  initAudio();
+  var id = b.getAttribute('data-key');
+  if (id === 'LSHIFT' || id === 'RSHIFT') {
+    G.shift = !G.shift;
+    if (shiftEls.L) shiftEls.L.classList.toggle('stuck', G.shift);
+    if (shiftEls.R) shiftEls.R.classList.toggle('stuck', G.shift);
+    return;
+  }
+  if (id === 'BACK') { handleBack(); return; }
+  if (id === 'ENTER') { return; }
+  var ch = id;
+  if (id === 'SPACE') ch = ' ';
+  else if (G.shift) {
+    /* the shifted face of this key */
+    for (var c in keyByChar) {
+      if (keyByChar.hasOwnProperty(c) && keyByChar[c].el === b && keyByChar[c].shift) { ch = c; break; }
+    }
+  }
+  if (G.shift) {
+    G.shift = false;
+    if (shiftEls.L) shiftEls.L.classList.remove('stuck');
+    if (shiftEls.R) shiftEls.R.classList.remove('stuck');
+  }
+  handleChar(ch);
+});
+
+window.addEventListener('keydown', function (e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  initAudio();
+
+  if (G.state === 'drill') {
+    if (e.key === 'Escape') { e.preventDefault(); togglePause(); return; }
+    if (e.key === 'Backspace') { e.preventDefault(); handleBack(); return; }
+    if (e.key === 'Tab') { e.preventDefault(); return; }
+    if (e.key && e.key.length === 1) { e.preventDefault(); handleChar(e.key); }
+    return;
+  }
+
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'escape') {
+    e.preventDefault();
+    if (G.state === 'paused') togglePause();
+    else if (G.state === 'lessons') titleScreen();
+    else if (G.state === 'done') lessonScreen();
+    return;
+  }
+  if (k === 'enter' || k === ' ') {
+    e.preventDefault();
+    if (G.state === 'title') startLesson(SAVE.unlocked - 1);
+    else if (G.state === 'done') startLesson(G.lesson);
+  }
+});
+
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () {
+  if (G.state === 'drill' || G.state === 'paused') togglePause();
+});
+window.addEventListener('blur', function () { if (G.state === 'drill' && G.started) togglePause(); });
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && G.state === 'drill' && G.started) togglePause();
+});
+
+/* --------------------------------------------------------------- gamepad - */
+var padPrev = {};
+function padDown(p, i) {
+  var now = !!(p.buttons[i] && p.buttons[i].pressed);
+  var was = !!padPrev[i];
+  padPrev[i] = now;
+  return now && !was;
+}
+function pollPad() {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null, i;
+  for (i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  if (padDown(p, 0)) {
+    initAudio();
+    if (G.state === 'title') startLesson(SAVE.unlocked - 1);
+    else if (G.state === 'done') startLesson(G.lesson);
+    else if (G.state === 'paused') togglePause();
+  }
+  if (padDown(p, 1)) { if (G.state === 'drill') handleBack(); }
+  if (padDown(p, 9)) { if (G.state === 'drill' || G.state === 'paused') togglePause(); }
+}
+
+/* ================================================================== loop = */
+/* Nothing simulates. The loop only accumulates drill time (dt, never a
+   wall clock) and services the gamepad, so the game is fully static
+   between keystrokes. */
+var lastT = 0, hudT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  pollPad();
+  if (G.state === 'drill' && G.started) {
+    G.elapsed += dt;
+    hudT += dt;
+    if (hudT > 0.12) {
+      hudT = 0;
+      elWpm.textContent = wpm();
+    }
+  }
+}
+
+/* ================================================================== boot = */
+buildKeyboard();
+buildFingerLegend();
+layout();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(layout).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -1,0 +1,1739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Char — Letters and Sounds</title>
+<meta name="theme-color" content="#fff3e0">
+<meta name="description" content="A char is one letter. Find it, match big to little, hear its sound, and spot what it starts. Four gentle activities that find a child's level by playing with her, then keep climbing — everything spoken aloud, nothing to lose.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Char">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #fff3e0;
+    --bg2: #ffe0b2;
+    --ink: #4a3520;
+    --dim: #7d6448;
+    --card: #ffffff;
+    --line: rgba(74,53,32,0.18);
+    --accent: #ef6c00;
+    --blue: #1565c0;
+    --green: #2e7d32;
+    --purple: #6a1b9a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, "Trebuchet MS", sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  body {
+    background: radial-gradient(120% 80% at 50% 0%, #fffdf7 0%, var(--bg) 46%, var(--bg2) 100%);
+  }
+  button { font-family: inherit; color: inherit; touch-action: manipulation; }
+
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+
+  /* ---- top-right icon buttons: the 100x52 reserve ---- */
+  #topbtns {
+    position: absolute;
+    top: max(6px, env(safe-area-inset-top));
+    right: max(6px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 8;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--card); color: var(--ink);
+    border: 2px solid var(--line);
+    font-size: 19px; font-weight: 700; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 2px 0 rgba(74,53,32,0.14);
+  }
+  .iconbtn:active { transform: translateY(2px); box-shadow: none; }
+  .iconbtn.off { opacity: 0.45; }
+  body:not(.playing) #homeBtn { display: none; }
+
+  /* ---- screens ---- */
+  #app {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    padding: 58px max(10px, env(safe-area-inset-left)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-right));
+  }
+  #app.scroll { overflow-y: auto; }
+  .screen { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px;
+            width: 100%; max-width: 880px; align-self: center; }
+
+  /* progress dots — how far through this short set, not a score */
+  .dots { flex: 0 0 auto; height: 20px; display: flex; gap: 8px; justify-content: center; align-items: center; }
+  .dots i { width: 13px; height: 13px; border-radius: 50%; background: rgba(74,53,32,0.16); display: block; }
+  .dots i.on { background: #ffb300; box-shadow: 0 0 0 3px rgba(255,179,0,0.22); }
+
+  /* Layout is IDENTICAL every round: dots, label, prompt slot, speaker,
+     clue line, choices. Nothing moves between activities or items. */
+  .prompt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 8px; text-align: center; }
+  .eyebrow { flex: 0 0 auto; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase;
+             color: var(--dim); font-weight: 700; }
+  .slot { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  .bigletter { font-size: clamp(52px, 15vh, 122px); font-weight: 800; line-height: 1;
+               color: var(--purple); text-shadow: 0 4px 0 rgba(106,27,154,0.15); }
+  .bigletter.blue { color: var(--blue); text-shadow: 0 4px 0 rgba(21,101,192,0.15); }
+  .hintword { flex: 0 0 auto; min-height: 26px; font-size: clamp(15px, 4vw, 21px);
+              font-weight: 700; color: var(--dim); display: flex; align-items: center; justify-content: center; }
+  .hintword b { color: var(--green); font-size: 1.5em; }
+
+  /* the replay speaker — same size, same place, every single screen */
+  .speaker {
+    flex: 0 0 auto;
+    width: 104px; height: 104px; border-radius: 50%;
+    border: 4px solid rgba(239,108,0,0.55);
+    background: #fff3e0; cursor: pointer; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 0 rgba(239,108,0,0.3);
+  }
+  .speaker:active { transform: translateY(3px); box-shadow: none; }
+  .speaker svg { width: 60px; height: 60px; display: block; }
+  .speaker.pulse { animation: pulse 1.3s ease-in-out 2; }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+  body.nospeech .speaker { display: none !important; }
+
+  /* ---- answer choices: big, well spaced, forgiving ---- */
+  .choices {
+    flex: 0 0 auto; display: grid; gap: 14px; align-items: stretch;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .choices.c3 { grid-template-columns: repeat(3, 1fr); }
+  .choices.c4 { grid-template-columns: repeat(2, 1fr); }
+  .choice {
+    min-width: 90px; min-height: 122px;
+    border-radius: 24px; border: 4px solid var(--line);
+    background: var(--card); cursor: pointer; padding: 6px 4px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    box-shadow: 0 4px 0 rgba(74,53,32,0.13);
+    position: relative; overflow: hidden;
+    transition: transform 0.12s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .choice:active { transform: translateY(3px); }
+  .choice .glyph { font-size: clamp(40px, 8.4vh, 66px); font-weight: 800; line-height: 1; color: var(--blue); }
+  .choice .glyph.pairg { font-size: clamp(31px, 6.4vh, 52px); color: var(--purple); }
+  .choice .word { font-size: 13px; font-weight: 700; color: var(--dim); letter-spacing: 0.04em; }
+  .choice .pic { width: clamp(62px, 12vh, 100px); height: clamp(62px, 12vh, 100px); display: block; }
+  /* the only two states: chosen-and-right, or here-is-the-one. Never a "wrong" state. */
+  .choice.right { border-color: #43a047; background: #e8f5e9; animation: bounce 0.5s ease; }
+  .choice.show  { border-color: #43a047; background: #e8f5e9; animation: nudge 1s ease-in-out 2; }
+  @keyframes bounce { 0% { transform: scale(1); } 35% { transform: scale(1.1); } 65% { transform: scale(0.98); } 100% { transform: scale(1); } }
+  @keyframes nudge { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+  /* ---- menu ---- */
+  .tiles { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .tile {
+    min-height: 110px; border-radius: 26px; border: 4px solid var(--line);
+    background: var(--card); cursor: pointer; padding: 6px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    box-shadow: 0 4px 0 rgba(74,53,32,0.13);
+  }
+  .tile:active { transform: translateY(3px); box-shadow: none; }
+  .tile svg { width: clamp(56px, 15vh, 132px); height: clamp(56px, 15vh, 132px); display: block; }
+  .tile .word { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; color: var(--dim); text-transform: uppercase; }
+  .menuhead { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
+  .grownlink {
+    flex: 0 0 auto; align-self: center; min-height: 44px; padding: 0 20px; margin-top: 2px;
+    border-radius: 12px; border: 2px solid var(--line); background: rgba(255,255,255,0.6);
+    font-size: 11px; font-weight: 800; letter-spacing: 0.18em; color: var(--dim);
+    text-transform: uppercase; cursor: pointer;
+  }
+
+  /* ---- title / finish ---- */
+  .center { align-items: center; justify-content: center; text-align: center; gap: 14px; }
+  h1 { margin: 0; font-size: clamp(48px, 15vw, 96px); font-weight: 800; letter-spacing: 0.16em;
+       color: var(--accent); text-shadow: 0 5px 0 rgba(239,108,0,0.22); }
+  .tagline { font-size: clamp(13px, 3.6vw, 17px); color: var(--dim); font-weight: 700; max-width: 470px; }
+  .btn {
+    min-height: 84px; min-width: 210px; padding: 0 34px;
+    border-radius: 26px; border: 4px solid #2e7d32; background: #81c784; color: #06280b;
+    font-size: 26px; font-weight: 800; letter-spacing: 0.22em; cursor: pointer;
+    box-shadow: 0 5px 0 rgba(27,94,32,0.5);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .btn:active { transform: translateY(4px); box-shadow: none; }
+  .btn::before { content: "\25B6"; margin-right: 14px; font-size: 22px; }
+  .grownup { font-size: 11.5px; color: var(--dim); line-height: 1.55; max-width: 470px; }
+  .bigrow { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  .bigbtn {
+    min-width: 132px; min-height: 132px; border-radius: 30px; border: 4px solid var(--line);
+    background: var(--card); cursor: pointer; padding: 6px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    box-shadow: 0 5px 0 rgba(74,53,32,0.14);
+  }
+  .bigbtn.go { border-color: #2e7d32; background: #e8f5e9; }
+  .bigbtn:active { transform: translateY(4px); box-shadow: none; }
+  .bigbtn svg { width: 74px; height: 74px; display: block; }
+  .bigbtn .word { font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: var(--dim); text-transform: uppercase; }
+  .starrow { display: flex; gap: 6px; justify-content: center; }
+  .starrow svg { width: 40px; height: 40px; }
+
+  /* ---- grown-up progress ---- */
+  .gu { text-align: left; font-size: 13px; color: var(--ink); }
+  .gu h2 { margin: 0 0 8px; font-size: 17px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  .gcard { background: var(--card); border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; }
+  .gcard .gt { font-weight: 800; font-size: 14px; margin-bottom: 2px; }
+  .gcard .gl { font-size: 12px; color: var(--dim); }
+  .gcard .lvlbar { display: flex; gap: 3px; margin: 6px 0 4px; }
+  .gcard .lvlbar i { flex: 1 1 0; height: 9px; border-radius: 4px; background: rgba(74,53,32,0.14); display: block; }
+  .gcard .lvlbar i.on { background: #66bb6a; }
+  .gcard .lvlbar i.now { background: var(--accent); }
+  .gcard svg.spark { width: 100%; height: 46px; display: block; margin-top: 4px; }
+  .gnote { font-size: 11.5px; color: var(--dim); line-height: 1.55; margin: 4px 0 10px; }
+
+  /* ---- stars / banner ---- */
+  #fx { position: absolute; inset: 0; pointer-events: none; z-index: 7; overflow: hidden; }
+  .star { position: absolute; width: 40px; height: 40px; animation: fly 1s ease-out forwards; }
+  @keyframes fly {
+    0% { transform: translate(0,0) scale(0.3) rotate(0deg); opacity: 1; }
+    100% { transform: translate(var(--dx), var(--dy)) scale(1.25) rotate(190deg); opacity: 0; }
+  }
+  #banner {
+    position: absolute; left: 50%; top: 10%; transform: translateX(-50%);
+    background: rgba(255,255,255,0.94); border: 3px solid var(--line);
+    border-radius: 18px; padding: 8px 18px; font-size: 17px; font-weight: 800;
+    color: var(--green); z-index: 9; display: none; max-width: 88%; text-align: center;
+  }
+  #banner.on { display: block; }
+  #banner.soft { color: var(--dim); }
+
+  /* ---- gallery (verification aid, not part of play) ---- */
+  #gallery { position: absolute; inset: 0; overflow: auto; background: var(--bg); z-index: 20; padding: 10px; display: none; }
+  #gallery.on { display: block; }
+  #gallery .g { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  #gallery .gi { background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 6px; text-align: center; }
+  #gallery .gi svg { width: 100%; height: auto; display: block; }
+  #gallery .gi b { font-size: 13px; }
+
+  @media (min-width: 700px) { .choices.c4 { grid-template-columns: repeat(4, 1fr); } }
+  @media (max-height: 460px) {
+    #app { padding-top: 52px; }
+    .screen { gap: 6px; }
+    .dots { height: 16px; }
+    .choices { gap: 10px; }
+    .choices.c4 { grid-template-columns: repeat(4, 1fr); }
+    .choice { min-height: 104px; border-radius: 18px; }
+    .tiles { grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .tile { min-height: 92px; border-radius: 18px; }
+    .speaker { width: 88px; height: 88px; }
+    .speaker svg { width: 50px; height: 50px; }
+    .btn { min-height: 68px; font-size: 22px; }
+    .bigbtn { min-width: 116px; min-height: 116px; }
+    .bigbtn svg { width: 58px; height: 58px; }
+    .grownup { display: none; }
+    .hintword { min-height: 20px; }
+  }
+  @media (max-width: 374px) { .choices { gap: 12px; } .tiles { gap: 12px; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Sound on or off">&#9835;</button>
+    <button class="iconbtn" id="homeBtn" type="button" aria-label="Back to the picture menu">&#9632;</button>
+  </div>
+  <div id="app"></div>
+  <div id="fx"></div>
+  <div id="banner"></div>
+  <div id="gallery"></div>
+</div>
+<script>
+/* =========================================================================
+   CHAR — letters and sounds, for the Overclock family arcade.
+
+   A `char` is a single character. This is the rung BELOW Scan: Scan starts
+   at letter sounds and climbs to blending, sight words and passages. Char is
+   for a reader still learning which squiggle is which — and it hands off to
+   Scan when she's ready.
+
+   WHO IT IS FOR, and every rule that follows from it:
+
+   * She cannot read. So every prompt is SPOKEN with the browser's own
+     speechSynthesis and ALSO drawn. Text on screen is for the grown-up.
+     A big speaker button sits in the same place on every screen.
+   * She may be working below her age, and her motor control may be
+     affected. So targets are huge and well spaced, taps are single and
+     forgiving, and the layout never moves between items.
+   * She is bright and has been short of air, not short of ability. So the
+     ladder does not stop at the easy start — it climbs to four choices,
+     letter sounds and first sounds, then points at Scan.
+   * The game FINDS HER LEVEL by playing with her. No difficulty screen, no
+     guessing. Up after four in a row, down fast after two misses, and an
+     occasional quiet probe one rung above so she can never get stuck low.
+   * There is no failure state anywhere. No red, no buzzer, no shake, no
+     score, no timer. A miss simply says the right answer warmly, shows it,
+     and brings the letter back later as ordinary practice.
+   * She is never asked to say anything. Everything is tapping.
+
+   speechSynthesis is a browser API, not an asset — but it is missing often
+   enough (headless, kiosks, some Linux builds) that the whole game has to
+   work in silence. When it is missing the speaker is hidden and the
+   pictures carry the question.
+   ========================================================================= */
+
+/* ============================================================ storage == */
+var K_SAVE  = 'char_v1';
+var K_MUTED = 'char_muted_v1';
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+
+/* ============================================================ letters == */
+/* Letters and Sounds order — the first six spell more words than the whole
+   rest of the alphabet does, which is why they come first. `snd` is a
+   spelled-out approximation of the PHONEME (/b/, not "bee") tuned so
+   speechSynthesis renders it close enough; `nm` is the letter NAME. */
+var LETTERS = [
+  { u: 'S', l: 's', nm: 'ess',        snd: 'sss',  key: 'sun' },
+  { u: 'A', l: 'a', nm: 'ay',         snd: 'aah',  key: 'apple' },
+  { u: 'T', l: 't', nm: 'tee',        snd: 'tuh',  key: 'tree' },
+  { u: 'P', l: 'p', nm: 'pee',        snd: 'puh',  key: 'pig' },
+  { u: 'I', l: 'i', nm: 'eye',        snd: 'ih',   key: 'igloo' },
+  { u: 'N', l: 'n', nm: 'enn',        snd: 'nnn',  key: 'nest' },
+  { u: 'M', l: 'm', nm: 'emm',        snd: 'mmm',  key: 'moon' },
+  { u: 'D', l: 'd', nm: 'dee',        snd: 'duh',  key: 'dog' },
+  { u: 'G', l: 'g', nm: 'jee',        snd: 'guh',  key: 'grapes' },
+  { u: 'O', l: 'o', nm: 'oh',         snd: 'awh',  key: 'octopus' },
+  { u: 'C', l: 'c', nm: 'see',        snd: 'kuh',  key: 'cat' },
+  { u: 'K', l: 'k', nm: 'kay',        snd: 'kuh',  key: 'key' },
+  { u: 'E', l: 'e', nm: 'ee',         snd: 'eh',   key: 'egg' },
+  { u: 'U', l: 'u', nm: 'you',        snd: 'uh',   key: 'umbrella' },
+  { u: 'R', l: 'r', nm: 'arr',        snd: 'rrr',  key: 'rainbow' },
+  { u: 'H', l: 'h', nm: 'aitch',      snd: 'huh',  key: 'hat' },
+  { u: 'B', l: 'b', nm: 'bee',        snd: 'buh',  key: 'ball' },
+  { u: 'F', l: 'f', nm: 'eff',        snd: 'fff',  key: 'fish' },
+  { u: 'L', l: 'l', nm: 'ell',        snd: 'lll',  key: 'leaf' },
+  { u: 'J', l: 'j', nm: 'jay',        snd: 'juh',  key: 'jet' },
+  { u: 'V', l: 'v', nm: 'vee',        snd: 'vvv',  key: 'van' },
+  { u: 'W', l: 'w', nm: 'double you', snd: 'wuh',  key: 'web' },
+  { u: 'Y', l: 'y', nm: 'why',        snd: 'yuh',  key: '' },
+  { u: 'Z', l: 'z', nm: 'zee',        snd: 'zzz',  key: '' },
+  { u: 'X', l: 'x', nm: 'ex',         snd: 'ks',   key: '' },
+  { u: 'Q', l: 'q', nm: 'cue',        snd: 'kwuh', key: '' }
+];
+function letterIndex(low) { var i; for (i = 0; i < LETTERS.length; i++) if (LETTERS[i].l === low) return i; return -1; }
+function soundOf(low) { var i = letterIndex(low); return i < 0 ? '' : LETTERS[i].snd; }
+
+/* Letters that get mistaken for each other — by shape. The easy rungs pull
+   distractors from DIFFERENT groups (S vs T), the hard rungs deliberately
+   pull from the SAME group (b vs d). */
+var SHAPE_GROUPS = ['bdpqg', 'mnhr', 'uvwy', 'iljtf', 'ceoas', 'kxz'];
+function shapeGroup(low) {
+  var i; for (i = 0; i < SHAPE_GROUPS.length; i++) if (SHAPE_GROUPS[i].indexOf(low) >= 0) return i;
+  return -1;
+}
+
+/* ============================================================ pictures == */
+/* Every picture is drawn procedurally as SVG — no asset files anywhere.
+   Each returns the INNER markup of a 0 0 100 100 viewBox so the menu icons
+   can reuse the same drawings at a smaller scale. `?gallery=1` renders the
+   whole table at once, because a child cannot answer "which starts with
+   /k/" if the cat looks like a blob. */
+function star5(cx, cy, r, fill) {
+  var pts = [], i, a, rr;
+  for (i = 0; i < 10; i++) {
+    a = -Math.PI / 2 + i * Math.PI / 5;
+    rr = (i % 2 === 0) ? r : r * 0.45;
+    pts.push((cx + Math.cos(a) * rr).toFixed(1) + ',' + (cy + Math.sin(a) * rr).toFixed(1));
+  }
+  return '<polygon points="' + pts.join(' ') + '" fill="' + fill + '"/>';
+}
+
+var PICS = [
+  { w: 'sun', ltr: 's', art: function () {
+      var s = '', i, a;
+      for (i = 0; i < 12; i++) {
+        a = i * Math.PI / 6;
+        s += '<line x1="' + (50 + Math.cos(a) * 31).toFixed(1) + '" y1="' + (50 + Math.sin(a) * 31).toFixed(1) +
+             '" x2="' + (50 + Math.cos(a) * 45).toFixed(1) + '" y2="' + (50 + Math.sin(a) * 45).toFixed(1) +
+             '" stroke="#f9a825" stroke-width="7" stroke-linecap="round"/>';
+      }
+      return s + '<circle cx="50" cy="50" r="26" fill="#ffca28" stroke="#f9a825" stroke-width="3"/>' +
+        '<circle cx="42" cy="45" r="3.2" fill="#8d6e00"/><circle cx="58" cy="45" r="3.2" fill="#8d6e00"/>' +
+        '<path d="M41 57 Q50 65 59 57" stroke="#8d6e00" stroke-width="3" fill="none" stroke-linecap="round"/>';
+    } },
+  { w: 'apple', ltr: 'a', art: function () {
+      return '<path d="M50 33 C44 22 27 22 21 37 C15 52 22 74 36 86 C42 91 48 87 50 85 C52 87 58 91 64 86 C78 74 85 52 79 37 C73 22 56 22 50 33 Z" fill="#e53935" stroke="#b71c1c" stroke-width="2"/>' +
+        '<path d="M33 42 C29 47 28 55 30 62" stroke="#ffffff" stroke-width="4" fill="none" opacity="0.45" stroke-linecap="round"/>' +
+        '<path d="M50 33 C50 24 52 18 57 13" stroke="#6d4c41" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+        '<ellipse cx="66" cy="19" rx="12" ry="6" fill="#43a047" stroke="#2e7d32" stroke-width="1.5" transform="rotate(-22 66 19)"/>';
+    } },
+  { w: 'tree', ltr: 't', art: function () {
+      return '<rect x="44" y="56" width="13" height="34" rx="4" fill="#795548"/>' +
+        '<circle cx="50" cy="36" r="23" fill="#388e3c"/>' +
+        '<circle cx="32" cy="49" r="17" fill="#2e7d32"/>' +
+        '<circle cx="68" cy="49" r="17" fill="#2e7d32"/>' +
+        '<circle cx="50" cy="52" r="16" fill="#43a047"/>' +
+        '<ellipse cx="50" cy="91" rx="26" ry="5" fill="#c5e1a5"/>';
+    } },
+  { w: 'pig', ltr: 'p', art: function () {
+      return '<polygon points="26,32 32,12 46,29" fill="#f06292"/>' +
+        '<polygon points="74,32 68,12 54,29" fill="#f06292"/>' +
+        '<circle cx="50" cy="54" r="29" fill="#f8bbd0" stroke="#ec407a" stroke-width="2.5"/>' +
+        '<circle cx="39" cy="46" r="3.6" fill="#3e2723"/><circle cx="61" cy="46" r="3.6" fill="#3e2723"/>' +
+        '<ellipse cx="50" cy="63" rx="15" ry="11" fill="#f48fb1" stroke="#ec407a" stroke-width="2"/>' +
+        '<ellipse cx="45" cy="63" rx="2.6" ry="4" fill="#ad1457"/><ellipse cx="55" cy="63" rx="2.6" ry="4" fill="#ad1457"/>';
+    } },
+  { w: 'igloo', ltr: 'i', art: function () {
+      return '<rect x="0" y="0" width="100" height="78" fill="#81d4fa"/>' +
+        '<rect x="0" y="78" width="100" height="22" fill="#ffffff"/>' +
+        '<path d="M12 78 A38 38 0 0 1 88 78 Z" fill="#ffffff" stroke="#455a64" stroke-width="3"/>' +
+        '<path d="M17 62 H83 M25 47 H75" stroke="#90a4ae" stroke-width="2.5" fill="none"/>' +
+        '<path d="M30 78 V62 M50 78 V62 M70 78 V62 M38 62 V47 M62 62 V47" stroke="#90a4ae" stroke-width="2.5"/>' +
+        '<path d="M34 78 A16 18 0 0 1 66 78 Z" fill="#ffffff" stroke="#455a64" stroke-width="3"/>' +
+        '<path d="M40 78 A10 12 0 0 1 60 78 Z" fill="#37474f"/>' +
+        '<path d="M0 78 H100" stroke="#b0bec5" stroke-width="2"/>';
+    } },
+  { w: 'nest', ltr: 'n', art: function () {
+      return '<ellipse cx="50" cy="56" rx="39" ry="11" fill="#5d4037"/>' +
+        '<ellipse cx="34" cy="46" rx="12" ry="10" fill="#fffdf0" stroke="#bcaaa4" stroke-width="1.8"/>' +
+        '<ellipse cx="66" cy="46" rx="12" ry="10" fill="#fffdf0" stroke="#bcaaa4" stroke-width="1.8"/>' +
+        '<ellipse cx="50" cy="38" rx="12" ry="10.5" fill="#fffdf0" stroke="#bcaaa4" stroke-width="1.8"/>' +
+        '<path d="M11 56 C13 86 87 86 89 56 Z" fill="#8d6e63" stroke="#5d4037" stroke-width="2.5"/>' +
+        '<path d="M14 62 Q34 72 56 68 M20 72 Q42 80 74 68 M40 80 Q58 78 78 66" stroke="#5d4037" stroke-width="2.2" fill="none"/>';
+    } },
+  { w: 'moon', ltr: 'm', art: function () {
+      return '<path d="M68 16 A38 38 0 1 0 68 84 A34 34 0 1 1 68 16 Z" fill="#ffd54f" stroke="#f9a825" stroke-width="2.5"/>' +
+        star5(20, 22, 8, '#ffca28') + star5(28, 76, 6, '#ffca28') + star5(12, 52, 5, '#ffe082');
+    } },
+  { w: 'dog', ltr: 'd', art: function () {
+      return '<ellipse cx="22" cy="56" rx="11" ry="21" fill="#6d4c41"/>' +
+        '<ellipse cx="78" cy="56" rx="11" ry="21" fill="#6d4c41"/>' +
+        '<circle cx="50" cy="48" r="27" fill="#a1887f" stroke="#795548" stroke-width="2"/>' +
+        '<circle cx="40" cy="42" r="3.8" fill="#3e2723"/><circle cx="60" cy="42" r="3.8" fill="#3e2723"/>' +
+        '<ellipse cx="50" cy="63" rx="17" ry="13" fill="#efebe9"/>' +
+        '<ellipse cx="50" cy="55" rx="6.5" ry="5" fill="#3e2723"/>' +
+        '<path d="M50 60 V66 M50 66 Q43 70 40 65 M50 66 Q57 70 60 65" stroke="#3e2723" stroke-width="2.4" fill="none" stroke-linecap="round"/>' +
+        '<path d="M45 70 Q50 82 55 70 Z" fill="#ef9a9a"/>';
+    } },
+  { w: 'grapes', ltr: 'g', art: function () {
+      var rows = [[36, 30], [50, 30], [64, 30], [29, 44], [43, 44], [57, 44], [71, 44],
+                  [36, 58], [50, 58], [64, 58], [43, 71], [57, 71], [50, 84]];
+      var s = '<path d="M50 26 C52 18 56 13 62 10" stroke="#6d4c41" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+              '<ellipse cx="72" cy="16" rx="13" ry="7" fill="#66bb6a" stroke="#2e7d32" stroke-width="1.5" transform="rotate(-18 72 16)"/>';
+      var i; for (i = 0; i < rows.length; i++) {
+        s += '<circle cx="' + rows[i][0] + '" cy="' + rows[i][1] + '" r="9" fill="#7b1fa2" stroke="#4a148c" stroke-width="1.5"/>';
+        s += '<circle cx="' + (rows[i][0] - 3) + '" cy="' + (rows[i][1] - 3) + '" r="2.6" fill="#ce93d8"/>';
+      }
+      return s;
+    } },
+  { w: 'octopus', ltr: 'o', art: function () {
+      /* Eight long curling arms and a bulbous head — a jellyfish has a smooth
+         bell and trailing threads, so the arms curl and the head is round. */
+      var s = '', i, x, dir, sp;
+      for (i = 0; i < 8; i++) {
+        x = 12 + i * 10.9;
+        dir = (i % 2) ? -1 : 1;
+        sp = (i < 4) ? -1 : 1;
+        s += '<path d="M' + x.toFixed(1) + ' 60 C' + (x + sp * 4).toFixed(1) + ' 74, ' +
+             (x + sp * 14 - dir * 4).toFixed(1) + ' 82, ' + (x + sp * 16).toFixed(1) + ' 92" ' +
+             'stroke="#ab47bc" stroke-width="8" stroke-linecap="round" fill="none"/>';
+      }
+      return s + '<ellipse cx="50" cy="44" rx="33" ry="30" fill="#ab47bc" stroke="#6a1b9a" stroke-width="2.5"/>' +
+        '<ellipse cx="50" cy="60" rx="30" ry="12" fill="#ab47bc"/>' +
+        '<circle cx="38" cy="40" r="10" fill="#ffffff"/><circle cx="62" cy="40" r="10" fill="#ffffff"/>' +
+        '<circle cx="39" cy="41" r="4.8" fill="#311b92"/><circle cx="63" cy="41" r="4.8" fill="#311b92"/>' +
+        '<path d="M42 56 Q50 63 58 56" stroke="#4a148c" stroke-width="2.8" fill="none" stroke-linecap="round"/>';
+    } },
+  { w: 'cat', ltr: 'c', art: function () {
+      return '<polygon points="24,42 29,14 47,31" fill="#ffa726" stroke="#ef6c00" stroke-width="2"/>' +
+        '<polygon points="76,42 71,14 53,31" fill="#ffa726" stroke="#ef6c00" stroke-width="2"/>' +
+        '<polygon points="30,37 32,24 41,32" fill="#f8bbd0"/><polygon points="70,37 68,24 59,32" fill="#f8bbd0"/>' +
+        '<circle cx="50" cy="54" r="27" fill="#ffb74d" stroke="#ef6c00" stroke-width="2.5"/>' +
+        '<ellipse cx="40" cy="49" rx="5.5" ry="7.5" fill="#ffffff"/><ellipse cx="60" cy="49" rx="5.5" ry="7.5" fill="#ffffff"/>' +
+        '<ellipse cx="40" cy="49" rx="2.2" ry="6.4" fill="#1b1b1b"/><ellipse cx="60" cy="49" rx="2.2" ry="6.4" fill="#1b1b1b"/>' +
+        '<polygon points="45,60 55,60 50,66" fill="#f06292"/>' +
+        '<path d="M50 66 Q44 72 39 67 M50 66 Q56 72 61 67" stroke="#6d4c41" stroke-width="2.4" fill="none" stroke-linecap="round"/>' +
+        '<path d="M22 56 H10 M22 62 H11 M78 56 H90 M78 62 H89" stroke="#6d4c41" stroke-width="2.2" stroke-linecap="round"/>';
+    } },
+  { w: 'key', ltr: 'k', art: function () {
+      return '<circle cx="28" cy="50" r="19" fill="#fdd835" stroke="#f9a825" stroke-width="3"/>' +
+        '<circle cx="28" cy="50" r="8" fill="#ffffff" stroke="#f9a825" stroke-width="2"/>' +
+        '<rect x="44" y="44" width="44" height="12" rx="3" fill="#fdd835" stroke="#f9a825" stroke-width="2.5"/>' +
+        '<rect x="66" y="54" width="8" height="14" rx="2" fill="#fdd835" stroke="#f9a825" stroke-width="2.5"/>' +
+        '<rect x="80" y="54" width="8" height="10" rx="2" fill="#fdd835" stroke="#f9a825" stroke-width="2.5"/>';
+    } },
+  { w: 'egg', ltr: 'e', art: function () {
+      return '<path d="M50 14 C33 14 25 33 25 48 C25 63 36 72 50 72 C64 72 75 63 75 48 C75 33 67 14 50 14 Z" fill="#fffdf3" stroke="#cbbb92" stroke-width="2.5"/>' +
+        '<path d="M38 31 C33 38 32 46 33 53" stroke="#ffffff" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+        '<path d="M28 62 L34 86 H66 L72 62 Z" fill="#ffb74d" stroke="#ef6c00" stroke-width="2.5"/>' +
+        '<ellipse cx="50" cy="88" rx="20" ry="5" fill="#ef6c00"/>';
+    } },
+  { w: 'umbrella', ltr: 'u', art: function () {
+      return '<path d="M10 54 Q20 42 30 54 Q40 42 50 54 Q60 42 70 54 Q80 42 90 54 A40 40 0 0 0 10 54 Z" fill="#e53935" stroke="#b71c1c" stroke-width="2.5"/>' +
+        '<path d="M30 54 Q34 24 50 15 M70 54 Q66 24 50 15" stroke="#b71c1c" stroke-width="2" fill="none"/>' +
+        '<path d="M50 15 V10" stroke="#6d4c41" stroke-width="4" stroke-linecap="round"/>' +
+        '<path d="M50 54 V78 A9 9 0 0 1 32 78" stroke="#6d4c41" stroke-width="5.5" fill="none" stroke-linecap="round"/>';
+    } },
+  { w: 'rainbow', ltr: 'r', art: function () {
+      var cols = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5'], s = '', i, r;
+      for (i = 0; i < cols.length; i++) {
+        r = 42 - i * 8;
+        s += '<path d="M' + (50 - r) + ' 74 A' + r + ' ' + r + ' 0 0 1 ' + (50 + r) + ' 74" stroke="' + cols[i] + '" stroke-width="8" fill="none"/>';
+      }
+      s += '<g fill="#ffffff" stroke="#cfd8dc" stroke-width="1.5">' +
+        '<ellipse cx="14" cy="76" rx="14" ry="9"/><ellipse cx="24" cy="72" rx="10" ry="8"/>' +
+        '<ellipse cx="86" cy="76" rx="14" ry="9"/><ellipse cx="76" cy="72" rx="10" ry="8"/></g>';
+      return s;
+    } },
+  { w: 'hat', ltr: 'h', art: function () {
+      return '<rect x="31" y="22" width="38" height="50" rx="5" fill="#1565c0"/>' +
+        '<ellipse cx="50" cy="22" rx="19" ry="6" fill="#1e88e5"/>' +
+        '<rect x="31" y="56" width="38" height="11" fill="#fdd835"/>' +
+        '<ellipse cx="50" cy="72" rx="39" ry="10" fill="#1565c0" stroke="#0d47a1" stroke-width="2"/>' +
+        '<ellipse cx="50" cy="70" rx="39" ry="9" fill="#1976d2"/>';
+    } },
+  { w: 'ball', ltr: 'b', art: function () {
+      return '<circle cx="50" cy="52" r="32" fill="#fb8c00" stroke="#e65100" stroke-width="3"/>' +
+        '<path d="M18 52 H82 M50 20 V84" stroke="#4e342e" stroke-width="3" fill="none"/>' +
+        '<path d="M28 27 Q44 52 28 77 M72 27 Q56 52 72 77" stroke="#4e342e" stroke-width="3" fill="none"/>' +
+        '<path d="M32 34 A22 22 0 0 1 44 28" stroke="#ffcc80" stroke-width="4" fill="none" stroke-linecap="round"/>';
+    } },
+  { w: 'fish', ltr: 'f', art: function () {
+      return '<polygon points="72,52 94,34 94,70" fill="#0288d1"/>' +
+        '<path d="M18 52 C28 30 62 30 76 52 C62 74 28 74 18 52 Z" fill="#29b6f6" stroke="#0277bd" stroke-width="2.5"/>' +
+        '<path d="M46 34 Q52 24 62 32 Z" fill="#0288d1"/>' +
+        '<circle cx="33" cy="46" r="6" fill="#ffffff"/><circle cx="32" cy="46" r="3" fill="#01579b"/>' +
+        '<path d="M55 40 Q62 52 55 64" stroke="#0277bd" stroke-width="2.5" fill="none"/>' +
+        '<circle cx="14" cy="34" r="4" fill="#b3e5fc"/><circle cx="22" cy="24" r="3" fill="#b3e5fc"/>';
+    } },
+  { w: 'leaf', ltr: 'l', art: function () {
+      return '<path d="M50 10 C24 30 20 66 50 90 C80 66 76 30 50 10 Z" fill="#43a047" stroke="#1b5e20" stroke-width="2.5"/>' +
+        '<path d="M50 16 V88" stroke="#1b5e20" stroke-width="3" fill="none"/>' +
+        '<path d="M50 32 L36 40 M50 32 L64 40 M50 48 L33 56 M50 48 L67 56 M50 64 L38 71 M50 64 L62 71" stroke="#1b5e20" stroke-width="2" fill="none"/>' +
+        '<path d="M50 88 V96" stroke="#6d4c41" stroke-width="4" stroke-linecap="round"/>';
+    } },
+  { w: 'jet', ltr: 'j', art: function () {
+      return '<polygon points="30,52 52,44 78,44 92,52 78,60 52,60" fill="#eceff1" stroke="#546e7a" stroke-width="2.5"/>' +
+        '<polygon points="46,46 34,22 42,22 62,44" fill="#90a4ae" stroke="#546e7a" stroke-width="2"/>' +
+        '<polygon points="46,58 34,82 42,82 62,60" fill="#78909c" stroke="#546e7a" stroke-width="2"/>' +
+        '<polygon points="30,52 16,40 22,40 34,48" fill="#b0bec5" stroke="#546e7a" stroke-width="2"/>' +
+        '<circle cx="80" cy="50" r="3.4" fill="#4fc3f7"/><circle cx="71" cy="50" r="3.4" fill="#4fc3f7"/>' +
+        '<circle cx="62" cy="50" r="3.4" fill="#4fc3f7"/>';
+    } },
+  { w: 'van', ltr: 'v', art: function () {
+      /* A delivery van, not a bus: one tall cargo box, a single sloped cab
+         with one window. A row of windows down the side would read "bus" —
+         and /b/ is a letter in play, so that would be a real trap. */
+      return '<path d="M8 32 H54 C62 32 67 37 75 45 H88 C90 45 92 47 92 51 V68 H8 Z" fill="#1e88e5" stroke="#0d47a1" stroke-width="2.5"/>' +
+        '<rect x="16" y="38" width="30" height="17" rx="3" fill="#bbdefb"/>' +
+        '<path d="M55 38 C61 38 65 41 72 47 H55 Z" fill="#bbdefb"/>' +
+        '<rect x="4" y="68" width="92" height="5" rx="2" fill="#0d47a1"/>' +
+        '<circle cx="26" cy="76" r="11" fill="#37474f"/><circle cx="26" cy="76" r="4.8" fill="#cfd8dc"/>' +
+        '<circle cx="74" cy="76" r="11" fill="#37474f"/><circle cx="74" cy="76" r="4.8" fill="#cfd8dc"/>';
+    } },
+  { w: 'web', ltr: 'w', art: function () {
+      var s = '', i, a, r, pts;
+      for (i = 0; i < 8; i++) {
+        a = i * Math.PI / 4;
+        s += '<line x1="50" y1="50" x2="' + (50 + Math.cos(a) * 44).toFixed(1) + '" y2="' + (50 + Math.sin(a) * 44).toFixed(1) +
+             '" stroke="#5d4037" stroke-width="2.4"/>';
+      }
+      for (r = 12; r <= 44; r += 11) {
+        pts = [];
+        for (i = 0; i < 8; i++) { a = i * Math.PI / 4; pts.push((50 + Math.cos(a) * r).toFixed(1) + ',' + (50 + Math.sin(a) * r).toFixed(1)); }
+        s += '<polygon points="' + pts.join(' ') + '" fill="none" stroke="#5d4037" stroke-width="2.2"/>';
+      }
+      return s + '<ellipse cx="50" cy="50" rx="9" ry="7" fill="#3e2723"/>' +
+        '<circle cx="50" cy="43" r="5" fill="#3e2723"/>' +
+        '<circle cx="47.5" cy="42" r="1.4" fill="#fff"/><circle cx="52.5" cy="42" r="1.4" fill="#fff"/>' +
+        '<path d="M42 46 L34 40 M42 50 L33 50 M42 54 L34 60 M58 46 L66 40 M58 50 L67 50 M58 54 L66 60" stroke="#3e2723" stroke-width="2.4" stroke-linecap="round"/>';
+    } }
+];
+function picIndexOfLetter(low) { var i; for (i = 0; i < PICS.length; i++) if (PICS[i].ltr === low) return i; return -1; }
+function svgWrap(inner, cls) {
+  return '<svg class="' + (cls || 'pic') + '" viewBox="0 0 100 100" aria-hidden="true" focusable="false">' + inner + '</svg>';
+}
+
+/* ============================================ activities and their rungs == */
+/* "Level" is a real number the game moves. Each activity owns its own rung
+   ladder: choices widen, look-alike letters arrive, then the spoken clues
+   are taken away. The top of the FIRST SOUND ladder is the handoff to Scan. */
+var ACTS = [
+  { id: 'find', label: 'Find the letter', say: 'Find the letter.',
+    rungs: [
+      { n: 2, confuse: false, hint: true,  name: '2 choices, very different letters' },
+      { n: 2, confuse: true,  hint: true,  name: '2 choices, look-alike letters' },
+      { n: 3, confuse: false, hint: true,  name: '3 choices' },
+      { n: 3, confuse: true,  hint: true,  name: '3 choices, look-alikes' },
+      { n: 3, confuse: true,  hint: false, name: '3 choices, no letter shown' },
+      { n: 4, confuse: true,  hint: false, name: '4 choices, no letter shown' },
+      { n: 4, confuse: true,  hint: false, lower: true, name: '4 small letters, no letter shown' }
+    ],
+    icon: function () {
+      return '<circle cx="44" cy="42" r="26" fill="#e3f2fd" stroke="#1565c0" stroke-width="7"/>' +
+        '<text x="44" y="54" font-size="30" font-weight="800" text-anchor="middle" fill="#1565c0" font-family="Segoe UI, sans-serif">A</text>' +
+        '<line x1="63" y1="61" x2="86" y2="84" stroke="#1565c0" stroke-width="10" stroke-linecap="round"/>';
+    } },
+  { id: 'case', label: 'Big and little', say: 'Match the big letter and the little letter.',
+    rungs: [
+      { n: 2, confuse: false, hint: true,  name: '2 choices, very different letters' },
+      { n: 2, confuse: true,  hint: true,  name: '2 choices, look-alike letters' },
+      { n: 3, confuse: false, hint: true,  name: '3 choices' },
+      { n: 3, confuse: true,  hint: true,  name: '3 choices, look-alikes' },
+      { n: 4, confuse: true,  hint: true,  name: '4 choices, look-alikes' }
+    ],
+    icon: function () {
+      return '<text x="26" y="66" font-size="52" font-weight="800" text-anchor="middle" fill="#6a1b9a" font-family="Segoe UI, sans-serif">B</text>' +
+        '<text x="76" y="66" font-size="40" font-weight="800" text-anchor="middle" fill="#ab47bc" font-family="Segoe UI, sans-serif">b</text>' +
+        '<path d="M44 50 H60" stroke="#8e24aa" stroke-width="5" stroke-linecap="round"/>' +
+        '<polygon points="66,50 56,44 56,56" fill="#8e24aa"/>';
+    } },
+  { id: 'sound', label: 'What sound?', say: 'Listen to the sound, then find the letter that makes it.',
+    rungs: [
+      { n: 2, confuse: false, hint: true,  name: '2 choices, with a word clue' },
+      { n: 2, confuse: true,  hint: true,  name: '2 look-alikes, with a word clue' },
+      { n: 3, confuse: false, hint: true,  name: '3 choices, with a word clue' },
+      { n: 3, confuse: true,  hint: false, name: '3 look-alikes, sound only' },
+      { n: 4, confuse: true,  hint: false, name: '4 choices, sound only' }
+    ],
+    icon: function () {
+      return '<polygon points="8,40 22,40 38,24 38,76 22,60 8,60" fill="#ef6c00"/>' +
+        '<path d="M48 36 A18 18 0 0 1 48 64" stroke="#ef6c00" stroke-width="6" fill="none" stroke-linecap="round"/>' +
+        '<path d="M58 28 A28 28 0 0 1 58 72" stroke="#fb8c00" stroke-width="6" fill="none" stroke-linecap="round"/>' +
+        '<text x="86" y="63" font-size="32" font-weight="800" text-anchor="middle" fill="#e65100" font-family="Segoe UI, sans-serif">s</text>';
+    } },
+  { id: 'first', label: 'First sound', say: 'Find the picture that starts with the sound.',
+    rungs: [
+      { n: 2, confuse: false, hint: true,  name: '2 pictures, named aloud' },
+      { n: 3, confuse: false, hint: true,  name: '3 pictures, named aloud' },
+      { n: 3, confuse: false, hint: false, name: '3 pictures, not named' },
+      { n: 4, confuse: false, hint: false, name: '4 pictures, not named' }
+    ],
+    icon: function () {
+      return '<g transform="translate(6,4) scale(0.62)">' + PICS[1].art() + '</g>' +
+        '<text x="76" y="80" font-size="40" font-weight="800" text-anchor="middle" fill="#2e7d32" font-family="Segoe UI, sans-serif">a</text>';
+    } }
+];
+function actIndex(id) { var i; for (i = 0; i < ACTS.length; i++) if (ACTS[i].id === id) return i; return -1; }
+function actById(id) { var i = actIndex(id); return i < 0 ? ACTS[0] : ACTS[i]; }
+function maxRung(id) { return actById(id).rungs.length - 1; }
+function rungOf(id, lvl) {
+  var a = actById(id);
+  var i = Math.max(0, Math.min(a.rungs.length - 1, lvl | 0));
+  return a.rungs[i];
+}
+
+/* ============================================================== audio == */
+var actx = null, master = null, muted = false;
+function initAudio() {
+  if (actx) return;
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    actx = new AC();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.5;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; master = null; }
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || !master || muted) return;
+  try {
+    var t = actx.currentTime + (delay || 0);
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.05);
+  } catch (e) {}
+}
+var SFX = {
+  tap:  function () { tone('sine', 620, 720, 0.09, 0.16); },
+  yay:  function () { tone('sine', 523, 523, 0.16, 0.22, 0);
+                      tone('sine', 659, 659, 0.16, 0.22, 0.11);
+                      tone('sine', 784, 784, 0.3, 0.24, 0.22); },
+  /* The "here it is" cue. Deliberately warm and RISING — there is no buzzer
+     anywhere in this game, and nothing that could read as a wrong-answer noise. */
+  here: function () { tone('sine', 440, 440, 0.18, 0.15, 0); tone('sine', 523, 523, 0.24, 0.15, 0.16); },
+  open: function () { tone('triangle', 440, 660, 0.2, 0.16); },
+  levelup: function () { var i; for (i = 0; i < 4; i++) tone('triangle', 523 * Math.pow(1.19, i), 523 * Math.pow(1.19, i), 0.18, 0.16, i * 0.1); },
+  fanfare: function () {
+    var ns = [523, 659, 784, 1047], i;
+    for (i = 0; i < ns.length; i++) tone('triangle', ns[i], ns[i], 0.28, 0.2, i * 0.13);
+  }
+};
+function setMuted(v) {
+  muted = !!v;
+  if (master) { try { master.gain.value = muted ? 0 : 0.5; } catch (e) {} }
+  if (muted) stopSpeech();
+  var b = document.getElementById('muteBtn');
+  if (b) {
+    b.classList.toggle('off', muted);
+    b.innerHTML = muted ? '&#9834;&#10005;' : '&#9835;';
+    b.setAttribute('aria-label', muted ? 'Sound is off' : 'Sound is on');
+  }
+  saveStr(K_MUTED, muted ? '1' : '0');
+}
+
+/* ============================================================= speech == */
+var SPEECH = { api: false, voices: 0, voice: null, ok: false, spoken: 0, failed: 0, last: '' };
+var SAY_RATE = 0.85;   /* slow and even — she needs time to take it in */
+function speechApi() {
+  try {
+    return !!(window.speechSynthesis &&
+      typeof window.speechSynthesis.speak === 'function' &&
+      typeof window.SpeechSynthesisUtterance === 'function');
+  } catch (e) { return false; }
+}
+function refreshVoices() {
+  SPEECH.api = speechApi();
+  SPEECH.voices = 0; SPEECH.voice = null;
+  if (SPEECH.api) {
+    try {
+      var vs = window.speechSynthesis.getVoices() || [];
+      SPEECH.voices = vs.length;
+      var i;
+      for (i = 0; i < vs.length; i++) if (vs[i] && /^en[-_]US/i.test(vs[i].lang || '')) { SPEECH.voice = vs[i]; break; }
+      if (!SPEECH.voice) for (i = 0; i < vs.length; i++) if (vs[i] && /^en/i.test(vs[i].lang || '')) { SPEECH.voice = vs[i]; break; }
+      if (!SPEECH.voice && vs.length) SPEECH.voice = vs[0];
+    } catch (e) { SPEECH.voices = 0; }
+  }
+  SPEECH.ok = SPEECH.api && SPEECH.voices > 0;
+  updateSpeakUI();
+}
+function stopSpeech() {
+  if (!speechApi()) return;
+  try { window.speechSynthesis.cancel(); } catch (e) {}
+}
+/* Returns true only if something was actually dispatched. NOTHING in the
+   game may depend on that — every spoken thing is also on screen. */
+function say(text, rate) {
+  if (!text) return false;
+  SPEECH.last = String(text);
+  if (!SPEECH.ok || muted) return false;
+  try {
+    window.speechSynthesis.cancel();
+    var u = new window.SpeechSynthesisUtterance(String(text));
+    ocApply(u, SPEECH.voice, rate);
+    u.lang = 'en-US';
+    window.speechSynthesis.speak(u);
+    SPEECH.spoken++;
+    return true;
+  } catch (e) {
+    SPEECH.failed++; SPEECH.ok = false; updateSpeakUI();
+    return false;
+  }
+}
+function updateSpeakUI() { try { document.body.classList.toggle('nospeech', !SPEECH.ok); } catch (e) {} }
+
+/* ============================================================== state == */
+var ROUND_LEN = 6;          /* short sets: she can stop after any of them */
+var PROMOTE_STREAK = 4;     /* four in a row at this rung and she moves up */
+var DEMOTE_MISSES = 2;      /* two misses inside the recent window drops one */
+var RECENT_WINDOW = 5;
+var PROBE_EVERY = 15;       /* every so often, quietly try one rung higher */
+var DEFAULT_POOL = 6;
+
+var state = null;
+
+function blankPerAct(v) {
+  var o = {}, i;
+  for (i = 0; i < ACTS.length; i++) o[ACTS[i].id] = (typeof v === 'function') ? v() : v;
+  return o;
+}
+function freshState() {
+  return {
+    screen: 'title', act: 'find',
+    pool: DEFAULT_POOL,
+    letters: {},                       /* low -> {a: right, w: missed} */
+    requeue: [],
+    lvl: blankPerAct(0),               /* the found level, per activity */
+    streak: blankPerAct(0),
+    recent: blankPerAct(function () { return []; }),
+    since: blankPerAct(0),             /* items since the last probe */
+    probeHit: blankPerAct(0),          /* a probe came back right and is awaiting confirmation */
+    played: blankPerAct(0),
+    hist: blankPerAct(function () { return [[0, 0]]; }),
+    stars: 0, rounds: 0,
+    item: null, busy: false,
+    roundN: 0, roundStars: 0
+  };
+}
+function statFor(low) {
+  if (!state.letters[low] || typeof state.letters[low] !== 'object') state.letters[low] = { a: 0, w: 0 };
+  var s = state.letters[low];
+  if (typeof s.a !== 'number' || !isFinite(s.a) || s.a < 0) s.a = 0;
+  if (typeof s.w !== 'number' || !isFinite(s.w) || s.w < 0) s.w = 0;
+  return s;
+}
+
+/* Defensive read: a corrupt save renders a fresh game, never crashes. The
+   hub peeks at these too. Everything is range-checked, including the
+   per-activity levels — a save claiming level 99 must not build a
+   nonexistent rung. */
+function loadSave() {
+  var st = freshState(), raw = null, o = null, i, k;
+  try { raw = localStorage.getItem(K_SAVE); } catch (e) { raw = null; }
+  if (!raw) return st;
+  try { o = JSON.parse(raw); } catch (e) { return st; }
+  if (!o || typeof o !== 'object' || Object.prototype.toString.call(o) === '[object Array]') return st;
+
+  if (typeof o.pool === 'number' && isFinite(o.pool)) st.pool = Math.max(DEFAULT_POOL, Math.min(LETTERS.length, Math.floor(o.pool)));
+  if (typeof o.stars === 'number' && isFinite(o.stars) && o.stars >= 0) st.stars = Math.min(999999, Math.floor(o.stars));
+  if (typeof o.rounds === 'number' && isFinite(o.rounds) && o.rounds >= 0) st.rounds = Math.min(999999, Math.floor(o.rounds));
+  if (typeof o.act === 'string' && actIndex(o.act) >= 0) st.act = o.act;
+
+  if (o.letters && typeof o.letters === 'object' && Object.prototype.toString.call(o.letters) !== '[object Array]') {
+    for (k in o.letters) {
+      if (!Object.prototype.hasOwnProperty.call(o.letters, k)) continue;
+      if (letterIndex(k) < 0) continue;
+      var v = o.letters[k];
+      if (!v || typeof v !== 'object') continue;
+      var a = (typeof v.a === 'number' && isFinite(v.a) && v.a >= 0) ? Math.floor(v.a) : 0;
+      var w = (typeof v.w === 'number' && isFinite(v.w) && v.w >= 0) ? Math.floor(v.w) : 0;
+      st.letters[k] = { a: Math.min(a, 99999), w: Math.min(w, 99999) };
+    }
+  }
+  if (Object.prototype.toString.call(o.requeue) === '[object Array]') {
+    for (i = 0; i < o.requeue.length && st.requeue.length < 12; i++) {
+      if (typeof o.requeue[i] === 'string' && letterIndex(o.requeue[i]) >= 0) st.requeue.push(o.requeue[i]);
+    }
+  }
+  if (o.lvl && typeof o.lvl === 'object') {
+    for (i = 0; i < ACTS.length; i++) {
+      var id = ACTS[i].id, lv = o.lvl[id];
+      if (typeof lv === 'number' && isFinite(lv) && lv >= 0) st.lvl[id] = Math.min(maxRung(id), Math.floor(lv));
+    }
+  }
+  if (o.played && typeof o.played === 'object') {
+    for (i = 0; i < ACTS.length; i++) {
+      var pid = ACTS[i].id, pv = o.played[pid];
+      if (typeof pv === 'number' && isFinite(pv) && pv >= 0) st.played[pid] = Math.min(999999, Math.floor(pv));
+    }
+  }
+  if (o.hist && typeof o.hist === 'object') {
+    for (i = 0; i < ACTS.length; i++) {
+      var hid = ACTS[i].id, hv = o.hist[hid], clean = [], j;
+      if (Object.prototype.toString.call(hv) !== '[object Array]') continue;
+      for (j = 0; j < hv.length && clean.length < 60; j++) {
+        var e2 = hv[j];
+        if (Object.prototype.toString.call(e2) !== '[object Array]' || e2.length < 2) continue;
+        if (typeof e2[0] !== 'number' || !isFinite(e2[0]) || typeof e2[1] !== 'number' || !isFinite(e2[1])) continue;
+        clean.push([Math.max(0, Math.floor(e2[0])), Math.max(0, Math.min(maxRung(hid), Math.floor(e2[1])))]);
+      }
+      if (clean.length) st.hist[hid] = clean;
+    }
+  }
+  return st;
+}
+function writeSave() {
+  /* `solid` is written here, by the code that owns the rule, so the arcade hub
+     card can read it instead of re-deriving it. The card already got this
+     wrong once — it read an `.ok` field this game has never written, so it
+     said Unplayed however long she played — and a second copy of the rule
+     drifts the moment lettersKnown() changes and the copy does not. */
+  var solid = 0;
+  try { solid = lettersKnown(); } catch (e) { solid = 0; }
+  try {
+    localStorage.setItem(K_SAVE, JSON.stringify({
+      v: 1, pool: state.pool, stars: state.stars, rounds: state.rounds, act: state.act,
+      letters: state.letters, requeue: state.requeue,
+      lvl: state.lvl, played: state.played, hist: state.hist,
+      solid: solid, total: LETTERS.length
+    }));
+  } catch (e) {}
+}
+
+/* ============================================== letter picking & weight == */
+function poolLows(picturesOnly) {
+  var out = [], i;
+  for (i = 0; i < state.pool && i < LETTERS.length; i++) {
+    if (picturesOnly && picIndexOfLetter(LETTERS[i].l) < 0) continue;
+    out.push(LETTERS[i].l);
+  }
+  /* FIRST SOUND needs enough pictured letters to build a question at all —
+     widen just for that activity until it has them. */
+  if (picturesOnly && out.length < 5) {
+    for (i = state.pool; i < LETTERS.length && out.length < 8; i++) {
+      if (picIndexOfLetter(LETTERS[i].l) >= 0) out.push(LETTERS[i].l);
+    }
+  }
+  if (!out.length) out.push(LETTERS[0].l);
+  return out;
+}
+function weightOf(low) {
+  var s = statFor(low), n = s.a + s.w, w = 1, i;
+  if (n === 0) w += 2.5;                      /* new letters get seen */
+  else w += 4 * (s.w / n);                    /* the ones she misses come back — as practice */
+  for (i = 0; i < state.requeue.length; i++) if (state.requeue[i] === low) { w += 3.5; break; }
+  return w;
+}
+function pickWeighted(lows) {
+  if (!lows.length) return LETTERS[0].l;
+  var total = 0, ws = [], i;
+  for (i = 0; i < lows.length; i++) { ws[i] = weightOf(lows[i]); total += ws[i]; }
+  var r = Math.random() * total;
+  for (i = 0; i < lows.length; i++) { r -= ws[i]; if (r <= 0) return lows[i]; }
+  return lows[lows.length - 1];
+}
+function dropRequeue(low) { var i; for (i = state.requeue.length - 1; i >= 0; i--) if (state.requeue[i] === low) state.requeue.splice(i, 1); }
+function addRequeue(low) { dropRequeue(low); state.requeue.push(low); while (state.requeue.length > 8) state.requeue.shift(); }
+
+/* ============================================================== items == */
+/* Every item carries its own truth: `correct` indexes `choices`, and the
+   builder guarantees exactly one choice is right and no distractor is
+   accidentally right — including the c/k trap, where two different letters
+   make the same sound. */
+function has(arr, v) { var i; for (i = 0; i < arr.length; i++) if (arr[i] === v) return true; return false; }
+
+function pickDistractors(target, count, lows, opts) {
+  opts = opts || {};
+  var out = [], guard = 0, tsnd = soundOf(target), tgrp = shapeGroup(target);
+  var wantSame = !!opts.confuse;
+
+  function ok(c) {
+    if (c === target || has(out, c)) return false;
+    if (opts.blockSameSound && soundOf(c) === tsnd) return false;
+    return true;
+  }
+  /* preferred pass: same shape-group for the hard rungs, different for easy */
+  while (out.length < count && guard++ < 500) {
+    var c = lows[Math.floor(Math.random() * lows.length)];
+    if (!ok(c)) continue;
+    var g = shapeGroup(c);
+    if (wantSame) { if (g !== tgrp || tgrp < 0) continue; }
+    else { if (g === tgrp && tgrp >= 0) continue; }
+    out.push(c);
+  }
+  /* relaxed pass inside the pool, then across the alphabet — never short,
+     and never at the cost of a legal item */
+  guard = 0;
+  while (out.length < count && guard++ < 500) {
+    var c2 = lows[Math.floor(Math.random() * lows.length)];
+    if (ok(c2)) out.push(c2);
+  }
+  var j;
+  for (j = 0; j < LETTERS.length && out.length < count; j++) if (ok(LETTERS[j].l)) out.push(LETTERS[j].l);
+  return out;
+}
+function shuffleWithCorrect(arr, correctValue) {
+  var a = arr.slice(), i, j, t;
+  for (i = a.length - 1; i > 0; i--) { j = Math.floor(Math.random() * (i + 1)); t = a[i]; a[i] = a[j]; a[j] = t; }
+  var ci = -1;
+  for (i = 0; i < a.length; i++) if (a[i] === correctValue) { ci = i; break; }
+  return { list: a, correct: ci };
+}
+
+function buildItem(actId, lvlIn, isProbe) {
+  if (actIndex(actId) < 0) actId = 'find';
+  var lvl = (typeof lvlIn === 'number') ? Math.max(0, Math.min(maxRung(actId), lvlIn)) : (state ? state.lvl[actId] : 0);
+  var cfg = rungOf(actId, lvl);
+  var i;
+
+  if (actId === 'first') {
+    var plows = poolLows(true);
+    var tl = pickWeighted(plows);
+    var others = pickDistractors(tl, cfg.n - 1, plows, { blockSameSound: true });
+    var lowsUsed = [tl].concat(others);
+    var picsUsed = [], used = {};
+    for (i = 0; i < lowsUsed.length; i++) {
+      var cands = [], p;
+      for (p = 0; p < PICS.length; p++) if (PICS[p].ltr === lowsUsed[i] && !used[PICS[p].w]) cands.push(p);
+      if (!cands.length) continue;
+      var chosen = cands[Math.floor(Math.random() * cands.length)];
+      used[PICS[chosen].w] = 1;
+      picsUsed.push(chosen);
+    }
+    var correctPic = -1;
+    for (i = 0; i < picsUsed.length; i++) if (PICS[picsUsed[i]].ltr === tl) { correctPic = picsUsed[i]; break; }
+    var shp = shuffleWithCorrect(picsUsed, correctPic);
+    return { act: 'first', lvl: lvl, probe: !!isProbe, hint: !!cfg.hint, low: tl,
+             choices: shp.list, correct: shp.correct, kind: 'pic' };
+  }
+
+  var lows = poolLows(false);
+  var target = pickWeighted(lows);
+  var blockSound = (actId === 'sound');
+  var ds = pickDistractors(target, cfg.n - 1, lows, { confuse: cfg.confuse, blockSameSound: blockSound });
+  var sh = shuffleWithCorrect([target].concat(ds), target);
+
+  if (actId === 'find') {
+    return { act: 'find', lvl: lvl, probe: !!isProbe, hint: !!cfg.hint, low: target,
+             choices: sh.list, correct: sh.correct, kind: cfg.lower ? 'lower' : 'upper' };
+  }
+  if (actId === 'case') {
+    var dir = Math.random() < 0.5 ? 'u2l' : 'l2u';
+    return { act: 'case', lvl: lvl, probe: !!isProbe, hint: !!cfg.hint, low: target, dir: dir,
+             choices: sh.list, correct: sh.correct, kind: dir === 'u2l' ? 'lower' : 'upper' };
+  }
+  return { act: 'sound', lvl: lvl, probe: !!isProbe, hint: !!cfg.hint, low: target,
+           choices: sh.list, correct: sh.correct, kind: 'pair' };
+}
+
+/* Build the NEXT item, deciding first whether this one is a quiet probe at
+   the rung above. She never sees that it was a test. */
+function nextItemSpec() {
+  var id = state.act;
+  var due = state.since[id] >= PROBE_EVERY + Math.floor(Math.random() * 6);
+  /* A probe that came back right is asked once more before it counts. Two tiles
+     means a single lucky tap would otherwise hand her a whole rung, which parks
+     her above her real level and turns play into guessing. */
+  if (state.lvl[id] < maxRung(id) && (due || state.probeHit[id])) {
+    return buildItem(id, state.lvl[id] + 1, true);
+  }
+  return buildItem(id, state.lvl[id], false);
+}
+
+/* ============================================== the level, found and moved == */
+function noteHist(id) {
+  var h = state.hist[id];
+  if (Object.prototype.toString.call(h) !== '[object Array]') { h = state.hist[id] = []; }
+  h.push([state.played[id], state.lvl[id]]);
+  while (h.length > 60) h.shift();
+}
+function promote(id) {
+  if (state.lvl[id] >= maxRung(id)) return false;
+  state.lvl[id]++;
+  state.streak[id] = 0;
+  state.recent[id] = [];
+  if (state.pool < LETTERS.length) state.pool++;   /* harder letters follow the climb */
+  noteHist(id);
+  return true;
+}
+function demote(id) {
+  if (state.lvl[id] <= 0) { state.recent[id] = []; state.streak[id] = 0; return false; }
+  state.lvl[id]--;
+  state.streak[id] = 0;
+  state.recent[id] = [];      /* hysteresis: a clean slate, so it can't yo-yo */
+  noteHist(id);
+  return true;
+}
+/* Aim for 75-85% success: up after four in a row, down fast after two
+   misses in the recent window. Returns 'up' | 'down' | '' . */
+function adapt(id, wasRight, wasProbe) {
+  var moved = '';
+  state.played[id]++;
+  state.since[id]++;
+  if (wasProbe) {
+    /* A probe never costs her anything. Right twice running: she moves up.
+       Wrong: nothing lost, and the probe clock starts again. */
+    if (wasRight) {
+      if (state.probeHit[id]) {
+        state.probeHit[id] = 0; state.since[id] = 0;
+        if (promote(id)) moved = 'up';
+      } else {
+        state.probeHit[id] = 1;          /* ask the same rung again next item */
+      }
+    } else {
+      state.probeHit[id] = 0; state.since[id] = 0; state.streak[id] = 0;
+    }
+    return moved;
+  }
+  var r = state.recent[id];
+  if (Object.prototype.toString.call(r) !== '[object Array]') r = state.recent[id] = [];
+  r.push(wasRight ? 1 : 0);
+  while (r.length > RECENT_WINDOW) r.shift();
+
+  if (wasRight) {
+    state.streak[id]++;
+    if (state.streak[id] >= PROMOTE_STREAK && promote(id)) moved = 'up';
+  } else {
+    state.streak[id] = 0;
+    var misses = 0, i;
+    for (i = 0; i < r.length; i++) if (!r[i]) misses++;
+    if (misses >= DEMOTE_MISSES && demote(id)) moved = 'down';
+  }
+  return moved;
+}
+
+/* ============================================================= scripts == */
+function article(word) { return /^[aeiou]/i.test(word) ? 'an ' : 'a '; }
+function promptScript(it) {
+  var L = LETTERS[letterIndex(it.low)];
+  if (it.act === 'find') return 'Find the letter ' + L.nm + '.';
+  if (it.act === 'case') {
+    return it.dir === 'u2l'
+      ? 'This is big ' + L.nm + '. Find little ' + L.nm + '.'
+      : 'This is little ' + L.nm + '. Find big ' + L.nm + '.';
+  }
+  if (it.act === 'sound') {
+    return 'Which letter says ' + L.snd + '?' + (it.hint && L.key ? ' ' + L.snd + ', like in ' + L.key + '.' : '');
+  }
+  if (it.hint) {
+    /* Naming the pictures removes any guessing about what a drawing is —
+       she is answering the sound, not the artwork. Taken away at the top rung. */
+    var names = [], i;
+    for (i = 0; i < it.choices.length; i++) names.push(article(PICS[it.choices[i]].w) + PICS[it.choices[i]].w);
+    var listed = names.length > 1 ? (names.slice(0, names.length - 1).join(', ') + ', and ' + names[names.length - 1]) : names[0];
+    return 'Here is ' + listed + '. Which one starts with ' + L.snd + '?';
+  }
+  return 'Which picture starts with ' + L.snd + '?';
+}
+/* The echo, spoken after a clear pause. Same words every time. */
+function echoScript(it) {
+  var L = LETTERS[letterIndex(it.low)];
+  if (it.act === 'find') return L.nm + '.';
+  if (it.act === 'case') return (it.dir === 'u2l' ? 'Little ' : 'Big ') + L.nm + '.';
+  return L.snd + '.';
+}
+var PRAISE = ['Yes.', 'That is right.', 'Good work.', 'Nice work.', 'You got it.', 'Correct.'];
+function rightScript(it) {
+  var L = LETTERS[letterIndex(it.low)];
+  var p = PRAISE[Math.floor(Math.random() * PRAISE.length)];
+  if (it.act === 'find') return p + ' That is ' + L.nm + '.';
+  if (it.act === 'case') return p + ' Big ' + L.nm + ' and little ' + L.nm + ' go together.';
+  if (it.act === 'sound') return p + ' ' + L.nm + ' says ' + L.snd + '.';
+  return p + ' ' + PICS[it.choices[it.correct]].w + ' starts with ' + L.snd + '.';
+}
+/* No correction, no "wrong" — just the answer, plainly and warmly. */
+function gentleScript(it) {
+  var L = LETTERS[letterIndex(it.low)];
+  if (it.act === 'find') return 'Here is ' + L.nm + '. This one.';
+  if (it.act === 'case') return 'Big ' + L.nm + ' goes with little ' + L.nm + '. This one.';
+  if (it.act === 'sound') return L.nm + ' says ' + L.snd + '. This one.';
+  return PICS[it.choices[it.correct]].w + ' starts with ' + L.snd + '. This one.';
+}
+
+/* ============================================================ rendering == */
+var app = document.getElementById('app');
+var fx = document.getElementById('fx');
+var bannerEl = document.getElementById('banner');
+
+var SPEAKER_SVG =
+  '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">' +
+  '<polygon points="14,38 30,38 48,20 48,80 30,62 14,62" fill="#ef6c00"/>' +
+  '<path d="M58 32 A24 24 0 0 1 58 68" stroke="#ef6c00" stroke-width="8" fill="none" stroke-linecap="round"/>' +
+  '<path d="M72 20 A38 38 0 0 1 72 80" stroke="#fb8c00" stroke-width="8" fill="none" stroke-linecap="round"/>' +
+  '</svg>';
+function speakerBtn(extra) {
+  return '<button class="speaker' + (extra || '') + '" type="button" data-act="replay" aria-label="Hear it again">' + SPEAKER_SVG + '</button>';
+}
+function dotsRow() {
+  var h = '<div class="dots">', i;
+  for (i = 0; i < ROUND_LEN; i++) h += '<i class="' + (i < state.roundN ? 'on' : '') + '"></i>';
+  return h + '</div>';
+}
+
+function render() {
+  app.classList.toggle('scroll', state.screen === 'grown');
+  if (state.screen === 'title') renderTitle();
+  else if (state.screen === 'menu') renderMenu();
+  else if (state.screen === 'done') renderDone();
+  else if (state.screen === 'grown') renderGrown();
+  else renderPlay();
+  document.body.classList.toggle('playing', state.screen !== 'title');
+}
+
+function renderTitle() {
+  app.innerHTML =
+    '<div class="screen center">' +
+      '<div class="eyebrow">Overclock &middot; letters and sounds</div>' +
+      '<h1>CHAR</h1>' +
+      '<div class="tagline">One letter at a time. Find it, match it, hear it, spot it.</div>' +
+      '<button class="btn" type="button" data-act="play">PLAY</button>' +
+      '<div class="grownup">Every question is spoken aloud and drawn, so no reading is needed to play. ' +
+        'The orange speaker repeats it, any number of times. Char finds her level by playing with her and ' +
+        'moves it as she grows &mdash; there is no timer, no score and nothing to lose.</div>' +
+    '</div>';
+}
+
+function renderMenu() {
+  var h = '<div class="screen">' +
+    '<div class="menuhead">' + speakerBtn(' pulse') + '</div>' +
+    '<div class="tiles">';
+  var i;
+  for (i = 0; i < ACTS.length; i++) {
+    h += '<button class="tile" type="button" data-act="pick" data-id="' + ACTS[i].id + '" aria-label="' + ACTS[i].label + '">' +
+      svgWrap(ACTS[i].icon(), 'ic') + '<span class="word">' + ACTS[i].label + '</span></button>';
+  }
+  h += '</div><button class="grownlink" type="button" data-act="grown">Grown-ups</button></div>';
+  app.innerHTML = h;
+}
+
+function choiceInner(it, value) {
+  if (it.kind === 'pic') {
+    var P = PICS[value];
+    return svgWrap(P.art(), 'pic') + '<span class="word">' + P.w + '</span>';
+  }
+  var L = LETTERS[letterIndex(value)];
+  if (it.kind === 'upper') return '<span class="glyph">' + L.u + '</span>';
+  if (it.kind === 'lower') return '<span class="glyph">' + L.l + '</span>';
+  return '<span class="glyph pairg">' + L.u + L.l + '</span>';
+}
+
+/* Identical structure for all four activities, every item: dots, label,
+   prompt slot, speaker, clue line, choices. Nothing ever moves. */
+function renderPlay() {
+  var it = state.item;
+  if (!it) { state.item = it = nextItemSpec(); }
+  var L = LETTERS[letterIndex(it.low)];
+  var A = actById(it.act);
+  var slot = '', clue = '';
+
+  if (it.act === 'find') {
+    slot = it.hint ? '<div class="bigletter blue">' + (it.kind === 'lower' ? L.l : L.u) + '</div>' : '<div class="bigletter blue">?</div>';
+    clue = it.hint ? 'find this letter' : 'listen, then find it';
+  } else if (it.act === 'case') {
+    slot = '<div class="bigletter">' + (it.dir === 'u2l' ? L.u : L.l) + '</div>';
+    clue = it.dir === 'u2l' ? 'find the little one' : 'find the big one';
+  } else if (it.act === 'sound') {
+    slot = '<div class="bigletter">' + L.snd + '</div>';
+    clue = (it.hint && L.key) ? 'like <b>' + L.key.charAt(0) + '</b>' + L.key.slice(1) : 'which letter says it?';
+  } else {
+    slot = '<div class="bigletter">' + L.snd + '</div>';
+    clue = 'starts with <b>' + L.snd + '</b>';
+  }
+
+  app.innerHTML = '<div class="screen">' + dotsRow() +
+    '<div class="prompt">' +
+      '<div class="eyebrow">' + A.label + '</div>' +
+      '<div class="slot">' + slot + '</div>' +
+      speakerBtn('') +
+      '<div class="hintword"><span>' + clue + '</span></div>' +
+    '</div>' +
+    choicesHtml(it) + '</div>';
+}
+function choicesHtml(it) {
+  var h = '<div class="choices c' + it.choices.length + '">', i;
+  for (i = 0; i < it.choices.length; i++) {
+    h += '<button class="choice" type="button" data-act="answer" data-i="' + i + '" aria-label="choice ' + (i + 1) + '">' +
+      choiceInner(it, it.choices[i]) + '</button>';
+  }
+  return h + '</div>';
+}
+
+function renderDone() {
+  var i, h = '<div class="screen center">' +
+    '<div class="eyebrow">' + actById(state.act).label + '</div>' +
+    '<div class="starrow">';
+  for (i = 0; i < ROUND_LEN; i++) h += '<svg viewBox="0 0 40 40">' + star5(20, 20, 18, i < state.roundStars ? '#ffb300' : 'rgba(74,53,32,0.16)') + '</svg>';
+  h += '</div>' + speakerBtn(' pulse') +
+    '<div class="bigrow">' +
+      '<button class="bigbtn go" type="button" data-act="again" aria-label="Play some more">' +
+        '<svg viewBox="0 0 100 100" aria-hidden="true"><polygon points="30,20 82,50 30,80" fill="#2e7d32"/></svg>' +
+        '<span class="word">More</span></button>' +
+      '<button class="bigbtn" type="button" data-act="home" aria-label="Choose another game">' +
+        '<svg viewBox="0 0 100 100" aria-hidden="true">' +
+          '<rect x="12" y="12" width="34" height="34" rx="7" fill="#1565c0"/>' +
+          '<rect x="54" y="12" width="34" height="34" rx="7" fill="#ef6c00"/>' +
+          '<rect x="12" y="54" width="34" height="34" rx="7" fill="#2e7d32"/>' +
+          '<rect x="54" y="54" width="34" height="34" rx="7" fill="#6a1b9a"/></svg>' +
+        '<span class="word">Games</span></button>' +
+    '</div>' + '<div class="grownup">' + doneNote() + '</div></div>';
+  app.innerHTML = h;
+}
+function doneNote() {
+  var id = state.act, lv = state.lvl[id], mx = maxRung(id);
+  var s = 'Level ' + (lv + 1) + ' of ' + (mx + 1) + ' &mdash; ' + rungOf(id, lv).name +
+    '. Char moves this on its own as she plays; nothing here needs setting. ';
+  s += (allTopped()
+    ? 'She has topped out every ladder in Char &mdash; SCAN is the next game up: blending, sight words and whole passages.'
+    : 'When every ladder here is topped out, SCAN is the next game up: blending, sight words and passages.');
+  return s;
+}
+function allTopped() { var i; for (i = 0; i < ACTS.length; i++) if (state.lvl[ACTS[i].id] < maxRung(ACTS[i].id)) return false; return true; }
+
+/* ---- grown-up progress: real growth, per activity, over time ---- */
+function sparkline(id) {
+  var h = state.hist[id] || [], mx = maxRung(id), i;
+  var W = 200, H = 46, pad = 4;
+  if (h.length < 2) {
+    return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+      '<line x1="0" y1="' + (H - pad) + '" x2="' + W + '" y2="' + (H - pad) + '" stroke="rgba(74,53,32,0.18)" stroke-width="2"/>' +
+      '<text x="4" y="18" font-size="11" fill="#7d6448" font-family="Segoe UI, sans-serif">not enough play yet</text></svg>';
+  }
+  var maxX = Math.max(1, h[h.length - 1][0]);
+  var d = '', px, py;
+  for (i = 0; i < h.length; i++) {
+    px = pad + (h[i][0] / maxX) * (W - pad * 2);
+    py = (H - pad) - (h[i][1] / Math.max(1, mx)) * (H - pad * 2);
+    d += (i === 0 ? 'M' : 'L') + px.toFixed(1) + ' ' + py.toFixed(1);
+    if (i < h.length - 1) {
+      var nx = pad + (h[i + 1][0] / maxX) * (W - pad * 2);
+      d += 'L' + nx.toFixed(1) + ' ' + py.toFixed(1);   /* step, not a slope */
+    }
+  }
+  var s = '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">';
+  s += '<line x1="0" y1="' + (H - pad) + '" x2="' + W + '" y2="' + (H - pad) + '" stroke="rgba(74,53,32,0.18)" stroke-width="1.5"/>';
+  s += '<path d="' + d + '" stroke="#ef6c00" stroke-width="2.5" fill="none"/>';
+  for (i = 0; i < h.length; i++) {
+    px = pad + (h[i][0] / maxX) * (W - pad * 2);
+    py = (H - pad) - (h[i][1] / Math.max(1, mx)) * (H - pad * 2);
+    s += '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="2.6" fill="#ef6c00"/>';
+  }
+  return s + '</svg>';
+}
+function lettersKnown() {
+  var n = 0, i, s, t;
+  for (i = 0; i < LETTERS.length; i++) {
+    s = state.letters[LETTERS[i].l];
+    if (!s) continue;
+    t = s.a + s.w;
+    if (t >= 4 && s.a / t >= 0.75) n++;
+  }
+  return n;
+}
+function renderGrown() {
+  var h = '<div class="screen gu"><h2>Progress</h2>' +
+    '<div class="gnote">Char finds her level by playing with her: up a rung after four right in a row, down a rung after two misses, ' +
+    'and every so often a quiet try at the rung above so she can never get stuck low. Nothing here needs setting, and her level ' +
+    'is remembered between sessions &mdash; she resumes, she is never re-tested.</div>';
+  var i, j, id, lv, mx, a, tot, right;
+  for (i = 0; i < ACTS.length; i++) {
+    id = ACTS[i].id; lv = state.lvl[id]; mx = maxRung(id); a = ACTS[i];
+    h += '<div class="gcard"><div class="gt">' + a.label + '</div>' +
+      '<div class="gl">Level ' + (lv + 1) + ' of ' + (mx + 1) + ' &mdash; ' + rungOf(id, lv).name + '</div>' +
+      '<div class="lvlbar">';
+    for (j = 0; j <= mx; j++) h += '<i class="' + (j < lv ? 'on' : (j === lv ? 'now' : '')) + '"></i>';
+    h += '</div><div class="gl">' + state.played[id] + ' turns played</div>' + sparkline(id) + '</div>';
+  }
+  tot = 0; right = 0;
+  for (i = 0; i < LETTERS.length; i++) {
+    var s = state.letters[LETTERS[i].l];
+    if (s) { tot += s.a + s.w; right += s.a; }
+  }
+  h += '<div class="gcard"><div class="gt">Letters</div>' +
+    '<div class="gl">' + lettersKnown() + ' of ' + LETTERS.length + ' letters solid &middot; ' +
+    state.pool + ' in play &middot; ' + (tot ? Math.round(100 * right / tot) : 0) + '% right over ' + tot + ' turns</div></div>';
+  h += '<div class="gnote">' + (allTopped()
+      ? 'Every ladder in Char is topped out. SCAN is the next game up &mdash; blending, sight words and whole passages.'
+      : 'Next game up when these ladders top out: SCAN &mdash; blending, sight words and passages.') + '</div>';
+  h += '<div style="text-align:center"><button class="btn" type="button" data-act="home">BACK</button></div></div>';
+  app.innerHTML = h;
+}
+
+/* ============================================================== effects == */
+function burst(x, y) {
+  var cols = ['#ffca28', '#ff8a65', '#66bb6a', '#42a5f5', '#ab47bc'], i;
+  for (i = 0; i < 9; i++) {
+    var d = document.createElement('div');
+    d.className = 'star';
+    var a = (i / 9) * Math.PI * 2 + Math.random();
+    d.style.left = (x - 20) + 'px';
+    d.style.top = (y - 20) + 'px';
+    d.style.setProperty('--dx', (Math.cos(a) * (60 + Math.random() * 70)).toFixed(0) + 'px');
+    d.style.setProperty('--dy', (Math.sin(a) * (60 + Math.random() * 70) - 30).toFixed(0) + 'px');
+    d.innerHTML = '<svg viewBox="0 0 40 40">' + star5(20, 20, 19, cols[i % cols.length]) + '</svg>';
+    fx.appendChild(d);
+  }
+  window.setTimeout(function () { while (fx.firstChild) fx.removeChild(fx.firstChild); }, 1100);
+}
+var bannerTimer = 0;
+function hideBanner() { bannerEl.classList.remove('on'); if (bannerTimer) { window.clearTimeout(bannerTimer); bannerTimer = 0; } }
+function banner(text, soft) {
+  bannerEl.textContent = text;
+  bannerEl.classList.toggle('soft', !!soft);
+  bannerEl.classList.add('on');
+  if (bannerTimer) window.clearTimeout(bannerTimer);
+  bannerTimer = window.setTimeout(function () { bannerEl.classList.remove('on'); }, 1900);
+}
+
+/* ================================================================ flow == */
+var advTimer = 0, echoTimer = 0;
+function clearTimers() {
+  if (advTimer) { window.clearTimeout(advTimer); advTimer = 0; }
+  if (echoTimer) { window.clearTimeout(echoTimer); echoTimer = 0; }
+}
+/* Say the question, then after a clear pause say the key part again. */
+function speakPrompt(it) {
+  if (echoTimer) { window.clearTimeout(echoTimer); echoTimer = 0; }
+  say(promptScript(it));
+  echoTimer = window.setTimeout(function () {
+    echoTimer = 0;
+    if (state.screen === 'play' && state.item === it && !state.busy) say(echoScript(it));
+  }, 1900);
+}
+function nextItem() {
+  clearTimers();
+  state.busy = false;
+  state.item = nextItemSpec();
+  renderPlay();
+  window.setTimeout(function () { speakPrompt(state.item); }, 60);
+}
+function goMenu() {
+  clearTimers(); stopSpeech(); hideBanner();
+  state.screen = 'menu'; state.busy = false;
+  render(); writeSave();
+  window.setTimeout(function () { say('Pick a game. Tap a picture.'); }, 60);
+}
+function goGrown() {
+  clearTimers(); stopSpeech(); hideBanner();
+  state.screen = 'grown'; state.busy = false;
+  render();
+}
+function startActivity(id) {
+  if (actIndex(id) < 0) id = 'find';
+  clearTimers(); hideBanner();
+  state.act = id;
+  state.screen = 'play';
+  state.busy = false;
+  state.roundN = 0; state.roundStars = 0;
+  state.item = nextItemSpec();
+  document.body.classList.add('playing');
+  render(); writeSave();
+  window.setTimeout(function () { speakPrompt(state.item); }, 80);
+}
+function finishRound() {
+  clearTimers();
+  state.rounds++;
+  state.screen = 'done';
+  state.busy = false;
+  render();
+  SFX.fanfare();
+  writeSave();
+  window.setTimeout(function () {
+    say('That is the end of this set. Good work. Tap the green arrow for more, or the squares to pick another game.');
+  }, 400);
+}
+
+function answer(idx) {
+  var it = state.item;
+  if (!it || state.busy || state.screen !== 'play') return;
+  if (typeof idx !== 'number' || idx < 0 || idx >= it.choices.length) return;
+  state.busy = true;
+  clearTimers();
+
+  var btns = app.querySelectorAll('.choice');
+  var s = statFor(it.low);
+  var right = (idx === it.correct);
+  state.roundN++;
+
+  if (right) {
+    s.a++; dropRequeue(it.low);
+    state.stars++; state.roundStars++;
+    if (btns[idx]) {
+      btns[idx].classList.add('right');
+      var r = btns[idx].getBoundingClientRect();
+      burst(r.left + r.width / 2, r.top + r.height / 2);
+    }
+    SFX.yay();
+    var rs = rightScript(it);
+    banner('★ ' + rs.split('.')[0] + '.');
+    say(rs);
+  } else {
+    /* No red, no buzzer, no shake, nothing marked wrong. Light up the right
+       one, name it warmly, and put the letter back in the practice queue. */
+    s.w++; addRequeue(it.low);
+    if (btns[it.correct]) btns[it.correct].classList.add('show');
+    SFX.here();
+    var gs = gentleScript(it);
+    banner(gs.split('.')[0] + '.', true);
+    say(gs);
+  }
+
+  var moved = adapt(it.act, right, it.probe);
+  writeSave();
+
+  var wait = right ? 1600 : 2700;
+  advTimer = window.setTimeout(function () {
+    if (moved === 'up') {
+      SFX.levelup();
+      banner('Moving up');
+      say('You are ready for something harder.');
+      advTimer = window.setTimeout(afterFeedback, 2100);
+    } else {
+      afterFeedback();
+    }
+  }, wait);
+}
+function afterFeedback() {
+  if (state.roundN >= ROUND_LEN) finishRound();
+  else nextItem();
+}
+
+function replay() {
+  initAudio(); SFX.tap();
+  if (state.screen === 'menu') { say('Pick a game. Tap a picture.'); return; }
+  if (state.screen === 'done') { say('Good work. Tap the green arrow for more, or the squares to pick another game.'); return; }
+  if (state.screen === 'play' && state.item) { speakPrompt(state.item); }
+}
+
+/* ================================================================ input == */
+app.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!b) return;
+  initAudio();
+  var a = b.getAttribute('data-act');
+  if (a === 'play')   { SFX.open(); goMenu(); return; }
+  if (a === 'replay') { replay(); return; }
+  if (a === 'grown')  { SFX.tap(); goGrown(); return; }
+  if (a === 'home')   { SFX.tap(); goMenu(); return; }
+  if (a === 'again')  { SFX.open(); startActivity(state.act); return; }
+  if (a === 'pick') {
+    SFX.open();
+    var id = b.getAttribute('data-id');
+    var ai = actIndex(id);
+    say(ai >= 0 ? ACTS[ai].say : '');
+    window.setTimeout(function () { startActivity(id); }, 560);
+    return;
+  }
+  if (a === 'answer') {
+    var i = parseInt(b.getAttribute('data-i'), 10);
+    if (!isNaN(i)) answer(i);
+    return;
+  }
+});
+document.getElementById('muteBtn').addEventListener('click', function () {
+  initAudio(); setMuted(!muted);
+  if (!muted) { SFX.tap(); replay(); }
+});
+document.getElementById('homeBtn').addEventListener('click', function () {
+  initAudio(); SFX.tap(); goMenu();
+});
+/* Keyboard, for the grown-up alongside: 1-4 answer, R repeats, M mutes,
+   Escape goes back to the picture menu. */
+document.addEventListener('keydown', function (e) {
+  var k = e.key;
+  if (k === 'm' || k === 'M') { initAudio(); setMuted(!muted); return; }
+  if (k === 'r' || k === 'R') { replay(); return; }
+  if (k === 'Escape') { if (state.screen !== 'title' && state.screen !== 'menu') goMenu(); return; }
+  if (state.screen === 'title' && (k === 'Enter' || k === ' ')) { initAudio(); goMenu(); return; }
+  if (state.screen === 'play' && k >= '1' && k <= '4') { initAudio(); answer(parseInt(k, 10) - 1); }
+});
+function hush() { stopSpeech(); }
+window.addEventListener('blur', hush);
+document.addEventListener('visibilitychange', function () { if (document.hidden) hush(); });
+
+/* ============================================================= gallery == */
+/* ?gallery=1 — a verification aid, not part of play. Renders every picture
+   and every menu icon at once so a human can check each reads as the thing
+   it names. */
+function renderGallery() {
+  var g = document.getElementById('gallery'), h = '<div class="g">', i;
+  for (i = 0; i < PICS.length; i++) {
+    h += '<div class="gi">' + svgWrap(PICS[i].art(), 'pic') +
+      '<b>' + PICS[i].w + '</b> <span style="color:#7d6448">(' + PICS[i].ltr + ')</span></div>';
+  }
+  for (i = 0; i < ACTS.length; i++) {
+    h += '<div class="gi" style="background:#fff8e1">' + svgWrap(ACTS[i].icon(), 'pic') + '<b>' + ACTS[i].id + '</b></div>';
+  }
+  g.innerHTML = h + '</div>';
+  g.classList.add('on');
+}
+
+/* ================================================================ boot == */
+function boot() {
+  state = loadSave();
+  state.screen = 'title';
+  state.item = null; state.busy = false;
+  state.roundN = 0; state.roundStars = 0;
+  setMuted(loadStr(K_MUTED, '0') === '1');
+  refreshVoices();
+  try { if (speechApi()) window.speechSynthesis.onvoiceschanged = refreshVoices; } catch (e) {}
+  window.setTimeout(refreshVoices, 350);
+  window.setTimeout(refreshVoices, 1200);
+  render();
+  try { if (/[?&]gallery=1/.test(window.location.search)) renderGallery(); } catch (e) {}
+}
+boot();
+
+/* Test surface — the harness pokes at these. Keeping the script top-level
+   (no IIFE) is deliberate. */
+var CHAR_TEST = {
+  marker: 'CHAR_LETTERS_AND_SOUNDS_V1_MARKER',
+  buildItem: buildItem, startActivity: startActivity, answer: answer, adapt: adapt,
+  promptScript: promptScript, echoScript: echoScript, letterIndex: letterIndex,
+  picIndexOfLetter: picIndexOfLetter, soundOf: soundOf, shapeGroup: shapeGroup,
+  loadSave: loadSave, writeSave: writeSave, freshState: freshState,
+  maxRung: maxRung, rungOf: rungOf, ROUND_LEN: ROUND_LEN
+};
+window.CHAR_TEST = CHAR_TEST;
+
+/* ==================================================== WHO IS READING == */
+/* Shared across every spoken game in the arcade. She picks a character once
+   and Char, Echo, Scan, Trace and Tally all speak in it — one key, one choice,
+   because being asked the same question in five places is not a feature.
+ *
+ * What is possible has to be said plainly, because it shapes this whole
+ * design: speechSynthesis can only use voices ALREADY INSTALLED on the device.
+ * These games ship no audio files and call no APIs, so no custom voice can
+ * travel with them. The honest levers are which device voice is used and its
+ * pitch and speed — and those change the character more than the name does.
+ *
+ * She cannot read a list of voice names, so she picks by EAR: four faces, and
+ * tapping one plays it introducing itself. Nothing here is ever required — if
+ * speech is missing the button hides itself and the game plays on in silence,
+ * exactly as it did before. */
+var OC_VOICE_KEY = 'overclock_voice_v1';
+var OC_CHARACTERS = [
+  { id: 'sunny', name: 'Sunny', pitch: 1.08, rate: 0.85, hint: 'warm and steady',
+    line: 'Hello. I am Sunny. I will read everything to you.',
+    face: '<circle cx="50" cy="50" r="34" fill="#ffd54f"/>' +
+      '<circle cx="39" cy="43" r="4.5" fill="#4a3520"/><circle cx="61" cy="43" r="4.5" fill="#4a3520"/>' +
+      '<path d="M36 60 q14 12 28 0" stroke="#4a3520" stroke-width="4" fill="none" stroke-linecap="round"/>' },
+  { id: 'chip', name: 'Chip', pitch: 0.62, rate: 0.8, hint: 'a deep robot',
+    line: 'Greetings. I am Chip. I am a computer.',
+    face: '<rect x="20" y="24" width="60" height="52" rx="8" fill="#90a4ae"/>' +
+      '<rect x="32" y="40" width="12" height="8" rx="2" fill="#1b2748"/><rect x="56" y="40" width="12" height="8" rx="2" fill="#1b2748"/>' +
+      '<rect x="34" y="60" width="32" height="5" rx="2.5" fill="#1b2748"/>' +
+      '<line x1="50" y1="24" x2="50" y2="12" stroke="#90a4ae" stroke-width="4"/><circle cx="50" cy="9" r="5" fill="#ef6c00"/>' },
+  { id: 'pip', name: 'Pip', pitch: 1.5, rate: 1.0, hint: 'quick and squeaky',
+    line: 'Hi hi! I am Pip! Lets go!',
+    face: '<circle cx="50" cy="52" r="30" fill="#f06292"/>' +
+      '<circle cx="40" cy="46" r="5" fill="#fff"/><circle cx="60" cy="46" r="5" fill="#fff"/>' +
+      '<circle cx="41" cy="47" r="2.5" fill="#3e2723"/><circle cx="61" cy="47" r="2.5" fill="#3e2723"/>' +
+      '<path d="M40 63 q10 9 20 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+      '<path d="M28 30 l8 12 M72 30 l-8 12" stroke="#f06292" stroke-width="5" stroke-linecap="round"/>' },
+  { id: 'moss', name: 'Moss', pitch: 0.95, rate: 0.62, hint: 'slow and calm',
+    line: 'Hello. I am Moss. I will take my time.',
+    face: '<circle cx="50" cy="52" r="31" fill="#66bb6a"/>' +
+      '<path d="M38 46 q4 -4 8 0 M54 46 q4 -4 8 0" stroke="#1b3a1e" stroke-width="3.5" fill="none" stroke-linecap="round"/>' +
+      '<path d="M38 62 q12 8 24 0" stroke="#1b3a1e" stroke-width="4" fill="none" stroke-linecap="round"/>' }
+];
+var OC_VOICE = { charId: 'sunny', uri: '' };
+var OC_LIST = [];
+function ocChar(id) { var i; for (i = 0; i < OC_CHARACTERS.length; i++) if (OC_CHARACTERS[i].id === id) return OC_CHARACTERS[i]; return OC_CHARACTERS[0]; }
+function ocCur() { return ocChar(OC_VOICE.charId); }
+function ocLoadVoice() {
+  var raw = null, o = null;
+  try { raw = localStorage.getItem(OC_VOICE_KEY); } catch (e) {}
+  if (!raw) return;
+  try { o = JSON.parse(raw); } catch (e) { return; }
+  if (!o || typeof o !== 'object') return;
+  if (typeof o.charId === 'string' && ocChar(o.charId).id === o.charId) OC_VOICE.charId = o.charId;
+  if (typeof o.uri === 'string') OC_VOICE.uri = o.uri;
+}
+function ocSaveVoice() {
+  try { localStorage.setItem(OC_VOICE_KEY, JSON.stringify({ charId: OC_VOICE.charId, uri: OC_VOICE.uri })); } catch (e) {}
+}
+function ocVoices() {
+  var out = [], vs = [], i;
+  try { vs = window.speechSynthesis.getVoices() || []; } catch (e) { vs = []; }
+  for (i = 0; i < vs.length; i++) if (vs[i] && /^en/i.test(vs[i].lang || '')) out.push(vs[i]);
+  if (!out.length) out = vs.slice(0, 8);
+  OC_LIST = out;
+  return out;
+}
+function ocPickedVoice(fallback) {
+  var i;
+  if (!OC_LIST.length) ocVoices();
+  if (OC_VOICE.uri) for (i = 0; i < OC_LIST.length; i++) if (OC_LIST[i].voiceURI === OC_VOICE.uri) return OC_LIST[i];
+  return fallback || OC_LIST[0] || null;
+}
+/* the one call every game's say() makes */
+function ocApply(u, fallbackVoice, rateOverride) {
+  var C = ocCur();
+  u.rate = rateOverride || C.rate;
+  u.pitch = C.pitch;
+  var v = ocPickedVoice(fallbackVoice);
+  if (v) u.voice = v;
+  return u;
+}
+function ocSpeak(text) {
+  try {
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
+    window.speechSynthesis.cancel();
+    var u = new window.SpeechSynthesisUtterance(String(text));
+    ocApply(u, null);
+    u.lang = 'en-US';
+    window.speechSynthesis.speak(u);
+    return true;
+  } catch (e) { return false; }
+}
+function ocSpeechOK() {
+  try { return !!(window.speechSynthesis && window.SpeechSynthesisUtterance); } catch (e) { return false; }
+}
+/* ---- the picker: its own overlay and its own styles, so it drops into any
+        of these games without touching that game's screen system ---- */
+function ocVoiceUI() {
+  if (!ocSpeechOK()) return;
+  var st = document.createElement('style');
+  st.textContent =
+    '#ocVoiceBtn{position:fixed;left:max(10px,env(safe-area-inset-left));' +
+    'bottom:max(10px,env(safe-area-inset-bottom));z-index:40;min-height:44px;padding:0 12px 0 8px;' +
+    'display:inline-flex;align-items:center;gap:7px;border-radius:14px;cursor:pointer;' +
+    'border:2px solid rgba(128,128,128,0.38);background:rgba(255,255,255,0.9);color:#333;' +
+    'font:700 12px "Segoe UI",system-ui,sans-serif;letter-spacing:0.06em;}' +
+    '#ocVoiceBtn svg{width:28px;height:28px;display:block}' +
+    'body.playing #ocVoiceBtn{display:none}' +
+    '#ocVoiceWrap{position:fixed;inset:0;z-index:60;background:rgba(12,18,14,0.72);' +
+    'display:none;align-items:center;justify-content:center;padding:14px;overflow:auto}' +
+    '#ocVoiceWrap.on{display:flex}' +
+    '#ocVoicePanel{background:#fff;border-radius:22px;padding:16px;max-width:560px;width:100%;' +
+    'font-family:"Segoe UI",system-ui,sans-serif;color:#2f4030;box-shadow:0 12px 40px rgba(0,0,0,0.35)}' +
+    '#ocVoicePanel h3{margin:0 0 12px;font-size:13px;letter-spacing:0.2em;text-transform:uppercase;' +
+    'text-align:center;color:#5d7159}' +
+    '#ocVoiceGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}' +
+    '.ocvc{min-height:110px;border-radius:18px;border:4px solid rgba(47,64,48,0.18);background:#fff;' +
+    'cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px}' +
+    '.ocvc.on{border-color:#43a047;background:#e8f5e9}' +
+    '.ocvc svg{width:56px;height:56px;display:block}' +
+    '.ocvc b{font-size:15px}.ocvc i{font-style:normal;font-size:11px;color:#5d7159;font-weight:700}' +
+    '#ocVoiceGrown{font-size:11px;color:#5d7159;line-height:1.5;margin-top:10px;text-align:center}' +
+    '#ocVoiceGrown select{font:inherit;font-size:11px;padding:3px 5px;border-radius:8px;' +
+    'border:2px solid rgba(47,64,48,0.18);max-width:180px}' +
+    '#ocVoiceDone{margin-top:12px;width:100%;min-height:52px;border-radius:14px;border:4px solid #2e7d32;' +
+    'background:#81c784;color:#06280b;font:800 15px "Segoe UI",system-ui,sans-serif;letter-spacing:0.14em;cursor:pointer}' +
+    '@media (max-height:460px){#ocVoiceGrid{grid-template-columns:repeat(4,1fr)}' +
+    '.ocvc{min-height:88px}.ocvc i{display:none}#ocVoiceGrown{display:none}}';
+  document.head.appendChild(st);
+
+  var btn = document.createElement('button');
+  btn.id = 'ocVoiceBtn'; btn.type = 'button';
+  btn.setAttribute('aria-label', 'Choose who reads to you');
+
+  var wrap = document.createElement('div');
+  wrap.id = 'ocVoiceWrap';
+  wrap.innerHTML = '<div id="ocVoicePanel"><h3>Who should read to you?</h3>' +
+    '<div id="ocVoiceGrid"></div><div id="ocVoiceGrown"></div>' +
+    '<button id="ocVoiceDone" type="button">DONE</button></div>';
+
+  function svg(inner, cls) {
+    return '<svg viewBox="0 0 100 100" class="' + (cls || '') + '" aria-hidden="true">' + inner + '</svg>';
+  }
+  function paintBtn() { btn.innerHTML = svg(ocCur().face) + '<span>' + ocCur().name + '</span>'; }
+  function paintGrid() {
+    var g = wrap.querySelector('#ocVoiceGrid'), h = '', i, c;
+    for (i = 0; i < OC_CHARACTERS.length; i++) {
+      c = OC_CHARACTERS[i];
+      h += '<button class="ocvc' + (c.id === OC_VOICE.charId ? ' on' : '') + '" type="button" data-oc="' + c.id +
+        '" aria-label="' + c.name + ', ' + c.hint + '">' + svg(c.face) +
+        '<b>' + c.name + '</b><i>' + c.hint + '</i></button>';
+    }
+    g.innerHTML = h;
+    var gr = wrap.querySelector('#ocVoiceGrown'), list = ocVoices();
+    if (list.length > 1) {
+      var cur = ocPickedVoice(null), s = 'Grown-ups: the device voice underneath is <select id="ocVoiceSel">';
+      for (i = 0; i < list.length && i < 24; i++) {
+        s += '<option value="' + list[i].voiceURI + '"' +
+             (cur && list[i].voiceURI === cur.voiceURI ? ' selected' : '') + '>' +
+             String(list[i].name).slice(0, 26) + '</option>';
+      }
+      gr.innerHTML = s + '</select>. More can be added in the device&rsquo;s own settings.';
+      var sel = wrap.querySelector('#ocVoiceSel');
+      if (sel) sel.addEventListener('change', function () { OC_VOICE.uri = sel.value; ocSaveVoice(); ocSpeak(ocCur().line); });
+    } else { gr.innerHTML = ''; }
+  }
+  btn.addEventListener('click', function () { paintGrid(); wrap.classList.add('on'); });
+  wrap.addEventListener('click', function (e) {
+    var t = e.target && e.target.closest ? e.target.closest('[data-oc]') : null;
+    if (t) {
+      OC_VOICE.charId = ocChar(t.getAttribute('data-oc')).id;
+      ocSaveVoice(); paintGrid(); paintBtn();
+      ocSpeak(ocCur().line);
+      return;
+    }
+    if (e.target === wrap || (e.target && e.target.id === 'ocVoiceDone')) {
+      wrap.classList.remove('on');
+      try { window.speechSynthesis.cancel(); } catch (err) {}
+    }
+  });
+  document.body.appendChild(btn);
+  document.body.appendChild(wrap);
+  paintBtn();
+}
+ocLoadVoice();
+try {
+  if (ocSpeechOK() && window.speechSynthesis) window.speechSynthesis.onvoiceschanged = ocVoices;
+} catch (e) {}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ocVoiceUI);
+else ocVoiceUI();
+window.setTimeout(function () { ocVoices(); }, 400);
+
+</script>
+</body>
+</html>

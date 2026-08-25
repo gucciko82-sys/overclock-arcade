@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Checksum — Checkers</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="Checkers, run inside the machine. Twelve bits a side, captures are compulsory, chains run to the end, and a bit that reaches the far row gets crowned. Play a friend on one device or a CPU at three strengths.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Checksum">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eaf2ff;
+    --dim: rgba(234,242,255,0.58);
+    --panel: rgba(9,13,30,0.62);
+    --line: rgba(255,255,255,0.13);
+    --one: #ffcc4d;
+    --zero: #7de2ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+  #satop { position: absolute; top: 0; left: 0; width: 1px; height: env(safe-area-inset-top); pointer-events: none; }
+  #sabot { position: absolute; bottom: 0; left: 0; width: 1px; height: env(safe-area-inset-bottom); pointer-events: none; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.22); }
+  body:not(.playing) #topbtns { display: none; }
+
+  #actbtns {
+    position: absolute;
+    left: max(10px, env(safe-area-inset-left));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    display: flex; gap: 8px; z-index: 6;
+  }
+  body:not(.playing) #actbtns { display: none; }
+  .actbtn {
+    min-width: 92px; height: 44px; padding: 0 14px;
+    border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 12px; font-weight: 800; letter-spacing: 0.14em;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .actbtn:active { background: rgba(255,204,77,0.22); color: var(--accent); }
+  @media (max-width: 400px) { .actbtn { min-width: 84px; font-size: 11px; } }
+
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(11,15,30,0.80), rgba(6,8,18,0.96));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(560px, 100%);
+    background: rgba(10,14,30,0.86);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 22px 20px 20px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(30px, 9vw, 52px);
+    letter-spacing: 0.1em; font-weight: 800; line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 24px rgba(255,204,77,0.45);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(20px, 6vw, 30px); letter-spacing: 0.08em; font-weight: 800; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.04em; margin-bottom: 10px; line-height: 1.45; }
+  .keys {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 5px 16px;
+    font-size: 12px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 440px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 8px;
+    border-bottom: 1px dashed rgba(255,255,255,0.09); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; white-space: nowrap; }
+  .keys .hdr { border: none; color: var(--accent); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 13px 0 4px; }
+  .stat { background: rgba(255,255,255,0.045); border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; }
+  .stat .k { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(15px, 4.6vw, 21px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .best { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .best b { color: var(--accent); }
+  .lbl { font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--dim); margin: 12px 0 2px; }
+  .btn {
+    margin-top: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; padding: 0 26px;
+    border-radius: 14px; border: 1px solid rgba(255,204,77,0.55);
+    background: rgba(255,204,77,0.13); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.16em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,204,77,0.3); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(255,255,255,0.05); }
+  .btn.sm { padding: 0 16px; font-size: 13px; letter-spacing: 0.12em; }
+  .btnrow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(26px, 8vw, 46px); font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+  @media (max-height: 620px) {
+    .card { padding: 12px 14px; border-radius: 16px; }
+    .keys, .ext, .best { display: none; }
+    h1 { font-size: clamp(24px, 6vw, 32px); margin: 2px 0 0; }
+    h2 { font-size: clamp(18px, 5vw, 24px); }
+    .tagline { margin-bottom: 4px; font-size: 11.5px; line-height: 1.35; }
+    .lbl { margin: 8px 0 0; }
+    .btn { margin-top: 6px; min-height: 44px; }
+    .stats { margin: 8px 0 2px; }
+    .stat { padding: 5px 4px; }
+    .stat .v { font-size: 17px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="satop"></div>
+  <div id="sabot"></div>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="actbtns">
+    <button class="actbtn" id="undoBtn" type="button" aria-label="Undo">UNDO</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   CHECKSUM — English draughts for the Overclock arcade.
+
+   Twelve bits a side on the dark sectors. Bits step forward one diagonal;
+   they capture by jumping the byte in front of them, and capture is
+   COMPULSORY — if a jump exists somewhere on the board, a quiet move is
+   refused. A chain of jumps runs to the end. A bit that lands on the far
+   row is crowned KING and from then on runs both ways — but crowning ENDS
+   the move, even mid-chain. Run out of legal moves and your process halts.
+
+   One file, no assets, all art drawn to canvas, all sound from oscillators.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'checksum_v1';
+var K_MUTE = 'checksum_muted_v1';
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+function loadJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function nowMs() { return (window.performance && window.performance.now) ? window.performance.now() : Date.now(); }
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null, noiseBuf = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') { try { actx.resume(); } catch (e) {} } return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.5;
+    master.connect(actx.destination);
+    noiseBuf = actx.createBuffer(1, 4096, actx.sampleRate);
+    var d = noiseBuf.getChannelData(0);
+    for (var i = 0; i < 4096; i++) d[i] = Math.random() * 2 - 1;
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.5;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(24, f1), t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + dur * 0.14);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noise(dur, vol, f0, f1, delay) {
+  if (!actx || muted || !noiseBuf) return;
+  var t = actx.currentTime + (delay || 0);
+  var s = actx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+  var f = actx.createBiquadFilter(); f.type = 'bandpass';
+  f.frequency.setValueAtTime(f0, t);
+  f.frequency.exponentialRampToValueAtTime(Math.max(60, f1), t + dur);
+  f.Q.value = 1.4;
+  var g = actx.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(master);
+  s.start(t); s.stop(t + dur + 0.02);
+}
+var sfx = {
+  tap:   function () { tone('sine', 620, 780, 0.05, 0.16); },
+  slide: function () { tone('triangle', 340, 220, 0.09, 0.20); },
+  cap:   function () { noise(0.16, 0.30, 1500, 240); tone('sawtooth', 250, 70, 0.17, 0.17); },
+  crown: function () { tone('square', 480, 500, 0.07, 0.15); tone('square', 640, 660, 0.07, 0.15, 0.07); tone('square', 880, 940, 0.15, 0.16, 0.14); },
+  deny:  function () { tone('square', 190, 120, 0.15, 0.16); },
+  undo:  function () { tone('triangle', 520, 260, 0.11, 0.15); },
+  win:   function () { var n = [523, 659, 784, 1046]; for (var i = 0; i < 4; i++) tone('square', n[i], n[i] * 1.01, 0.20, 0.16, i * 0.10); },
+  lose:  function () { var n = [420, 330, 262, 190]; for (var i = 0; i < 4; i++) tone('sawtooth', n[i], n[i] * 0.96, 0.24, 0.15, i * 0.11); },
+  draw:  function () { tone('triangle', 380, 300, 0.3, 0.14); tone('triangle', 300, 240, 0.34, 0.12, 0.16); }
+};
+
+/* =========================================================== rules core ===
+   Board is a flat 64-cell array, row 0 at the TOP.
+     0  empty      1  ONE man   2  ONE king
+     7  captured-this-move marker (blocks, cannot be re-jumped)
+    -1  ZERO man  -2  ZERO king
+   ONE (side +1) sits at the bottom and marches toward row 0.
+   ZERO (side -1) sits at the top and marches toward row 7.
+   Playable squares are the dark ones: (r + c) % 2 === 1.
+   ========================================================================= */
+var CAP = 7;
+function idx(r, c) { return r * 8 + c; }
+function sideOf(p) { return p > 0 ? 1 : (p < 0 ? -1 : 0); }
+function isKing(p) { return p === 2 || p === -2; }
+function dark(r, c) { return ((r + c) & 1) === 1; }
+
+var D_ONE  = [[-1, -1], [-1, 1]];
+var D_ZERO = [[1, -1], [1, 1]];
+var D_KING = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+function dirsFor(p) { return p === 1 ? D_ONE : (p === -1 ? D_ZERO : D_KING); }
+
+function newBoard() {
+  var b = new Array(64), r, c;
+  for (var i = 0; i < 64; i++) b[i] = 0;
+  for (r = 0; r < 8; r++) for (c = 0; c < 8; c++) {
+    if (!dark(r, c)) continue;
+    if (r < 3) b[idx(r, c)] = -1;
+    else if (r > 4) b[idx(r, c)] = 1;
+  }
+  return b;
+}
+
+/* A move: { from, path:[landing squares in order], caps:[captured squares],
+             crown:bool (this move crowns it), piece:original piece value }.
+   Jump chains are generated to the END of the chain — one move object holds
+   the whole sequence, which is how "you must finish a multi-jump" is
+   enforced: no partial chain is ever a legal move. Captured pieces stay on
+   the board as CAP markers until the move completes, so they block landing
+   squares and can never be jumped twice — that is the real draughts rule. */
+function chainJumps(b, r, c, p, from, path, caps, out) {
+  var ds = dirsFor(p), any = false, k;
+  for (k = 0; k < ds.length; k++) {
+    var dr = ds[k][0], dc = ds[k][1];
+    var mr = r + dr, mc = c + dc, lr = r + dr * 2, lc = c + dc * 2;
+    if (lr < 0 || lr > 7 || lc < 0 || lc > 7) continue;
+    var mi = mr * 8 + mc, li = lr * 8 + lc, mv = b[mi];
+    if (mv === 0 || mv === CAP) continue;
+    if ((mv > 0 ? 1 : -1) === (p > 0 ? 1 : -1)) continue;
+    if (b[li] !== 0) continue;
+    any = true;
+    var ci = r * 8 + c;
+    b[ci] = 0; b[mi] = CAP;
+    var np = p, cr = false;
+    if ((p === 1 && lr === 0) || (p === -1 && lr === 7)) { np = p * 2; cr = true; }
+    b[li] = np;
+    path.push(li); caps.push(mi);
+    /* Crowning ENDS the move. A man crowned mid-chain does not keep going
+       as a king — it stops right there, on the back row. */
+    if (cr) out.push({ from: from, path: path.slice(), caps: caps.slice(), crown: true, piece: p });
+    else chainJumps(b, lr, lc, np, from, path, caps, out);
+    path.pop(); caps.pop();
+    b[li] = 0; b[mi] = mv; b[ci] = p;
+  }
+  if (!any && path.length > 0) out.push({ from: from, path: path.slice(), caps: caps.slice(), crown: false, piece: p });
+}
+
+function quietMoves(b, side, out) {
+  for (var r = 0; r < 8; r++) for (var c = 0; c < 8; c++) {
+    var i = r * 8 + c, p = b[i];
+    if (p === 0 || p === CAP || (p > 0 ? 1 : -1) !== side) continue;
+    var ds = dirsFor(p);
+    for (var k = 0; k < ds.length; k++) {
+      var nr = r + ds[k][0], nc = c + ds[k][1];
+      if (nr < 0 || nr > 7 || nc < 0 || nc > 7) continue;
+      var ni = nr * 8 + nc;
+      if (b[ni] !== 0) continue;
+      var cr = (p === 1 && nr === 0) || (p === -1 && nr === 7);
+      out.push({ from: i, path: [ni], caps: [], crown: cr, piece: p });
+    }
+  }
+}
+
+/* Capture is COMPULSORY: if any jump exists anywhere, only jumps come back. */
+function genMoves(b, side) {
+  var out = [];
+  for (var r = 0; r < 8; r++) for (var c = 0; c < 8; c++) {
+    var i = r * 8 + c, p = b[i];
+    if (p === 0 || p === CAP || (p > 0 ? 1 : -1) !== side) continue;
+    chainJumps(b, r, c, p, i, [], [], out);
+  }
+  if (out.length) return out;
+  quietMoves(b, side, out);
+  return out;
+}
+
+function doMove(b, m) {
+  var capv = [], i;
+  for (i = 0; i < m.caps.length; i++) { capv.push(b[m.caps[i]]); b[m.caps[i]] = 0; }
+  b[m.from] = 0;
+  var dest = m.path[m.path.length - 1];
+  b[dest] = m.crown ? m.piece * 2 : m.piece;
+  return { m: m, capv: capv, dest: dest };
+}
+function undoMove(b, u) {
+  var m = u.m;
+  b[u.dest] = 0;
+  b[m.from] = m.piece;
+  for (var i = 0; i < m.caps.length; i++) b[m.caps[i]] = u.capv[i];
+}
+function countPieces(b) {
+  var o = { m1: 0, k1: 0, m2: 0, k2: 0 };
+  for (var i = 0; i < 64; i++) {
+    var p = b[i];
+    if (p === 1) o.m1++; else if (p === 2) o.k1++;
+    else if (p === -1) o.m2++; else if (p === -2) o.k2++;
+  }
+  o.one = o.m1 + o.k1; o.zero = o.m2 + o.k2;
+  return o;
+}
+function boardStr(b) {
+  var s = '', r, c;
+  for (r = 0; r < 8; r++) {
+    for (c = 0; c < 8; c++) {
+      var p = b[r * 8 + c];
+      s += p === 1 ? 'o' : p === 2 ? 'O' : p === -1 ? 'x' : p === -2 ? 'X' : (dark(r, c) ? '.' : ' ');
+    }
+    if (r < 7) s += '\n';
+  }
+  return s;
+}
+function parseBoard(txt) {
+  var b = new Array(64), i;
+  for (i = 0; i < 64; i++) b[i] = 0;
+  var rows = String(txt).replace(/\r/g, '').split('\n');
+  var rr = 0;
+  for (var q = 0; q < rows.length && rr < 8; q++) {
+    var line = rows[q];
+    if (!/[oOxX.\- ]/.test(line) || line.replace(/\s/g, '') === '' && rr === 0 && q === 0) { if (line.trim() === '') continue; }
+    if (line.trim() === '') continue;
+    for (var c = 0; c < 8; c++) {
+      var ch = line.charAt(c) || '.';
+      var v = ch === 'o' ? 1 : ch === 'O' ? 2 : ch === 'x' ? -1 : ch === 'X' ? -2 : 0;
+      b[rr * 8 + c] = v;
+    }
+    rr++;
+  }
+  return b;
+}
+
+/* ============================================================ evaluation ==
+   Always from ONE's point of view: positive is good for ONE (+1).
+   Material, kings worth more, back-row defence, centre control and
+   advancement toward the crowning row, plus a nudge to trade down when
+   ahead. IDLE uses the "simple" branch — bare material — which is why it
+   plays like it just woke up rather than like a coin flip.
+   ========================================================================= */
+var V_MAN = 100, V_KING = 162, MATE = 100000, INF = 1000000;
+var CENT = new Array(64);
+(function () {
+  for (var r = 0; r < 8; r++) for (var c = 0; c < 8; c++) {
+    var v;
+    if (c === 0 || c === 7) v = -6;
+    else if (c >= 2 && c <= 5 && r >= 2 && r <= 5) v = 6;
+    else v = 2;
+    CENT[r * 8 + c] = v;
+  }
+})();
+
+function evaluate(b, simple) {
+  var s = 0, i, p, r, m1 = 0, k1 = 0, m2 = 0, k2 = 0;
+  for (i = 0; i < 64; i++) {
+    p = b[i]; if (p === 0) continue;
+    r = i >> 3;
+    if (p === 1) {
+      m1++; s += V_MAN;
+      if (!simple) { s += (7 - r) * 5; if (r === 7) s += 12; s += CENT[i]; }
+    } else if (p === 2) {
+      k1++; s += V_KING;
+      if (!simple) s += CENT[i] * 2;
+    } else if (p === -1) {
+      m2++; s -= V_MAN;
+      if (!simple) { s -= r * 5; if (r === 0) s -= 12; s -= CENT[i]; }
+    } else if (p === -2) {
+      k2++; s -= V_KING;
+      if (!simple) s -= CENT[i] * 2;
+    }
+  }
+  if (!simple) {
+    var tot = m1 + k1 + m2 + k2;
+    var mat = (m1 * V_MAN + k1 * V_KING) - (m2 * V_MAN + k2 * V_KING);
+    if (tot <= 12 && mat !== 0) s += (mat > 0 ? 1 : -1) * (12 - tot) * 4;
+  }
+  return s;
+}
+
+/* ---------------------------------------------------------------- search --
+   Negamax + alpha-beta, iterative deepening inside a time budget, capture
+   extensions so the engine never stops counting halfway through a swap.
+   One deepening iteration per jobStep(); the caller yields between them so
+   the frame never locks up. */
+var rngState = 20260822 >>> 0;
+function setSeed(s) { rngState = (s >>> 0) || 1; }
+function rnd01() { rngState = (rngState * 1664525 + 1013904223) >>> 0; return rngState / 4294967296; }
+
+var STRENGTH = {
+  idle:   { key: 'idle',   name: 'IDLE',   depth: 2,  budget: 140, simple: true,  ext: 0,
+            blurb: 'Half asleep. Counts material one exchange ahead and no further.' },
+  kernel: { key: 'kernel', name: 'KERNEL', depth: 7,  budget: 340, simple: false, ext: 4,
+            blurb: 'Awake. Searches several moves deep, holds its back row, plays for the centre.' },
+  root:   { key: 'root',   name: 'ROOT',   depth: 16, budget: 650, simple: false, ext: 8,
+            blurb: 'Full privileges. Searches as deep as the clock allows. It will punish a loose bit.' }
+};
+var STR_ORDER = ['idle', 'kernel', 'root'];
+
+function orderMoves(ms) {
+  if (ms.length < 2) return;
+  ms.sort(function (a, b) {
+    var d = b.caps.length - a.caps.length;
+    if (d) return d;
+    return (b.crown ? 1 : 0) - (a.crown ? 1 : 0);
+  });
+}
+
+function negamax(bd, side, depth, alpha, beta, ply, ext, job) {
+  job.nodes++;
+  if ((job.nodes & 511) === 0 && nowMs() > job.deadline) { job.abort = true; return 0; }
+  var moves = genMoves(bd, side);
+  if (moves.length === 0) return -MATE + ply;   /* no legal move: this side has halted */
+  if (depth <= 0) {
+    if (moves[0].caps.length > 0 && ext < job.maxExt) { depth = 1; ext++; }
+    else return side * evaluate(bd, job.simple);
+  }
+  if (depth >= 2) orderMoves(moves);
+  var best = -INF;
+  for (var i = 0; i < moves.length; i++) {
+    var u = doMove(bd, moves[i]);
+    var v = -negamax(bd, -side, depth - 1, -beta, -alpha, ply + 1, ext, job);
+    undoMove(bd, u);
+    if (job.abort) return 0;
+    if (v > best) best = v;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+
+function makeJob(bd, side, cfg, budgetOverride) {
+  var roots = genMoves(bd, side);
+  orderMoves(roots);
+  /* seeded shuffle inside equal-priority groups so repeat games differ */
+  for (var i = roots.length - 1; i > 0; i--) {
+    var j = Math.floor(rnd01() * (i + 1));
+    if (roots[i].caps.length === roots[j].caps.length) { var t = roots[i]; roots[i] = roots[j]; roots[j] = t; }
+  }
+  orderMoves(roots);
+  var budget = budgetOverride > 0 ? budgetOverride : cfg.budget;
+  return {
+    bd: bd.slice(), side: side, cfg: cfg, rootMoves: roots,
+    depth: 0, best: roots.length ? roots[0] : null, bestScore: 0,
+    deadline: nowMs() + budget, budget: budget, nodes: 0, abort: false,
+    simple: !!cfg.simple, maxExt: cfg.ext | 0, done: false
+  };
+}
+
+function jobStep(job) {
+  if (job.done) return true;
+  if (job.rootMoves.length <= 1) { job.best = job.rootMoves[0] || null; job.done = true; return true; }
+  job.depth++;
+  job.abort = false;
+  var alpha = -INF, beta = INF, best = null, bestScore = -INF, scored = [], i;
+  for (i = 0; i < job.rootMoves.length; i++) {
+    var m = job.rootMoves[i];
+    var u = doMove(job.bd, m);
+    var v = -negamax(job.bd, -job.side, job.depth - 1, -beta, -alpha, 1, 0, job);
+    undoMove(job.bd, u);
+    if (job.abort) break;
+    scored.push({ m: m, v: v });
+    if (v > bestScore) { bestScore = v; best = m; }
+    if (bestScore > alpha) alpha = bestScore;
+  }
+  if (best !== null) { job.best = best; job.bestScore = bestScore; }
+  if (!job.abort && scored.length === job.rootMoves.length) {
+    scored.sort(function (a, b) { return b.v - a.v; });
+    var nr = []; for (i = 0; i < scored.length; i++) nr.push(scored[i].m);
+    job.rootMoves = nr;
+    if (bestScore > MATE / 2 || bestScore < -MATE / 2) { job.done = true; return true; }
+  }
+  if (job.abort || job.depth >= job.cfg.depth || nowMs() > job.deadline) { job.done = true; return true; }
+  return false;
+}
+
+function bestMoveSync(bd, side, cfg, budget) {
+  var job = makeJob(bd, side, cfg, budget), guard = 0;
+  while (!jobStep(job) && guard++ < 80) { /* keep deepening */ }
+  return job.best || job.rootMoves[0] || null;
+}
+
+/* Headless engine-vs-engine game, used by the test harness to prove the
+   three strengths are actually different players. */
+function selfPlay(sa, sb, seed, budget, maxPly) {
+  setSeed(seed >>> 0 || 1);
+  var b = newBoard(), side = 1, ply = 0, idleN = 0;
+  var cap = maxPly || 320;
+  while (ply < cap) {
+    var ms = genMoves(b, side);
+    if (ms.length === 0) return { winner: -side, plies: ply, reason: 'halted' };
+    var cfg = STRENGTH[side === 1 ? sa : sb];
+    var mv = bestMoveSync(b, side, cfg, budget) || ms[0];
+    var isCap = mv.caps.length > 0, isMan = Math.abs(mv.piece) === 1;
+    doMove(b, mv);
+    if (isCap || isMan) idleN = 0; else idleN++;
+    if (idleN >= 80) return { winner: 0, plies: ply, reason: 'idle' };
+    side = -side; ply++;
+  }
+  return { winner: 0, plies: ply, reason: 'plycap' };
+}
+
+/* ============================================================ game state == */
+function blankRec() { return { w: 0, l: 0, d: 0 }; }
+function loadRec() {
+  var raw = loadJSON(K_SAVE, null), out = {};
+  for (var i = 0; i < STR_ORDER.length; i++) {
+    var k = STR_ORDER[i], r = blankRec();
+    if (raw && typeof raw === 'object' && raw[k] && typeof raw[k] === 'object') {
+      var s = raw[k];
+      r.w = (typeof s.w === 'number' && isFinite(s.w) && s.w >= 0) ? Math.floor(s.w) : 0;
+      r.l = (typeof s.l === 'number' && isFinite(s.l) && s.l >= 0) ? Math.floor(s.l) : 0;
+      r.d = (typeof s.d === 'number' && isFinite(s.d) && s.d >= 0) ? Math.floor(s.d) : 0;
+    }
+    out[k] = r;
+  }
+  return out;
+}
+function saveRec() { saveJSON(K_SAVE, G.rec); }
+
+var G = {
+  state: 'title', prePause: 'play',
+  mode: 'cpu', strength: 'kernel',
+  bd: newBoard(), turn: 1, legal: [], hasCap: false,
+  sel: -1, pending: null,
+  anim: null, last: null,
+  thinking: false, aiDone: false, aiReady: null, thinkMin: 0,
+  hist: [], idleN: 0, ply: 0,
+  winner: 0, overReason: '',
+  msg: '', msgT: 0, forced: 0, shake: 0, pulse: 0,
+  cur: { r: 5, c: 2 }, curOn: false,
+  rec: loadRec()
+};
+
+function HUMAN() { return 1; }
+function isCpuTurn() { return G.mode === 'cpu' && G.turn === -1; }
+function canInput() {
+  return G.state === 'play' && !G.anim && !G.thinking &&
+         (G.mode === 'two' || G.turn === HUMAN());
+}
+function flash(t) { G.msg = t; G.msgT = 1.9; }
+function sideName(s) { return s > 0 ? 'ONE' : 'ZERO'; }
+function movesFrom(list, i) {
+  var out = [];
+  for (var k = 0; k < list.length; k++) if (list[k].from === i) out.push(list[k]);
+  return out;
+}
+
+function refreshLegal() {
+  G.legal = genMoves(G.bd, G.turn);
+  G.hasCap = G.legal.length > 0 && G.legal[0].caps.length > 0;
+}
+
+function pushHistory() {
+  G.hist.push({
+    bd: G.bd.slice(), turn: G.turn, idleN: G.idleN, ply: G.ply,
+    last: G.last ? { from: G.last.from, path: G.last.path.slice() } : null
+  });
+  if (G.hist.length > 500) G.hist.shift();
+}
+function restoreSnap(s) {
+  G.bd = s.bd.slice(); G.turn = s.turn; G.idleN = s.idleN; G.ply = s.ply;
+  G.last = s.last ? { from: s.last.from, path: s.last.path.slice() } : null;
+}
+
+function beginTurn() {
+  G.sel = -1; G.pending = null;
+  refreshLegal();
+  if (G.legal.length === 0) { endGame(-G.turn, sideName(G.turn) + ' had no legal move'); return; }
+  if (G.idleN >= 80) { endGame(0, 'forty moves with nothing taken'); return; }
+  if (isCpuTurn()) startThink();
+}
+
+function performMove(m) {
+  pushHistory();
+  var capv = [], i;
+  for (i = 0; i < m.caps.length; i++) capv.push(G.bd[m.caps[i]]);
+  doMove(G.bd, m);
+  G.last = { from: m.from, path: m.path.slice() };
+  if (m.caps.length > 0 || Math.abs(m.piece) === 1) G.idleN = 0; else G.idleN++;
+  G.ply++;
+  G.sel = -1; G.pending = null;
+  G.anim = { m: m, capv: capv, t: 0, dur: 0.14 * m.path.length + 0.10 };
+  if (m.caps.length > 0) { sfx.cap(); G.shake = Math.min(9, 3 + m.caps.length * 2.4); }
+  else sfx.slide();
+}
+
+function finishAnim() {
+  var m = G.anim.m;
+  G.anim = null;
+  if (m.crown) { sfx.crown(); G.pulse = 1; flash(sideName(sideOf(m.piece)) + ' CROWNED A KING'); }
+  G.turn = -G.turn;
+  beginTurn();
+}
+
+function endGame(w, reason) {
+  cancelThink();
+  G.state = 'over'; G.winner = w; G.overReason = reason || '';
+  G.sel = -1; G.pending = null; G.anim = null;
+  document.body.classList.remove('playing');
+  if (G.mode === 'cpu') {
+    var r = G.rec[G.strength] || (G.rec[G.strength] = blankRec());
+    if (w === 1) r.w++; else if (w === -1) r.l++; else r.d++;
+    saveRec();
+  }
+  if (w === 0) sfx.draw();
+  else if (G.mode === 'two') sfx.win();
+  else if (w === 1) sfx.win(); else sfx.lose();
+  overScreen();
+}
+
+/* ------------------------------------------------------------------- AI -- */
+var aiJob = null, aiTimer = null;
+function cancelThink() {
+  if (aiTimer) { clearTimeout(aiTimer); aiTimer = null; }
+  aiJob = null; G.thinking = false; G.aiDone = false; G.aiReady = null;
+}
+function startThink() {
+  cancelThink();
+  G.thinking = true; G.aiDone = false; G.aiReady = null; G.thinkMin = 0.38;
+  aiJob = makeJob(G.bd, G.turn, STRENGTH[G.strength] || STRENGTH.kernel, 0);
+  aiTimer = setTimeout(aiTick, 0);
+}
+function aiTick() {
+  aiTimer = null;
+  if (!aiJob) return;
+  if (G.state === 'pause') return;
+  var done = false;
+  try { done = jobStep(aiJob); } catch (e) { done = true; }
+  if (!done) { aiTimer = setTimeout(aiTick, 0); return; }
+  G.aiReady = aiJob.best || aiJob.rootMoves[0] || null;
+  G.aiDone = true;
+  aiJob = null;
+}
+
+/* ------------------------------------------------------------- new game -- */
+function startGame(mode, strength) {
+  initAudio();
+  cancelThink();
+  G.mode = mode;
+  if (strength && STRENGTH[strength]) G.strength = strength;
+  G.bd = newBoard(); G.turn = 1; G.hist = []; G.idleN = 0; G.ply = 0;
+  G.sel = -1; G.pending = null; G.anim = null; G.last = null;
+  G.winner = 0; G.overReason = ''; G.msg = ''; G.msgT = 0;
+  G.forced = 0; G.shake = 0; G.pulse = 0;
+  G.cur.r = 5; G.cur.c = 2;
+  G.state = 'play';
+  document.body.classList.add('playing');
+  hideOverlay();
+  setSeed((Date.now() ^ 2654435761) >>> 0);
+  refreshLegal();
+  flash(G.mode === 'two' ? 'ONE MOVES FIRST' : 'YOUR MOVE');
+}
+
+function undo() {
+  if (G.state !== 'play' && G.state !== 'over' && G.state !== 'pause') return;
+  if (!G.hist.length) { flash('NOTHING TO UNDO'); sfx.deny(); return; }
+  cancelThink();
+  G.anim = null;
+  restoreSnap(G.hist.pop());
+  if (G.mode === 'cpu' && G.turn !== HUMAN() && G.hist.length) restoreSnap(G.hist.pop());
+  G.state = 'play'; G.winner = 0; G.overReason = '';
+  G.sel = -1; G.pending = null;
+  document.body.classList.add('playing');
+  hideOverlay();
+  refreshLegal();
+  if (G.legal.length === 0) { endGame(-G.turn, sideName(G.turn) + ' had no legal move'); return; }
+  if (isCpuTurn()) startThink();
+  sfx.undo();
+  flash('ROLLED BACK');
+}
+
+/* ---------------------------------------------------------- tap handling --
+   Tap a bit, its legal landings light up, tap one to go. A chain is walked
+   one hop at a time and only commits when the chain is finished, which is
+   how the "you must play the whole multi-jump" rule stays fair rather than
+   fiddly. */
+function onSquareTap(r, c) {
+  if (!canInput()) return false;
+  if (r < 0 || r > 7 || c < 0 || c > 7) return false;
+  var i = idx(r, c), k;
+
+  if (G.pending) {
+    var cont = [];
+    for (k = 0; k < G.pending.cands.length; k++) {
+      var cm = G.pending.cands[k];
+      if (cm.path.length > G.pending.step && cm.path[G.pending.step] === i) cont.push(cm);
+    }
+    if (cont.length) { advanceChain(i, cont); return true; }
+    flash('FINISH THE CHAIN'); sfx.deny(); G.shake = 4;
+    return false;
+  }
+
+  if (G.sel !== -1) {
+    var opts = [], fm = movesFrom(G.legal, G.sel);
+    for (k = 0; k < fm.length; k++) if (fm[k].path[0] === i) opts.push(fm[k]);
+    if (opts.length) { beginMove(opts); return true; }
+  }
+
+  var p = G.bd[i];
+  if (p !== 0 && sideOf(p) === G.turn) {
+    var mine = movesFrom(G.legal, i);
+    if (mine.length) { G.sel = i; sfx.tap(); return true; }
+    if (G.hasCap) { flash('CAPTURE IS COMPULSORY'); G.forced = 1.6; }
+    else flash('THAT BIT IS BLOCKED');
+    sfx.deny(); G.shake = 4; G.sel = -1;
+    return false;
+  }
+  if (G.sel !== -1) { G.sel = -1; return false; }
+  return false;
+}
+
+function beginMove(opts) {
+  if (opts.length === 1 && opts[0].path.length === 1) { performMove(opts[0]); return; }
+  G.pending = { cands: opts, step: 1, from: opts[0].from, path: [opts[0].path[0]], caps: [opts[0].caps[0]] };
+  G.sel = -1;
+  sfx.cap();
+  var left = 0;
+  for (var k = 0; k < opts.length; k++) left = Math.max(left, opts[k].caps.length - 1);
+  flash('CHAIN: ' + left + ' MORE TO TAKE');
+}
+
+function advanceChain(i, cont) {
+  var st = G.pending.step;
+  G.pending.path.push(i);
+  G.pending.caps.push(cont[0].caps[st]);
+  G.pending.step = st + 1;
+  var finished = null, k;
+  for (k = 0; k < cont.length; k++) if (cont[k].path.length === G.pending.step) finished = cont[k];
+  if (finished) { G.pending = null; performMove(finished); return; }
+  G.pending.cands = cont;
+  sfx.cap();
+  var left = 0;
+  for (k = 0; k < cont.length; k++) left = Math.max(left, cont[k].caps.length - G.pending.step);
+  flash('CHAIN: ' + left + ' MORE TO TAKE');
+}
+
+/* ================================================================ view === */
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var satop = document.getElementById('satop');
+var sabot = document.getElementById('sabot');
+var view = { w: 900, h: 600, dpr: 1, saTop: 0, saBot: 0 };
+
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(220, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  view.saTop = satop ? satop.offsetHeight : 0;
+  view.saBot = sabot ? sabot.offsetHeight : 0;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+/* The board is a square that letterboxes into whatever shape the phone is.
+   Tall: HUD strip on top, board centred below it, buttons under it.
+   Wide (landscape phone, 342px of real height): the board takes the full
+   height and the HUD moves into the side gutters — that keeps every square
+   at 40px or more, which is the whole point. */
+function metrics() {
+  var w = view.w, h = view.h;
+  var hudTop = 58 + view.saTop;
+  var botRes = 70 + view.saBot;
+  var wide = w > h * 1.12;
+  var size, ox, oy;
+  if (wide) {
+    size = Math.max(110, Math.min(h - 16, w - 260, 660));
+    ox = (w - size) / 2;
+    oy = Math.max(8, (h - size) / 2);
+  } else {
+    var availW = w - 16, availH = h - hudTop - botRes;
+    size = Math.max(110, Math.min(availW, availH, 660));
+    ox = (w - size) / 2;
+    oy = hudTop + Math.max(0, (availH - size) / 2);
+  }
+  return { size: size, cell: size / 8, ox: ox, oy: oy, wide: wide, hudTop: hudTop, botRes: botRes };
+}
+function cellFromXY(x, y) {
+  var m = metrics();
+  var c = Math.floor((x - m.ox) / m.cell), r = Math.floor((y - m.oy) / m.cell);
+  if (r < 0 || r > 7 || c < 0 || c > 7) return null;
+  return { r: r, c: c };
+}
+function cxOf(m, i) { return m.ox + ((i & 7) + 0.5) * m.cell; }
+function cyOf(m, i) { return m.oy + ((i >> 3) + 0.5) * m.cell; }
+
+/* ------------------------------------------------------- board backdrop -- */
+var bgCache = null;
+function hashf(i, s) { var x = Math.sin(i * 127.1 + s * 311.7) * 43758.5453; return x - Math.floor(x); }
+function boardBG(size) {
+  if (bgCache && bgCache.size === size && bgCache.dpr === view.dpr) return bgCache.cv;
+  var d = view.dpr;
+  var c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(size * d));
+  c.height = Math.max(1, Math.round(size * d));
+  var g = c.getContext('2d');
+  g.setTransform(d, 0, 0, d, 0, 0);
+  var cell = size / 8, r, cc;
+  g.fillStyle = '#080c19'; g.fillRect(0, 0, size, size);
+  for (r = 0; r < 8; r++) for (cc = 0; cc < 8; cc++) {
+    var x = cc * cell, y = r * cell, i = r * 8 + cc;
+    if (dark(r, cc)) {
+      var gr = g.createLinearGradient(x, y, x + cell, y + cell);
+      gr.addColorStop(0, '#1b2440'); gr.addColorStop(1, '#141c33');
+      g.fillStyle = gr; g.fillRect(x, y, cell, cell);
+      /* etched circuit traces so the playable sectors read as silicon */
+      g.strokeStyle = 'rgba(125,226,255,0.10)';
+      g.lineWidth = Math.max(1, cell * 0.028);
+      var n = 2 + Math.floor(hashf(i, 1) * 2);
+      for (var k = 0; k < n; k++) {
+        var a = hashf(i, k + 2), b2 = hashf(i, k + 9);
+        var px = x + cell * (0.16 + a * 0.68), py = y + cell * (0.16 + b2 * 0.68);
+        g.beginPath();
+        g.moveTo(x + cell * 0.08, py);
+        g.lineTo(px, py);
+        g.lineTo(px, y + cell * (b2 > 0.5 ? 0.92 : 0.08));
+        g.stroke();
+        g.fillStyle = 'rgba(125,226,255,0.16)';
+        g.beginPath(); g.arc(px, py, Math.max(1, cell * 0.035), 0, TAU); g.fill();
+      }
+      g.strokeStyle = 'rgba(255,255,255,0.055)';
+      g.lineWidth = 1;
+      g.strokeRect(x + 0.5, y + 0.5, cell - 1, cell - 1);
+    } else {
+      g.fillStyle = '#0a1022'; g.fillRect(x, y, cell, cell);
+      g.fillStyle = 'rgba(255,255,255,0.018)';
+      for (var q = 0; q < 3; q++) g.fillRect(x + cell * 0.12, y + cell * (0.22 + q * 0.26), cell * 0.76, Math.max(1, cell * 0.03));
+    }
+  }
+  bgCache = { size: size, dpr: view.dpr, cv: c };
+  return c;
+}
+
+/* ------------------------------------------------------------- pieces --- */
+function drawCrown(g, x, y, s, col) {
+  g.beginPath();
+  g.moveTo(x - s, y + s * 0.55);
+  g.lineTo(x - s * 1.05, y - s * 0.55);
+  g.lineTo(x - s * 0.45, y - s * 0.02);
+  g.lineTo(x, y - s * 0.8);
+  g.lineTo(x + s * 0.45, y - s * 0.02);
+  g.lineTo(x + s * 1.05, y - s * 0.55);
+  g.lineTo(x + s, y + s * 0.55);
+  g.closePath();
+  g.fillStyle = col; g.fill();
+}
+function drawPiece(g, x, y, rad, p, alpha) {
+  if (!p) return;
+  var one = p > 0;
+  var col = one ? '#ffcc4d' : '#7de2ff';
+  var lite = one ? '#fff2c8' : '#dcf7ff';
+  var dk = one ? '#6e4d09' : '#0d4457';
+  g.save();
+  g.globalAlpha = (alpha === undefined || alpha === null) ? 1 : alpha;
+  g.fillStyle = 'rgba(0,0,0,0.5)';
+  g.beginPath(); g.arc(x, y + rad * 0.17, rad, 0, TAU); g.fill();
+  var gr = g.createRadialGradient(x - rad * 0.34, y - rad * 0.4, rad * 0.08, x, y, rad);
+  gr.addColorStop(0, lite); gr.addColorStop(0.5, col); gr.addColorStop(1, dk);
+  g.fillStyle = gr;
+  g.beginPath(); g.arc(x, y, rad, 0, TAU); g.fill();
+  g.lineWidth = Math.max(1, rad * 0.10);
+  g.strokeStyle = 'rgba(0,0,0,0.42)';
+  g.beginPath(); g.arc(x, y, rad - g.lineWidth * 0.5, 0, TAU); g.stroke();
+  g.lineWidth = Math.max(1, rad * 0.06);
+  g.strokeStyle = 'rgba(0,0,0,0.20)';
+  g.beginPath(); g.arc(x, y, rad * 0.74, 0, TAU); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.26)';
+  g.beginPath(); g.arc(x, y, rad * 0.62, 0, TAU); g.stroke();
+  if (isKing(p)) {
+    g.strokeStyle = one ? 'rgba(255,238,180,0.95)' : 'rgba(210,246,255,0.95)';
+    g.lineWidth = Math.max(1.5, rad * 0.11);
+    g.beginPath(); g.arc(x, y, rad * 0.86, 0, TAU); g.stroke();
+    drawCrown(g, x, y, rad * 0.42, 'rgba(12,16,32,0.82)');
+    drawCrown(g, x, y - rad * 0.05, rad * 0.36, one ? '#fff4d0' : '#e6fbff');
+  } else {
+    g.fillStyle = 'rgba(10,14,30,0.42)';
+    g.font = 'bold ' + Math.round(rad * 1.05) + 'px "Segoe UI", system-ui, sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(one ? '1' : '0', x, y + rad * 0.04);
+  }
+  g.restore();
+}
+function ringAt(g, x, y, rad, col, wdt, alpha) {
+  g.save();
+  g.globalAlpha = alpha === undefined ? 1 : alpha;
+  g.strokeStyle = col; g.lineWidth = wdt;
+  g.beginPath(); g.arc(x, y, rad, 0, TAU); g.stroke();
+  g.restore();
+}
+
+/* ================================================================ hud ==== */
+function statusText() {
+  if (G.msgT > 0 && G.msg) return G.msg;
+  if (G.state === 'over') return 'PROCESS HALTED';
+  if (G.state === 'title') return '';
+  if (G.thinking) return (STRENGTH[G.strength] || STRENGTH.kernel).name + ' IS COMPUTING...';
+  if (G.pending) {
+    var left = 0;
+    for (var k = 0; k < G.pending.cands.length; k++) left = Math.max(left, G.pending.cands[k].caps.length - G.pending.step);
+    return 'CHAIN: ' + left + ' MORE TO TAKE';
+  }
+  if (G.hasCap) return 'CAPTURE IS COMPULSORY';
+  if (G.mode === 'cpu') return 'YOUR MOVE';
+  return sideName(G.turn) + ' TO MOVE';
+}
+function tagWidth(g, count) { return 26 + g.measureText(String(count)).width + 34; }
+function drawSideTag(g, x, y, side, count, active) {
+  var col = side > 0 ? '#ffcc4d' : '#7de2ff';
+  g.save();
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  if (active) {
+    g.globalAlpha = 0.16; g.fillStyle = col;
+    g.beginPath(); g.rect(x - 8, y - 13, 104, 26); g.fill();
+    g.globalAlpha = 1;
+  }
+  g.fillStyle = col;
+  g.beginPath(); g.arc(x + 6, y, 6, 0, TAU); g.fill();
+  g.font = 'bold 12px "Segoe UI", system-ui, sans-serif';
+  g.fillStyle = active ? col : 'rgba(234,242,255,0.62)';
+  g.fillText(sideName(side), x + 18, y + 0.5);
+  g.font = 'bold 15px "Segoe UI", system-ui, sans-serif';
+  g.fillStyle = active ? '#eaf2ff' : 'rgba(234,242,255,0.5)';
+  g.fillText(String(count), x + 62, y + 0.5);
+  g.restore();
+}
+function drawMatBar(g, x, y, w, h) {
+  var n = countPieces(G.bd);
+  var a = n.m1 * 1 + n.k1 * 1.6, b = n.m2 * 1 + n.k2 * 1.6;
+  var tot = a + b || 1;
+  var fa = a / tot;
+  g.save();
+  g.fillStyle = 'rgba(255,255,255,0.07)';
+  g.fillRect(x, y, w, h);
+  g.fillStyle = '#7de2ff'; g.fillRect(x, y, w, h);
+  g.fillStyle = '#ffcc4d'; g.fillRect(x, y, w * fa, h);
+  g.fillStyle = 'rgba(11,15,30,0.9)';
+  g.fillRect(x + w * fa - 1, y - 2, 2, h + 4);
+  g.restore();
+}
+function drawHUD(g, m, t) {
+  var mode = G.mode === 'cpu' ? ('VS ' + (STRENGTH[G.strength] || STRENGTH.kernel).name) : '2 PLAYERS';
+  var n = countPieces(G.bd);
+  var st = statusText();
+  var stCol = (G.msgT > 0 && G.msg) ? '#ffcc4d' : 'rgba(234,242,255,0.72)';
+  if (G.forced > 0) stCol = '#ff8f6a';
+  g.save();
+  if (!m.wide) {
+    var y1 = view.saTop + 20, y2 = view.saTop + 43;
+    drawSideTag(g, 12, y1, 1, n.one, G.turn === 1);
+    drawSideTag(g, 124, y1, -1, n.zero, G.turn === -1);
+    g.textAlign = 'right'; g.textBaseline = 'middle';
+    g.font = 'bold 11px "Segoe UI", system-ui, sans-serif';
+    g.fillStyle = 'rgba(234,242,255,0.5)';
+    g.fillText(mode, view.w - 112, y1);
+    g.textAlign = 'left';
+    g.font = 'bold 12.5px "Segoe UI", system-ui, sans-serif';
+    g.fillStyle = stCol;
+    g.fillText(st, 12, y2);
+    if (m.oy - m.hudTop >= 30) drawMatBar(g, m.ox + m.size * 0.15, m.oy - 16, m.size * 0.7, 6);
+  } else {
+    var px = 14, pw = Math.max(80, m.ox - 26);
+    var py = Math.max(16, m.oy + 6);
+    g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.font = 'bold 13px "Segoe UI", system-ui, sans-serif';
+    g.fillStyle = '#ffcc4d';
+    g.fillText('CHECKSUM', px, py);
+    g.font = 'bold 10px "Segoe UI", system-ui, sans-serif';
+    g.fillStyle = 'rgba(234,242,255,0.42)';
+    g.fillText(mode, px, py + 17);
+    drawSideTag(g, px, py + 48, 1, n.one, G.turn === 1);
+    drawSideTag(g, px, py + 78, -1, n.zero, G.turn === -1);
+    drawMatBar(g, px, py + 100, Math.min(pw, 150), 6);
+    g.font = 'bold 12px "Segoe UI", system-ui, sans-serif';
+    g.fillStyle = stCol;
+    var words = st.split(' '), line = '', yy = py + 128, maxw = Math.min(pw, 170);
+    for (var i = 0; i < words.length; i++) {
+      var tryl = line ? line + ' ' + words[i] : words[i];
+      if (g.measureText(tryl).width > maxw && line) { g.fillText(line, px, yy); yy += 15; line = words[i]; }
+      else line = tryl;
+    }
+    if (line) g.fillText(line, px, yy);
+    /* right gutter, kept clear of the top-right button block */
+    var rx = m.ox + m.size + 14;
+    if (view.w - rx > 70) {
+      g.textAlign = 'left';
+      g.font = 'bold 10px "Segoe UI", system-ui, sans-serif';
+      g.fillStyle = 'rgba(234,242,255,0.34)';
+      g.fillText('MOVE ' + (Math.floor(G.ply / 2) + 1), rx, Math.max(66, m.oy + 10));
+      g.fillText('CAPTURES FORCED', rx, Math.max(66, m.oy + 10) + 16);
+      g.fillText('CHAINS RUN OUT', rx, Math.max(66, m.oy + 10) + 30);
+      g.fillText('FAR ROW CROWNS', rx, Math.max(66, m.oy + 10) + 44);
+    }
+  }
+  g.restore();
+}
+
+/* ============================================================== render === */
+function render(t) {
+  var g = ctx, m = metrics(), i, k;
+  g.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  var bg = g.createLinearGradient(0, 0, 0, view.h);
+  bg.addColorStop(0, '#0d1224'); bg.addColorStop(1, '#070a16');
+  g.fillStyle = bg; g.fillRect(0, 0, view.w, view.h);
+  g.strokeStyle = 'rgba(125,226,255,0.04)'; g.lineWidth = 1;
+  for (i = 0; i < view.w; i += 44) { g.beginPath(); g.moveTo(i + 0.5, 0); g.lineTo(i + 0.5, view.h); g.stroke(); }
+  for (i = 0; i < view.h; i += 44) { g.beginPath(); g.moveTo(0, i + 0.5); g.lineTo(view.w, i + 0.5); g.stroke(); }
+
+  if (G.state === 'title') { drawTitleArt(g, m, t); return; }
+
+  g.save();
+  if (G.shake > 0.05) g.translate((Math.random() - 0.5) * G.shake, (Math.random() - 0.5) * G.shake);
+
+  /* frame */
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,0.75)'; g.shadowBlur = 26; g.shadowOffsetY = 8;
+  g.fillStyle = '#05070f';
+  g.fillRect(m.ox - 6, m.oy - 6, m.size + 12, m.size + 12);
+  g.restore();
+  g.drawImage(boardBG(m.size), m.ox, m.oy, m.size, m.size);
+  g.strokeStyle = 'rgba(255,204,77,0.30)'; g.lineWidth = 2;
+  g.strokeRect(m.ox - 3.5, m.oy - 3.5, m.size + 7, m.size + 7);
+
+  var cell = m.cell, rad = cell * 0.37;
+  var showHints = G.state === 'play' && !G.anim && !G.thinking && (G.mode === 'two' || G.turn === HUMAN());
+
+  /* last move trail */
+  if (G.last) {
+    g.save(); g.globalAlpha = 0.5;
+    g.fillStyle = 'rgba(125,226,255,0.16)';
+    var pts = [G.last.from].concat(G.last.path);
+    for (k = 0; k < pts.length; k++) g.fillRect(m.ox + (pts[k] & 7) * cell, m.oy + (pts[k] >> 3) * cell, cell, cell);
+    g.restore();
+  }
+
+  /* what can be tapped, and what must capture */
+  var dests = [], preview = [], chainAt = -1, fromSq = -1;
+  if (G.pending) {
+    chainAt = G.pending.path[G.pending.path.length - 1];
+    fromSq = G.pending.from;
+    for (k = 0; k < G.pending.cands.length; k++) {
+      var cm = G.pending.cands[k];
+      if (cm.path.length > G.pending.step) {
+        if (dests.indexOf(cm.path[G.pending.step]) < 0) dests.push(cm.path[G.pending.step]);
+        preview.push({ start: chainAt, rest: cm.path.slice(G.pending.step), caps: cm.caps.length - G.pending.step });
+      }
+    }
+  } else if (G.sel !== -1 && showHints) {
+    var fm = movesFrom(G.legal, G.sel);
+    for (k = 0; k < fm.length; k++) {
+      if (dests.indexOf(fm[k].path[0]) < 0) dests.push(fm[k].path[0]);
+      if (fm[k].path.length > 1) preview.push({ start: G.sel, rest: fm[k].path.slice(0), caps: fm[k].caps.length });
+    }
+  }
+
+  /* a beginner should never wonder why a move was refused: the bits that
+     are obliged to capture pulse, everything else that can move gets a
+     quiet ring. */
+  if (showHints) {
+    var pulse = 0.5 + 0.5 * Math.sin(t * 4.4);
+    for (k = 0; k < G.legal.length; k++) {
+      var fi = G.legal[k].from;
+      var x = cxOf(m, fi), y = cyOf(m, fi);
+      if (fi === G.sel) continue;
+      if (G.hasCap) ringAt(g, x, y, rad + 4 + pulse * 2, 'rgba(255,124,90,' + (0.35 + pulse * 0.45) + ')', 2.4, 1);
+      else ringAt(g, x, y, rad + 3.5, 'rgba(255,255,255,0.16)', 2, 1);
+    }
+  }
+  if (G.forced > 0) {
+    g.save();
+    g.globalAlpha = Math.min(1, G.forced) * 0.5;
+    g.fillStyle = '#ff7c5a';
+    for (k = 0; k < G.legal.length; k++) {
+      var ff = G.legal[k].from;
+      g.fillRect(m.ox + (ff & 7) * cell, m.oy + (ff >> 3) * cell, cell, cell);
+    }
+    g.restore();
+  }
+
+  /* pieces */
+  var skipD = -1, animF = 0, aPts = null;
+  if (G.anim) {
+    var am = G.anim.m;
+    aPts = [am.from].concat(am.path);
+    skipD = am.path[am.path.length - 1];
+    animF = clamp(G.anim.t / G.anim.dur, 0, 1) * (aPts.length - 1);
+  }
+  for (i = 0; i < 64; i++) {
+    var p = G.bd[i];
+    if (!p) continue;
+    if (i === skipD) continue;
+    if (G.pending && i === fromSq) continue;
+    var doomed = false;
+    if (G.pending) for (k = 0; k < G.pending.caps.length; k++) if (G.pending.caps[k] === i) doomed = true;
+    drawPiece(g, cxOf(m, i), cyOf(m, i), rad, p, doomed ? 0.4 : 1);
+    if (doomed) {
+      g.save(); g.strokeStyle = '#ff7c5a'; g.lineWidth = Math.max(2, rad * 0.16);
+      var xx = cxOf(m, i), yy = cyOf(m, i), s = rad * 0.6;
+      g.beginPath(); g.moveTo(xx - s, yy - s); g.lineTo(xx + s, yy + s);
+      g.moveTo(xx + s, yy - s); g.lineTo(xx - s, yy + s); g.stroke(); g.restore();
+    }
+  }
+  /* pieces being taken this move fade out as the jumper passes them */
+  if (G.anim) {
+    var an = G.anim;
+    for (k = 0; k < an.m.caps.length; k++) {
+      var a2 = animF >= (k + 1) ? clamp(1 - (animF - (k + 1)) * 2.6, 0, 1) : 1;
+      if (a2 <= 0) continue;
+      drawPiece(g, cxOf(m, an.m.caps[k]), cyOf(m, an.m.caps[k]), rad * (0.6 + 0.4 * a2), an.capv[k], a2 * 0.85);
+    }
+  }
+
+  /* chain preview: the hops still to come, dashed, with the take count */
+  if (preview.length) {
+    g.save();
+    g.setLineDash([5, 5]);
+    g.lineWidth = 2;
+    for (k = 0; k < preview.length; k++) {
+      var pv = preview[k];
+      g.strokeStyle = 'rgba(255,204,77,0.36)';
+      g.beginPath();
+      g.moveTo(cxOf(m, pv.start), cyOf(m, pv.start));
+      for (i = 0; i < pv.rest.length; i++) g.lineTo(cxOf(m, pv.rest[i]), cyOf(m, pv.rest[i]));
+      g.stroke();
+      for (i = 1; i < pv.rest.length; i++) {
+        g.setLineDash([]);
+        g.fillStyle = 'rgba(255,204,77,0.30)';
+        g.beginPath(); g.arc(cxOf(m, pv.rest[i]), cyOf(m, pv.rest[i]), cell * 0.09, 0, TAU); g.fill();
+        g.setLineDash([5, 5]);
+      }
+      if (pv.caps > 1) {
+        var lx = cxOf(m, pv.rest[pv.rest.length - 1]), ly = cyOf(m, pv.rest[pv.rest.length - 1]);
+        g.setLineDash([]);
+        g.fillStyle = 'rgba(255,204,77,0.85)';
+        g.font = 'bold ' + Math.round(cell * 0.26) + 'px "Segoe UI", system-ui, sans-serif';
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText('x' + pv.caps, lx, ly + cell * 0.30);
+        g.setLineDash([5, 5]);
+      }
+    }
+    g.restore();
+  }
+
+  /* landing dots */
+  if (dests.length) {
+    var bob = 0.5 + 0.5 * Math.sin(t * 5.2);
+    for (k = 0; k < dests.length; k++) {
+      var dx = cxOf(m, dests[k]), dy = cyOf(m, dests[k]);
+      g.save();
+      g.fillStyle = 'rgba(255,204,77,0.14)';
+      g.fillRect(m.ox + (dests[k] & 7) * cell, m.oy + (dests[k] >> 3) * cell, cell, cell);
+      g.shadowColor = 'rgba(255,204,77,0.8)'; g.shadowBlur = 12;
+      g.fillStyle = '#ffcc4d';
+      g.beginPath(); g.arc(dx, dy, cell * (0.15 + bob * 0.03), 0, TAU); g.fill();
+      g.restore();
+      ringAt(g, dx, dy, cell * 0.30, 'rgba(255,204,77,0.55)', 2, 1);
+    }
+  }
+
+  /* selection / chain marker */
+  if (G.sel !== -1 && showHints) {
+    var sx = cxOf(m, G.sel), sy = cyOf(m, G.sel);
+    g.save(); g.shadowColor = 'rgba(255,204,77,0.9)'; g.shadowBlur = 16;
+    ringAt(g, sx, sy, rad + 5, '#ffcc4d', 3, 1);
+    g.restore();
+  }
+  if (G.pending) {
+    var px2 = cxOf(m, chainAt), py2 = cyOf(m, chainAt);
+    drawPiece(g, px2, py2, rad * 1.06, G.bd[fromSq], 1);
+    g.save(); g.shadowColor = 'rgba(255,204,77,0.9)'; g.shadowBlur = 18;
+    ringAt(g, px2, py2, rad + 6, '#ffcc4d', 3, 1);
+    g.restore();
+  }
+
+  /* the piece in flight */
+  if (G.anim) {
+    var seg = aPts.length - 1;
+    var si = Math.min(seg - 1, Math.floor(animF));
+    var lt = ease(clamp(animF - si, 0, 1));
+    var ax = lerp(cxOf(m, aPts[si]), cxOf(m, aPts[si + 1]), lt);
+    var ay = lerp(cyOf(m, aPts[si]), cyOf(m, aPts[si + 1]), lt);
+    var hop = Math.sin(clamp(animF - si, 0, 1) * Math.PI) * (G.anim.m.caps.length ? cell * 0.20 : cell * 0.09);
+    var fp = G.anim.m.piece;
+    if (G.anim.m.crown && animF >= seg - 0.02) fp = fp * 2;
+    drawPiece(g, ax, ay - hop, rad * (1 + hop / cell * 0.3), fp, 1);
+  }
+
+  /* keyboard / gamepad cursor */
+  if (G.curOn && showHints) {
+    var cxp = m.ox + G.cur.c * cell, cyp = m.oy + G.cur.r * cell;
+    g.save();
+    g.strokeStyle = 'rgba(234,242,255,0.85)'; g.lineWidth = 2;
+    g.strokeRect(cxp + 2, cyp + 2, cell - 4, cell - 4);
+    g.restore();
+  }
+
+  g.restore();
+  drawHUD(g, m, t);
+}
+
+/* Title screen keeps a live board behind the card so the arcade never shows
+   a dead rectangle. */
+function drawTitleArt(g, m, t) {
+  var cell = m.cell, rad = cell * 0.37, i;
+  g.save();
+  g.globalAlpha = 0.55;
+  g.drawImage(boardBG(m.size), m.ox, m.oy, m.size, m.size);
+  var demo = newBoard();
+  for (i = 0; i < 64; i++) {
+    if (!demo[i]) continue;
+    var wob = Math.sin(t * 1.2 + i * 0.5) * 1.5;
+    drawPiece(g, cxOf(m, i), cyOf(m, i) + wob, rad, demo[i], 0.9);
+  }
+  g.restore();
+}
+
+/* ============================================================= overlays == */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+function recLine(k) {
+  var r = G.rec[k] || blankRec();
+  return r.w + '&ndash;' + r.l + (r.d ? '&ndash;' + r.d : '');
+}
+function titleScreen() {
+  G.state = 'title';
+  cancelThink();
+  document.body.classList.remove('playing');
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>CHECKSUM</h1>' +
+      '<div class="tagline">Checkers, running inside the machine. Twelve bits a side, and taking is <b>compulsory</b>.' +
+        '<span class="ext"> Bits step forward one diagonal and take by jumping the byte in front of them. ' +
+        'A chain of jumps runs to the end. Reach the far row and you are crowned a KING, which moves both ways &mdash; ' +
+        'but the crown ends your move. Run out of legal moves and your process halts.</span></div>' +
+      '<div class="keys">' +
+        '<div class="hdr">Play</div><div class="hdr">Keys</div>' +
+        '<div>Pick a bit, then a lit square<span>Tap / click</span></div><div>Move the cursor<span>Arrows</span></div>' +
+        '<div>Landing dots show legal moves<span>Gold</span></div><div>Select / confirm<span>Enter</span></div>' +
+        '<div>Red rings = must capture<span>Forced</span></div><div>Undo a move<span>U</span></div>' +
+        '<div>Chains show what is left to take<span>x2, x3</span></div><div>Pause / mute<span>Esc / M</span></div>' +
+      '</div>' +
+      '<div class="lbl">Play the CPU</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn sm" data-act="s_idle">IDLE</button>' +
+        '<button class="btn sm" data-act="s_kernel">KERNEL</button>' +
+        '<button class="btn sm" data-act="s_root">ROOT</button>' +
+      '</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Idle W&ndash;L</div><div class="v">' + recLine('idle') + '</div></div>' +
+        '<div class="stat"><div class="k">Kernel W&ndash;L</div><div class="v">' + recLine('kernel') + '</div></div>' +
+        '<div class="stat"><div class="k">Root W&ndash;L</div><div class="v accent">' + recLine('root') + '</div></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn ghost" data-act="two">2 PLAYERS</button>' +
+      '</div>' +
+      '<div class="best">Two players share one device &mdash; gold ONE moves first.</div>' +
+    '</div>');
+}
+function pauseScreen() {
+  var n = countPieces(G.bd);
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">One</div><div class="v accent">' + n.one + '</div></div>' +
+        '<div class="stat"><div class="k">Zero</div><div class="v">' + n.zero + '</div></div>' +
+        '<div class="stat"><div class="k">Move</div><div class="v">' + (Math.floor(G.ply / 2) + 1) + '</div></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="undo">UNDO</button>' +
+        '<button class="btn ghost" data-act="restart">RESTART</button>' +
+        '<button class="btn ghost" data-act="quit">QUIT</button>' +
+      '</div>' +
+    '</div>');
+}
+function overScreen() {
+  var head, sub;
+  if (G.winner === 0) { head = 'PARITY STALL'; sub = 'Forty moves, nothing taken. Called a draw.'; }
+  else if (G.mode === 'two') {
+    head = sideName(G.winner) + ' WINS';
+    sub = G.overReason;
+  } else if (G.winner === 1) { head = 'CHECKSUM VALID'; sub = 'You beat ' + STRENGTH[G.strength].name + '. ' + G.overReason; }
+  else { head = 'CHECKSUM FAILED'; sub = STRENGTH[G.strength].name + ' took it. ' + G.overReason; }
+  var n = countPieces(G.bd);
+  var r = G.rec[G.strength] || blankRec();
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">' + (G.mode === 'cpu' ? 'vs ' + STRENGTH[G.strength].name : '2 players') + '</div>' +
+      '<h2 style="color:' + (G.winner === 0 ? 'var(--fg)' : (G.winner === 1 ? 'var(--one)' : 'var(--zero)')) + '">' + head + '</h2>' +
+      '<div class="tagline">' + sub + '</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">One left</div><div class="v accent">' + n.one + '</div></div>' +
+        '<div class="stat"><div class="k">Zero left</div><div class="v">' + n.zero + '</div></div>' +
+        '<div class="stat"><div class="k">Moves</div><div class="v">' + (Math.floor(G.ply / 2) + 1) + '</div></div>' +
+      '</div>' +
+      (G.mode === 'cpu' ? '<div class="best">Record vs ' + STRENGTH[G.strength].name + ': <b>' + r.w + ' W</b> &middot; ' + r.l + ' L' + (r.d ? ' &middot; ' + r.d + ' D' : '') + '</div>' : '') +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="again">REMATCH</button>' +
+        '<button class="btn ghost" data-act="undo">UNDO</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>');
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 's_idle') startGame('cpu', 'idle');
+  else if (act === 's_kernel') startGame('cpu', 'kernel');
+  else if (act === 's_root') startGame('cpu', 'root');
+  else if (act === 'two') startGame('two');
+  else if (act === 'again') startGame(G.mode, G.strength);
+  else if (act === 'restart') startGame(G.mode, G.strength);
+  else if (act === 'undo') undo();
+  else if (act === 'resume') togglePause();
+  else if (act === 'quit' || act === 'title') titleScreen();
+});
+function togglePause() {
+  if (G.state === 'play') { G.state = 'pause'; pauseScreen(); }
+  else if (G.state === 'pause') {
+    G.state = 'play'; hideOverlay();
+    if (aiJob && !aiTimer) { aiJob.deadline = nowMs() + aiJob.budget; aiTimer = setTimeout(aiTick, 0); }
+  }
+}
+
+/* =============================================================== input === */
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { initAudio(); togglePause(); });
+document.getElementById('undoBtn').addEventListener('click', function () { initAudio(); undo(); });
+
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+cv.addEventListener('pointerdown', function (e) {
+  initAudio();
+  if (e.pointerType === 'touch' && !document.body.classList.contains('touch')) document.body.classList.add('touch');
+  e.preventDefault();
+  if (G.state !== 'play') return;
+  var cell = cellFromXY(e.clientX, e.clientY);
+  if (!cell) { if (G.sel !== -1 && !G.pending) G.sel = -1; return; }
+  G.curOn = false;
+  G.cur.r = cell.r; G.cur.c = cell.c;
+  onSquareTap(cell.r, cell.c);
+});
+
+function moveCursor(dr, dc) {
+  G.curOn = true;
+  var r = clamp(G.cur.r + dr, 0, 7), c = clamp(G.cur.c + dc, 0, 7);
+  if (!dark(r, c)) {
+    if (dc !== 0) c = clamp(c + (dc > 0 ? 1 : -1), 0, 7);
+    else c = (c + 1 <= 7 && dark(r, c + 1)) ? c + 1 : clamp(c - 1, 0, 7);
+  }
+  if (dark(r, c)) { G.cur.r = r; G.cur.c = c; }
+}
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+  initAudio();
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'escape' || k === 'p') { if (G.state === 'play' || G.state === 'pause') togglePause(); return; }
+  if (k === 'u') { if (G.state === 'play' || G.state === 'over') undo(); return; }
+  if (G.state === 'title') {
+    if (k === 'enter' || k === ' ') startGame('cpu', G.strength);
+    return;
+  }
+  if (G.state === 'over') {
+    if (k === 'enter' || k === ' ' || k === 'r') startGame(G.mode, G.strength);
+    if (k === 't') titleScreen();
+    return;
+  }
+  if (G.state !== 'play') return;
+  if (k === 'arrowup') moveCursor(-1, 0);
+  else if (k === 'arrowdown') moveCursor(1, 0);
+  else if (k === 'arrowleft') moveCursor(0, -2);
+  else if (k === 'arrowright') moveCursor(0, 2);
+  else if (k === 'enter' || k === ' ') { G.curOn = true; onSquareTap(G.cur.r, G.cur.c); }
+  else if (k === 'backspace') { if (!G.pending) G.sel = -1; }
+});
+window.addEventListener('blur', function () { if (G.state === 'play') togglePause(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden && G.state === 'play') togglePause(); });
+
+/* gamepad: d-pad drives the same cursor, A taps, X undoes */
+var padPrev = {}, padRepeat = 0;
+function pollPad(dt) {
+  if (!navigator.getGamepads) return;
+  var gps = navigator.getGamepads(), gp = null;
+  for (var i = 0; i < gps.length; i++) if (gps[i]) { gp = gps[i]; break; }
+  if (!gp) return;
+  var ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
+  var b = gp.buttons;
+  function bd2(n) { return b[n] && b[n].pressed; }
+  var up = bd2(12) || ay < -0.55, dn = bd2(13) || ay > 0.55, lf = bd2(14) || ax < -0.55, rt = bd2(15) || ax > 0.55;
+  padRepeat = Math.max(0, padRepeat - dt);
+  if (G.state === 'play' && padRepeat <= 0) {
+    if (up) { moveCursor(-1, 0); padRepeat = 0.16; }
+    else if (dn) { moveCursor(1, 0); padRepeat = 0.16; }
+    else if (lf) { moveCursor(0, -2); padRepeat = 0.16; }
+    else if (rt) { moveCursor(0, 2); padRepeat = 0.16; }
+  }
+  var a = bd2(0), x = bd2(2), st = bd2(9);
+  if (a && !padPrev.a) {
+    initAudio();
+    if (G.state === 'title') startGame('cpu', G.strength);
+    else if (G.state === 'over') startGame(G.mode, G.strength);
+    else if (G.state === 'play') { G.curOn = true; onSquareTap(G.cur.r, G.cur.c); }
+  }
+  if (x && !padPrev.x && (G.state === 'play' || G.state === 'over')) undo();
+  if (st && !padPrev.st && (G.state === 'play' || G.state === 'pause')) togglePause();
+  padPrev.a = a; padPrev.x = x; padPrev.st = st;
+}
+
+/* ================================================================ loop === */
+var lastT = 0, T = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  if (G.state !== 'pause') {
+    T += dt;
+    if (G.msgT > 0) G.msgT = Math.max(0, G.msgT - dt);
+    if (G.forced > 0) G.forced = Math.max(0, G.forced - dt * 1.3);
+    if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 22);
+    if (G.pulse > 0) G.pulse = Math.max(0, G.pulse - dt * 1.6);
+    if (G.anim) { G.anim.t += dt; if (G.anim.t >= G.anim.dur) finishAnim(); }
+    if (G.thinking) {
+      if (G.thinkMin > 0) G.thinkMin -= dt;
+      if (G.aiDone && G.thinkMin <= 0) {
+        var mv = G.aiReady;
+        G.thinking = false; G.aiDone = false; G.aiReady = null;
+        if (mv) performMove(mv);
+        else endGame(-G.turn, sideName(G.turn) + ' had no legal move');
+      }
+    }
+    pollPad(dt);
+  }
+  render(T);
+}
+
+/* ======================================================== test harness === */
+function testSetup(ascii, turn, mode, strength, autoTurn) {
+  cancelThink();
+  G.mode = mode || 'two';
+  if (strength && STRENGTH[strength]) G.strength = strength;
+  G.bd = parseBoard(ascii);
+  G.turn = turn === -1 ? -1 : 1;
+  G.hist = []; G.last = null; G.sel = -1; G.pending = null; G.anim = null;
+  G.idleN = 0; G.ply = 0; G.winner = 0; G.overReason = '';
+  G.msg = ''; G.msgT = 0; G.forced = 0; G.shake = 0;
+  G.state = 'play';
+  document.body.classList.add('playing');
+  hideOverlay();
+  if (autoTurn) beginTurn(); else refreshLegal();
+  return G.legal.length;
+}
+function describeMove(m) {
+  var s = (m.from >> 3) + ',' + (m.from & 7);
+  for (var i = 0; i < m.path.length; i++) s += '->' + (m.path[i] >> 3) + ',' + (m.path[i] & 7);
+  if (m.caps.length) s += ' x' + m.caps.length;
+  if (m.crown) s += ' K';
+  return s;
+}
+window.__CHECKSUM = {
+  G: G, STRENGTH: STRENGTH,
+  newBoard: newBoard, genMoves: genMoves, doMove: doMove, undoMove: undoMove,
+  evaluate: evaluate, parseBoard: parseBoard, boardStr: boardStr, countPieces: countPieces,
+  idx: idx, dark: dark, selfPlay: selfPlay, bestMoveSync: bestMoveSync, setSeed: setSeed,
+  setup: testSetup, beginTurn: beginTurn, start: startGame, undo: undo, title: titleScreen,
+  tap: function (r, c) { return onSquareTap(r, c); },
+  settle: function () { var n = 0; while (G.anim && n++ < 40) { G.anim.t = G.anim.dur; finishAnim(); } return !G.anim; },
+  play: function (m) { performMove(m); },
+  moves: function (side) { return genMoves(G.bd, side === undefined ? G.turn : side); },
+  describe: describeMove,
+  describeAll: function (side) { return genMoves(G.bd, side === undefined ? G.turn : side).map(describeMove); },
+  metrics: metrics,
+  state: function () {
+    return {
+      state: G.state, turn: G.turn, winner: G.winner, reason: G.overReason,
+      ply: G.ply, sel: G.sel, hasCap: G.hasCap, msg: G.msg, mode: G.mode, strength: G.strength,
+      pending: G.pending ? { step: G.pending.step, path: G.pending.path.slice(), cands: G.pending.cands.length } : null,
+      anim: !!G.anim, thinking: G.thinking, legal: G.legal.length,
+      board: boardStr(G.bd), counts: countPieces(G.bd), rec: G.rec, hist: G.hist.length
+    };
+  }
+};
+
+/* ================================================================ boot === */
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

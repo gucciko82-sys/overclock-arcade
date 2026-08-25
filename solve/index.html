@@ -1,0 +1,2239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Solve — Pre-Algebra &amp; Algebra</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="An algebra tutor for the Overclock arcade. Eight rungs from order of operations to equations with brackets, fractions and word problems. It finds your level by playing, and when you slip it names the rule and works the whole thing through, line by line.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Solve">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eaf0ff;
+    --dim: rgba(234,240,255,0.62);
+    --panel: rgba(18,24,44,0.78);
+    --line: rgba(234,240,255,0.14);
+    --good: #63e2a8;
+    --cool: #6fd8ff;
+    --warn: #ff9f6e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: manipulation;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(38,52,102,0.55), rgba(11,15,30,0)),
+      var(--bg); }
+  canvas#bg { position: absolute; inset: 0; width: 100%; height: 100%;
+    display: block; z-index: 0; opacity: 0.34; pointer-events: none; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 8;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0;
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.22); }
+  body:not(.playing) #topbtns { display: none; }
+
+  /* ------------------------------------------------------------ play UI -- */
+  #play {
+    position: absolute; inset: 0; display: none; flex-direction: column;
+    padding: max(7px, env(safe-area-inset-top)) max(9px, env(safe-area-inset-right))
+             max(9px, env(safe-area-inset-bottom)) max(9px, env(safe-area-inset-left));
+    z-index: 2;
+  }
+  body.playing #play { display: flex; }
+
+  #head { flex: none; display: flex; align-items: center; gap: 9px;
+          height: 46px; padding-right: 104px; }
+  .hbtn { height: 40px; min-width: 62px; padding: 0 11px; border-radius: 10px;
+    background: rgba(255,204,77,0.10); border: 1px solid rgba(255,204,77,0.42);
+    color: var(--accent); font-family: inherit; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.14em; cursor: pointer; }
+  .hbtn:active { background: rgba(255,204,77,0.26); }
+  #hinfo { flex: 1; min-width: 0; }
+  #hname { display: flex; justify-content: space-between; gap: 8px;
+    font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--dim); white-space: nowrap; overflow: hidden; }
+  #hname i { font-style: normal; overflow: hidden; text-overflow: ellipsis; }
+  #hname b { color: var(--accent); flex: none; }
+  #hbar { height: 6px; border-radius: 3px; background: rgba(234,240,255,0.10);
+    margin-top: 6px; overflow: hidden; }
+  #hbar i { display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--cool), var(--accent)); }
+
+  #body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px;
+    width: 100%; max-width: 980px; margin: 0 auto; }
+  #work { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  /* With nothing in the panel there is no reason to leave a hole in the middle
+     of a phone screen — the question rides up into the space instead. */
+  #work.blank { justify-content: center; }
+  #work.blank #panel { flex: 0 0 auto; }
+  #qtext { flex: none; display: none; font-size: 14px; line-height: 1.42;
+    color: var(--fg); background: rgba(111,216,255,0.07);
+    border: 1px solid rgba(111,216,255,0.26); border-left-width: 3px;
+    border-radius: 9px; padding: 8px 11px; margin-bottom: 6px; text-align: left; }
+  #qtext.on { display: block; }
+  #qline { flex: none; text-align: center; line-height: 1.15;
+    font-size: clamp(23px, 6.4vw, 40px); font-weight: 700; letter-spacing: 0.02em;
+    padding: 2px 0; font-variant-numeric: tabular-nums; word-break: break-word; }
+  #ansline { flex: none; text-align: center; line-height: 1.1;
+    font-size: clamp(20px, 5.4vw, 31px); font-weight: 700; color: var(--dim);
+    padding: 2px 0 4px; font-variant-numeric: tabular-nums; }
+  #ansline.off { display: none; }
+  #slot { color: var(--accent); display: inline-block; min-width: 1.6em;
+    border-bottom: 3px solid rgba(255,204,77,0.45); margin: 0 0.12em; }
+  #panel { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+    text-align: left; padding: 2px 1px; }
+  #panel::-webkit-scrollbar { width: 5px; }
+  #panel::-webkit-scrollbar-thumb { background: rgba(234,240,255,0.18); border-radius: 3px; }
+  .rulehead { border: 1px solid rgba(255,159,110,0.42); background: rgba(255,159,110,0.10);
+    border-radius: 10px; padding: 8px 11px; margin-bottom: 7px; }
+  .rulehead b { display: block; color: var(--warn); font-size: 11px;
+    letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 3px; }
+  .rulehead span { font-size: 13px; line-height: 1.42; color: var(--fg); }
+  .sline { display: flex; align-items: baseline; gap: 10px; padding: 5px 9px;
+    border-radius: 9px; margin-bottom: 5px; background: rgba(234,240,255,0.05);
+    border: 1px solid var(--line); }
+  .sline.now { border-color: rgba(255,204,77,0.55); background: rgba(255,204,77,0.10); }
+  .sline b { flex: none; font-size: clamp(15px, 4vw, 20px); font-weight: 700;
+    color: var(--fg); font-variant-numeric: tabular-nums; min-width: 5em; }
+  .sline em { flex: 1; min-width: 0; font-style: normal; font-size: 11.5px;
+    line-height: 1.35; color: var(--dim); }
+  .sline em u { text-decoration: none; color: var(--cool); }
+  .hline { display: flex; gap: 9px; padding: 7px 10px; border-radius: 9px;
+    margin-bottom: 5px; background: rgba(111,216,255,0.08);
+    border: 1px solid rgba(111,216,255,0.3); font-size: 13px; line-height: 1.38; }
+  .hline i { flex: none; font-style: normal; color: var(--cool); font-weight: 700;
+    font-size: 10px; letter-spacing: 0.14em; padding-top: 2px; }
+  #fb { flex: none; min-height: 26px; text-align: center; padding: 2px 6px;
+    font-size: 12.5px; line-height: 1.3; color: var(--dim); }
+  #fb.good { color: var(--good); }
+  #fb.teach { color: var(--warn); }
+
+  #entry { flex: none; width: 100%; max-width: 400px; margin: 0 auto; }
+  #hintrow { display: flex; gap: 8px; margin-bottom: 7px; }
+  #hintrow.off { display: none; }
+  .hintbtn { flex: 1; height: 42px; min-height: 40px; border-radius: 10px;
+    background: rgba(111,216,255,0.10); border: 1px solid rgba(111,216,255,0.42);
+    color: var(--cool); font-family: inherit; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.18em; cursor: pointer; }
+  .hintbtn:active { background: rgba(111,216,255,0.26); }
+  .hintbtn.dead { opacity: 0.42; }
+  #pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .key { height: 50px; min-height: 44px; border-radius: 11px;
+    background: rgba(234,240,255,0.055); border: 1px solid var(--line);
+    color: var(--fg); font-family: inherit; font-size: 22px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    font-variant-numeric: tabular-nums; padding: 0; }
+  .key:active { background: rgba(255,204,77,0.20); }
+  .key.act { background: rgba(255,204,77,0.13); border-color: rgba(255,204,77,0.45);
+    color: var(--accent); font-size: 17px; }
+  .key.sel { box-shadow: 0 0 0 2px var(--accent) inset; }
+  #choices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .ch { min-height: 54px; border-radius: 11px; background: rgba(234,240,255,0.055);
+    border: 1px solid var(--line); color: var(--fg); font-family: inherit;
+    font-size: 19px; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px; padding: 4px; }
+  .ch:active { background: rgba(255,204,77,0.20); }
+  .ch.sel { box-shadow: 0 0 0 2px var(--accent) inset; }
+  .ch small { color: var(--dim); font-size: 10px; font-weight: 700; }
+  #teachbtns { display: flex; gap: 8px; justify-content: center; }
+  #pad.off, #choices.off, #teachbtns.off { display: none; }
+
+  /* ------------------------------------------------------------ overlay -- */
+  #overlay {
+    position: absolute; inset: 0; z-index: 10; display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(20,28,58,0.86), rgba(6,9,18,0.96));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card { width: min(600px, 100%); background: rgba(16,21,40,0.94);
+    border: 1px solid var(--line); border-radius: 16px; padding: 20px 18px 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.65); text-align: center; }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 5px 0 2px; font-size: clamp(30px, 9vw, 52px); letter-spacing: 0.16em;
+    font-weight: 700; line-height: 1; color: var(--accent);
+    text-shadow: 0 0 22px rgba(255,204,77,0.35); }
+  h2 { margin: 2px 0 6px; font-size: clamp(18px, 5.4vw, 26px); letter-spacing: 0.09em; font-weight: 700; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.02em; margin-bottom: 10px; line-height: 1.45; }
+  .keys { display: grid; grid-template-columns: 1fr; gap: 5px; font-size: 12.5px;
+    color: var(--dim); margin: 10px auto 4px; max-width: 380px; text-align: left; }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(234,240,255,0.10); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .btn { margin-top: 13px; display: inline-flex; align-items: center; justify-content: center;
+    min-height: 46px; padding: 0 22px; border-radius: 10px;
+    border: 1px solid rgba(255,204,77,0.55); background: rgba(255,204,77,0.14);
+    color: var(--accent); font-family: inherit; font-size: 13px; font-weight: 700;
+    letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; }
+  .btn:active { background: rgba(255,204,77,0.3); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(234,240,255,0.05); }
+  .btnrow { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(24px, 7vw, 40px); font-weight: 700; letter-spacing: 0.3em;
+    text-transform: uppercase; color: var(--accent); }
+
+  .slist { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 10px; text-align: left; }
+  .srow { display: flex; align-items: center; gap: 8px; min-height: 46px;
+    padding: 5px 10px; border-radius: 10px; border: 1px solid var(--line);
+    background: rgba(234,240,255,0.045); color: var(--fg); font-family: inherit;
+    width: 100%; text-align: left; }
+  .srow.cur { border-color: rgba(255,204,77,0.6); background: rgba(255,204,77,0.10); }
+  .srow.above { opacity: 0.45; }
+  .srow .sn { flex: 1; min-width: 0; font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; }
+  .srow .sn em { display: block; font-style: normal; font-size: 9.5px; font-weight: 400;
+    color: var(--dim); letter-spacing: 0.04em; margin-top: 2px; }
+  .srow .sp { flex: none; font-size: 11px; font-weight: 700; color: var(--accent);
+    font-variant-numeric: tabular-nums; min-width: 46px; text-align: right; }
+  .mini { height: 5px; border-radius: 3px; background: rgba(234,240,255,0.10);
+    overflow: hidden; margin-top: 4px; }
+  .mini i { display: block; height: 100%; background: linear-gradient(90deg, var(--cool), var(--accent)); }
+  .weak { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-top: 8px; }
+  .weak b { font-weight: 700; font-size: 11.5px; padding: 5px 9px; border-radius: 8px;
+    background: rgba(255,159,110,0.14); border: 1px solid rgba(255,159,110,0.36);
+    color: #ffb08a; text-align: left; }
+  .note { font-size: 11px; color: var(--dim); margin-top: 9px; line-height: 1.45; }
+  .grid2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 10px; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; padding: 7px 4px;
+    background: rgba(234,240,255,0.04); }
+  .stat b { display: block; font-size: 19px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+  canvas.spark { width: 100%; height: 62px; display: block; margin-top: 8px;
+    border: 1px solid var(--line); border-radius: 10px; background: rgba(234,240,255,0.03); }
+
+  @media (max-height: 620px) {
+    .card { padding: 12px 14px 12px; border-radius: 12px; }
+    .keys { display: none; }
+    .slist { grid-template-columns: repeat(2, 1fr); }
+    .srow { min-height: 44px; }
+    .tagline { margin-bottom: 6px; font-size: 11.5px; }
+    .btn { margin-top: 10px; min-height: 44px; }
+  }
+  @media (max-height: 560px) {
+    #head { height: 40px; }
+    #body { flex-direction: row; gap: 10px; align-items: stretch; }
+    #work { flex: 1; min-width: 0; }
+    #entry { width: 206px; max-width: 206px; flex: none; margin: 0; align-self: stretch;
+      display: flex; flex-direction: column; justify-content: center; }
+    .key { height: 42px; min-height: 40px; font-size: 19px; }
+    .key.act { font-size: 15px; }
+    .ch { min-height: 44px; font-size: 16px; }
+    .hintbtn { height: 40px; }
+    #hintrow { margin-bottom: 5px; }
+    #qline { font-size: clamp(20px, 4.2vw, 30px); }
+    #ansline { font-size: clamp(17px, 3.6vw, 24px); }
+    #qtext { font-size: 12.5px; padding: 6px 9px; margin-bottom: 4px; }
+    #fb { min-height: 20px; font-size: 11px; }
+    .sline b { font-size: clamp(14px, 3.2vw, 18px); }
+    .sline em { font-size: 10.5px; }
+    .hline { font-size: 11.5px; padding: 6px 9px; }
+  }
+  @media (max-height: 460px) {
+    .slist { grid-template-columns: repeat(2, 1fr); gap: 5px; }
+    .card .eyebrow { display: none; }
+    h1 { font-size: clamp(26px, 7vw, 36px); }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    .tagline { font-size: 11px; margin-bottom: 5px; }
+    .srow .sn em { display: none; }
+    .srow .mini { display: none; }
+    .srow { min-height: 40px; padding: 4px 8px; }
+    .srow .sn { font-size: 10.5px; }
+    .btn { min-height: 42px; margin-top: 8px; }
+    .card { padding: 10px 12px 12px; }
+    .note { font-size: 10px; margin-top: 5px; }
+    .weak b { font-size: 10.5px; padding: 3px 7px; }
+    .weak { margin-top: 5px; gap: 4px; }
+    .btnrow { gap: 7px; }
+    canvas.spark { height: 46px; }
+    .stat b { font-size: 16px; }
+    .grid2 { margin-top: 6px; gap: 5px; }
+  }
+  @media (max-width: 380px) {
+    #head { padding-right: 100px; gap: 6px; }
+    .hbtn { min-width: 58px; padding: 0 7px; letter-spacing: 0.08em; }
+    #pad { gap: 5px; }
+    .key { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="bg"></canvas>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="play">
+    <div id="head">
+      <button class="hbtn" id="menuBtn" type="button">MENU</button>
+      <div id="hinfo">
+        <div id="hname"><i id="hlabel">&nbsp;</i><b id="hstreak"></b></div>
+        <div id="hbar"><i id="hfill"></i></div>
+      </div>
+    </div>
+    <div id="body">
+      <div id="work">
+        <div id="qtext"></div>
+        <div id="qline"></div>
+        <div id="ansline"><span id="qpre"></span><span id="slot"></span></div>
+        <div id="panel"></div>
+        <div id="fb"></div>
+      </div>
+      <div id="entry">
+        <div id="hintrow"><button class="hintbtn" id="hintBtn" type="button">HINT</button></div>
+        <div id="pad"></div>
+        <div id="choices" class="off"></div>
+        <div id="teachbtns" class="off"></div>
+      </div>
+    </div>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   SOLVE — the Overclock arcade's algebra tutor.  solve-overclock-v1-marker
+   Built for a fourteen-year-old: eight rungs from order of operations up to
+   equations with brackets, fractions and word problems.
+
+   Three things make this different from a worksheet:
+     1. Nobody picks a level.  It places him by playing, promotes on a real
+        run, demotes fast on misses, and quietly probes one rung up so he
+        can never be stuck low.  The found rung is resumed, never re-earned.
+     2. Getting one wrong is never a bare X.  It names the RULE he broke,
+        recognises the specific wrong answer where it can (a sign slip and
+        an order-of-operations slip get different words), and then walks the
+        whole solution one line at a time, each line saying what was done
+        and why.
+     3. HINT gives the NEXT STEP, never the answer.
+
+   Every question is generated.  Every answer is an exact rational, so
+   "clean answer" is a guarantee rather than a hope.
+   One file, no dependencies, no assets, all sound synthesized.
+   ========================================================================= */
+"use strict";
+
+var SOLVE_MARKER = 'solve-overclock-v1-marker';
+var K_SAVE = 'solve_v1';
+var K_MUTE = 'solve_muted_v1';
+var SET_LEN = 8;             /* items per set — he can stop after any set */
+
+/* ---------------------------------------------------------------- utils -- */
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function isNum(v) { return typeof v === 'number' && isFinite(v); }
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* The random source is swappable so the ladder simulation can seed it. */
+var RND = Math.random;
+function setRandom(fn) { RND = fn || Math.random; }
+function rnd() { return RND(); }
+function ri(a, b) { return a + Math.floor(rnd() * (b - a + 1)); }      /* inclusive */
+function pick(a) { return a[(rnd() * a.length) | 0]; }
+function coin() { return rnd() < 0.5; }
+function sgn1() { return coin() ? 1 : -1; }
+function shuffle(a) {
+  for (var i = a.length - 1; i > 0; i--) { var j = (rnd() * (i + 1)) | 0, t = a[i]; a[i] = a[j]; a[j] = t; }
+  return a;
+}
+
+/* ------------------------------------------------------------ rationals -- */
+/* Everything numeric in this game is an exact fraction.  That is what makes
+   "no ugly answers" a property rather than a wish, and it lets 0.5 and 1/2
+   be recognised as the same answer without any floating-point slop. */
+function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = a % b; a = b; b = t; } return a; }
+function R(n, d) {
+  if (d === undefined) d = 1;
+  if (!isNum(n) || !isNum(d) || d === 0) return { n: 0, d: 1, bad: true };
+  n = Math.round(n); d = Math.round(d);
+  if (d < 0) { n = -n; d = -d; }
+  var g = gcd(n, d) || 1;
+  return { n: n / g, d: d / g };
+}
+function Radd(a, b) { return R(a.n * b.d + b.n * a.d, a.d * b.d); }
+function Rsub(a, b) { return R(a.n * b.d - b.n * a.d, a.d * b.d); }
+function Rmul(a, b) { return R(a.n * b.n, a.d * b.d); }
+function Rdiv(a, b) { return b.n === 0 ? R(0, 1) : R(a.n * b.d, a.d * b.n); }
+function Rneg(a) { return R(-a.n, a.d); }
+function Req(a, b) { return !!a && !!b && a.n === b.n && a.d === b.d; }
+function Rint(a) { return a.d === 1; }
+function Rnum(a) { return a.n / a.d; }
+/* Display: whole number if it is one, else a terminating decimal if that is
+   short and exact, else a proper fraction. */
+function Rstr(a) {
+  if (!a) return '?';
+  if (a.d === 1) return String(a.n);
+  if (100 % a.d === 0) {
+    var v = (a.n * (100 / a.d)) / 100;
+    return String(v);
+  }
+  return a.n + '/' + a.d;
+}
+function Rhtml(a) { return esc(Rstr(a)); }
+
+/* Parse what he typed.  Accepts  12   -7   0.5   3/4   -2/3 . */
+function parseAns(s) {
+  s = String(s == null ? '' : s).trim();
+  if (!s) return null;
+  var m = /^(-?)(\d+)\/(\d+)$/.exec(s);
+  if (m) {
+    var d = parseInt(m[3], 10);
+    if (!d) return null;
+    return R((m[1] ? -1 : 1) * parseInt(m[2], 10), d);
+  }
+  m = /^(-?)(\d*)(?:\.(\d+))?$/.exec(s);
+  if (!m || (!m[2] && !m[3])) return null;
+  var whole = m[2] ? parseInt(m[2], 10) : 0;
+  var frac = m[3] || '';
+  if (frac.length > 6) return null;
+  var den = Math.pow(10, frac.length);
+  var num = whole * den + (frac ? parseInt(frac, 10) : 0);
+  return R((m[1] ? -1 : 1) * num, den);
+}
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') { try { actx.resume(); } catch (e) {} } return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.32;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = !!m; saveStr(K_MUTE, muted ? '1' : '0');
+  if (master) master.gain.value = muted ? 0 : 0.32;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = muted ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  try {
+    var t = actx.currentTime + (delay || 0);
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(24, f1), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) {}
+}
+var sfx = {
+  tap:    function () { tone('sine', 640, 610, 0.045, 0.09); },
+  del:    function () { tone('sine', 330, 250, 0.06, 0.07); },
+  right:  function () { tone('sine', 523, 523, 0.13, 0.13); tone('sine', 784, 784, 0.24, 0.11, 0.10); },
+  gentle: function () { tone('sine', 300, 248, 0.19, 0.10); tone('sine', 236, 220, 0.25, 0.07, 0.13); },
+  step:   function () { tone('sine', 462, 470, 0.07, 0.08); },
+  hint:   function () { tone('triangle', 620, 880, 0.13, 0.08); },
+  climb:  function () {
+    tone('sine', 523, 523, 0.15, 0.11); tone('sine', 659, 659, 0.15, 0.11, 0.12);
+    tone('sine', 880, 880, 0.32, 0.12, 0.24);
+  },
+  setdone: function () {
+    tone('triangle', 440, 440, 0.14, 0.10); tone('triangle', 587, 587, 0.14, 0.10, 0.13);
+    tone('triangle', 740, 740, 0.30, 0.11, 0.26);
+  }
+};
+
+/* ================================================================ RULES == */
+/* Every question knows which rule it is really about, and every wrong answer
+   we can recognise points at the rule it broke.  These names are what gets
+   tracked, and what comes back more often. */
+var RULES = {
+  'ord-md':  { name: 'Multiply and divide first', txt: 'Multiplication and division are done before addition and subtraction, wherever they sit in the line.' },
+  'ord-br':  { name: 'Brackets first', txt: 'Whatever is inside the brackets is worked out before anything outside them touches it.' },
+  'ord-pow': { name: 'Powers before products', txt: 'A power is done before any multiplying or dividing. The small number says how many copies are multiplied together.' },
+  'ord-lr':  { name: 'Same rank, left to right', txt: 'Multiply and divide rank equally, and so do add and subtract. Equal rank means work left to right.' },
+  'neg-add': { name: 'Adding across zero', txt: 'Adding a positive moves right along the number line, adding a negative moves left. The sign of the answer follows whichever pull is bigger.' },
+  'neg-sub': { name: 'Subtracting a negative', txt: 'Subtracting a negative is adding. Two minus signs side by side turn into a plus.' },
+  'neg-mul': { name: 'Signs in products', txt: 'Same signs multiply to a positive, different signs multiply to a negative. Division follows the same law.' },
+  'sub-par': { name: 'Substitute inside brackets', txt: 'Put the value in wrapped in brackets, then work it out. That is what keeps a negative value from losing its sign.' },
+  'sub-pow': { name: 'Squaring a negative', txt: 'A negative squared is positive, because it is that number multiplied by itself. But -x squared is not the same as (-x) squared.' },
+  'like':    { name: 'Only like terms combine', txt: 'x terms add with x terms and numbers add with numbers. An x term and a plain number can never be merged.' },
+  'like-sgn':{ name: 'The sign belongs to the term', txt: 'A term carries the sign written in front of it. Move a term and its sign goes with it.' },
+  'inv-add': { name: 'Undo with the opposite', txt: 'To get x on its own, do the opposite of what is being done to it: undo an add with a subtract, a subtract with an add.' },
+  'inv-mul': { name: 'Undo a product by dividing', txt: 'A number multiplying x is undone by dividing both sides by that number.' },
+  'inv-div': { name: 'Undo a division by multiplying', txt: 'x over a number is undone by multiplying both sides by that number.' },
+  'both':    { name: 'Do it to both sides', txt: 'An equation is a balance. Whatever you do to one side you must do to the other, or it stops being true.' },
+  'order2':  { name: 'Undo in reverse order', txt: 'Peel the equation like an onion: clear the added or subtracted number first, then the number multiplying x.' },
+  'dist':    { name: 'Distribute to every term', txt: 'A number in front of brackets multiplies everything inside them, not just the first thing.' },
+  'coll':    { name: 'Gather the x terms on one side', txt: 'With x on both sides, take the smaller x term away from both sides so all the x lands together.' },
+  'frac-eq': { name: 'Clear the fraction', txt: 'Multiply both sides by the bottom of the fraction and the fraction disappears.' },
+  'dec-eq':  { name: 'Decimals obey the same rules', txt: 'A decimal coefficient is undone exactly like a whole one — divide both sides by it.' },
+  'trans':   { name: 'Name the unknown, then translate', txt: 'Give the thing you are asked for a letter, write each sentence as a piece of algebra, and only then solve.' }
+};
+function ruleName(id) { return (RULES[id] && RULES[id].name) || 'Check each step'; }
+function ruleTxt(id) { return (RULES[id] && RULES[id].txt) || 'Work through it one line at a time.'; }
+
+/* ================================================================ RUNGS == */
+/* Eight rungs, low floor and a real ceiling.  gate/probeHits are per rung so
+   the gate can be harder where a guess could get lucky: rung 4 is the only
+   multiple-choice rung, and 1-in-4 of wrong guesses come back right there. */
+var RUNGS = [
+  { id: 'ord',   name: 'Order of operations',   short: 'ORDER OF OPS',   blurb: 'Brackets, powers, times and divide, then plus and minus.', gate: 5, probeHits: 2, mc: false },
+  { id: 'neg',   name: 'Negative numbers',      short: 'NEGATIVES',      blurb: 'Adding, subtracting and multiplying below zero.',          gate: 5, probeHits: 2, mc: false },
+  { id: 'sub',   name: 'Evaluate by substitution', short: 'SUBSTITUTION', blurb: 'Put the value in for x and work it out.',                 gate: 5, probeHits: 2, mc: false },
+  { id: 'like',  name: 'Combining like terms',  short: 'LIKE TERMS',     blurb: 'Tidy an expression down to as few terms as possible.',     gate: 6, probeHits: 3, mc: true },
+  { id: 'one',   name: 'One-step equations',    short: 'ONE-STEP',       blurb: 'One move gets x on its own.',                              gate: 5, probeHits: 2, mc: false },
+  { id: 'two',   name: 'Two-step equations',    short: 'TWO-STEP',       blurb: 'Clear the number, then clear the coefficient.',            gate: 5, probeHits: 2, mc: false },
+  { id: 'dist',  name: 'Brackets and both sides', short: 'BRACKETS',     blurb: 'Distribute, then gather x on one side.',                   gate: 5, probeHits: 2, mc: false },
+  { id: 'hard',  name: 'Fractions, decimals, word problems', short: 'THE DEEP END', blurb: 'Messier numbers, and sentences turned into equations.', gate: 5, probeHits: 2, mc: false }
+];
+var MAX_RUNG = RUNGS.length - 1;
+function rungAt(l) { return RUNGS[clamp(l | 0, 0, MAX_RUNG)]; }
+
+/* ------------------------------------------------- little display helpers */
+var MUL = '×', DIV = '÷', MINUS = '-';
+function sq(s) { return s + '<sup>2</sup>'; }
+function xterm(c, v) {
+  v = v || 'x';
+  if (c === 1) return v;
+  if (c === -1) return '-' + v;
+  return c + v;
+}
+/* " + 5" / " - 5" for a signed constant tacked onto an expression */
+function addC(n) { return n < 0 ? ' - ' + (-n) : ' + ' + n; }
+function addX(c, v) {
+  v = v || 'x';
+  if (c === 0) return '';
+  var a = Math.abs(c);
+  return (c < 0 ? ' - ' : ' + ') + (a === 1 ? v : a + v);
+}
+/* a linear expression px + q written the way a person writes it */
+function linTxt(p, q, v) {
+  v = v || 'x';
+  if (p === 0) return String(q);
+  if (q === 0) return xterm(p, v);
+  return xterm(p, v) + addC(q);
+}
+function linPlain(p, q, v) {
+  v = v || 'x';
+  if (p === 0) return String(q);
+  var s = (p === 1 ? v : (p === -1 ? '-' + v : p + '*' + v));
+  if (q === 0) return s;
+  return s + (q < 0 ? ' - ' + (-q) : ' + ' + q);
+}
+function step(line, act, why) { return { line: line, act: act || '', why: why || '' }; }
+
+/* ======================================================= the generators == */
+/* Each returns a complete item.  The contract every one of them keeps:
+     plain   an ASCII form of the question that an outside parser can read
+     ansR    the exact answer as a rational
+     steps   a worked solution whose LAST line states that same answer
+     traps   specific wrong answers we can name
+   The content audit re-derives ansR from plain with its own parser and
+   checks the last step agrees, so a generator that lies fails loudly. */
+
+function baseItem(o) {
+  o.traps = o.traps || [];
+  o.vars = o.vars || null;
+  o.word = o.word || '';
+  o.prefix = o.prefix || '=';
+  o.kind = o.kind || 'expr';
+  /* A "common wrong answer" that happens to BE the right answer would mark a
+     correct answer wrong.  Coefficients collide often enough that this has to
+     be enforced rather than hoped for. */
+  if (o.ansR) {
+    var keep = [], seen = {}, i;
+    for (i = 0; i < o.traps.length; i++) {
+      var tr = o.traps[i];
+      if (!tr || !tr.r || tr.r.bad) continue;
+      if (Req(tr.r, o.ansR)) continue;
+      var k = tr.r.n + '/' + tr.r.d;
+      if (seen[k]) continue;
+      seen[k] = 1; keep.push(tr);
+    }
+    o.traps = keep;
+  }
+  return o;
+}
+
+/* ---- rung 0: order of operations --------------------------------------- */
+function genOrder() {
+  var t = rnd(), a, b, c, d, ans, q, plain, steps, traps, rule;
+  if (t < 0.20) {                       /* a + b x c */
+    a = ri(2, 20); b = ri(2, 9); c = ri(2, 9);
+    ans = a + b * c; rule = 'ord-md';
+    q = a + ' + ' + b + ' ' + MUL + ' ' + c;
+    plain = a + ' + ' + b + '*' + c;
+    steps = [
+      step(q, 'Start.', ''),
+      step(a + ' + ' + (b * c), 'Do ' + b + ' ' + MUL + ' ' + c + ' first.', 'Multiplying outranks adding, so it goes first even though it is written second.'),
+      step(String(ans), 'Now add.', 'Nothing outranks it any more.')
+    ];
+    traps = [{ r: R((a + b) * c), rule: 'ord-md', msg: 'You added ' + a + ' and ' + b + ' first, then multiplied. Left to right is only the tie-breaker &mdash; ' + MUL + ' beats + outright.' }];
+  } else if (t < 0.36) {                /* a x b + c  and  a x b - c */
+    a = ri(2, 9); b = ri(2, 9); c = ri(2, 20);
+    var minus = coin() && a * b > c;
+    ans = minus ? a * b - c : a * b + c; rule = 'ord-md';
+    q = a + ' ' + MUL + ' ' + b + (minus ? ' - ' : ' + ') + c;
+    plain = a + '*' + b + (minus ? ' - ' : ' + ') + c;
+    steps = [
+      step(q, 'Start.', ''),
+      step((a * b) + (minus ? ' - ' : ' + ') + c, 'Do ' + a + ' ' + MUL + ' ' + b + ' first.', 'The product is one number; only then does the ' + (minus ? 'subtraction' : 'addition') + ' happen.'),
+      step(String(ans), minus ? 'Now subtract.' : 'Now add.', '')
+    ];
+    traps = [{ r: R(minus ? a * (b - c) : a * (b + c)), rule: 'ord-md', msg: 'You worked the ' + (minus ? 'subtraction' : 'addition') + ' first. There are no brackets there, so ' + a + ' only multiplies the ' + b + '.' }];
+  } else if (t < 0.54) {                /* (a + b) x c  and  c x (a - b) */
+    a = ri(2, 11); b = ri(2, 11); c = ri(2, 7);
+    var sub = coin() && a > b;
+    var inner = sub ? a - b : a + b;
+    ans = inner * c; rule = 'ord-br';
+    q = '(' + a + (sub ? ' - ' : ' + ') + b + ') ' + MUL + ' ' + c;
+    plain = '(' + a + (sub ? ' - ' : ' + ') + b + ')*' + c;
+    steps = [
+      step(q, 'Start.', ''),
+      step(inner + ' ' + MUL + ' ' + c, 'Work out the bracket.', 'Brackets outrank everything. Nothing outside them happens until they are gone.'),
+      step(String(ans), 'Multiply.', '')
+    ];
+    traps = [{ r: R(sub ? a - b * c : a + b * c), rule: 'ord-br', msg: 'You multiplied only the ' + b + ' by ' + c + '. The brackets say ' + c + ' multiplies the whole of ' + inner + '.' }];
+  } else if (t < 0.70) {                /* a + b div c  and  b div c - a */
+    c = ri(2, 9); var k = ri(2, 9); b = c * k; a = ri(2, 15);
+    var first = coin();
+    ans = first ? a + k : (k - a);
+    if (!first && ans < 0) { a = ri(1, Math.max(1, k)); ans = k - a; }
+    rule = 'ord-md';
+    q = first ? (a + ' + ' + b + ' ' + DIV + ' ' + c) : (b + ' ' + DIV + ' ' + c + ' - ' + a);
+    plain = first ? (a + ' + ' + b + '/' + c) : (b + '/' + c + ' - ' + a);
+    steps = [
+      step(q, 'Start.', ''),
+      step(first ? (a + ' + ' + k) : (k + ' - ' + a), 'Do ' + b + ' ' + DIV + ' ' + c + ' first.', 'Dividing ranks with multiplying, above plus and minus.'),
+      step(String(ans), first ? 'Now add.' : 'Now subtract.', '')
+    ];
+    traps = first ? [{ r: R(a + b, c), rule: 'ord-md', msg: 'You added ' + a + ' before dividing. Only the ' + b + ' is being divided by ' + c + '.' }] : [];
+  } else if (t < 0.86) {                /* a + b x c - d, three ranks in one line */
+    a = ri(2, 15); b = ri(2, 8); c = ri(2, 8); d = ri(1, 12);
+    ans = a + b * c - d; rule = 'ord-lr';
+    q = a + ' + ' + b + ' ' + MUL + ' ' + c + ' - ' + d;
+    plain = a + ' + ' + b + '*' + c + ' - ' + d;
+    steps = [
+      step(q, 'Start.', ''),
+      step(a + ' + ' + (b * c) + ' - ' + d, 'Do the multiplication.', 'It is the only thing on the top rank, so it goes first.'),
+      step((a + b * c) + ' - ' + d, 'Add, working left to right.', 'Plus and minus rank equally, so now order really is left to right.'),
+      step(String(ans), 'Subtract.', '')
+    ];
+    traps = [
+      { r: R((a + b) * c - d), rule: 'ord-md', msg: 'You added ' + a + ' + ' + b + ' first. Straight left-to-right is only for equal ranks &mdash; ' + MUL + ' goes before +.' },
+      { r: R(a + b * (c - d)), rule: 'ord-lr', msg: 'You did ' + c + ' - ' + d + ' first. There are no brackets, so the minus is the LAST thing that happens, not the first.' }
+    ];
+  } else {                              /* powers */
+    b = ri(2, 7); a = ri(2, 15);
+    var minus2 = coin() && b * b > a;
+    ans = minus2 ? b * b - a : a + b * b; rule = 'ord-pow';
+    q = minus2 ? (sq(String(b)) + ' - ' + a) : (a + ' + ' + sq(String(b)));
+    plain = minus2 ? (b + '^2 - ' + a) : (a + ' + ' + b + '^2');
+    steps = [
+      step(q, 'Start.', ''),
+      step(minus2 ? ((b * b) + ' - ' + a) : (a + ' + ' + (b * b)), 'Work out ' + b + '<sup>2</sup> = ' + b + ' ' + MUL + ' ' + b + ' = ' + (b * b) + '.', 'A power beats every other operation except brackets.'),
+      step(String(ans), minus2 ? 'Subtract.' : 'Add.', '')
+    ];
+    traps = [{ r: R(minus2 ? b * 2 - a : a + b * 2), rule: 'ord-pow', msg: 'You read ' + b + '<sup>2</sup> as ' + b + ' ' + MUL + ' 2. The small 2 counts how many copies are multiplied: ' + b + ' ' + MUL + ' ' + b + '.' }];
+  }
+  return baseItem({ rung: 0, kind: 'expr', qhtml: q, plain: plain, ansR: R(ans),
+                    rule: rule, steps: steps, traps: traps, prefix: '=' });
+}
+
+/* ---- rung 1: negative numbers ------------------------------------------ */
+function genNeg() {
+  var t = rnd(), a, b, ans, q, plain, steps, traps, rule;
+  if (t < 0.18) {                       /* -a + b */
+    a = ri(2, 18); b = ri(2, 18);
+    ans = -a + b; rule = 'neg-add';
+    q = '-' + a + ' + ' + b; plain = '-' + a + ' + ' + b;
+    steps = [
+      step(q, 'Start.', ''),
+      step('start at -' + a + ', move ' + b + ' right', 'Adding a positive moves right along the number line.', ''),
+      step(String(ans), (ans >= 0 ? 'You cross zero and land on ' : 'You do not reach zero, so you stay negative: ') + ans + '.', 'The bigger of ' + a + ' and ' + b + ' decides the sign.')
+    ];
+    traps = [{ r: R(-(a + b)), rule: 'neg-add', msg: 'You treated the + ' + b + ' as another step DOWN. It is a step up &mdash; ' + b + ' to the right of -' + a + '.' }];
+  } else if (t < 0.34) {                /* a - b, b bigger */
+    b = ri(6, 22); a = ri(1, b - 1);
+    ans = a - b; rule = 'neg-add';
+    q = a + ' - ' + b; plain = a + ' - ' + b;
+    steps = [
+      step(q, 'Start.', ''),
+      step('start at ' + a + ', move ' + b + ' left', 'Subtracting moves left.', ''),
+      step(String(ans), 'You pass zero with ' + (b - a) + ' still to go, so the answer is -' + (b - a) + '.', 'Take the smaller from the bigger, then wear the sign of the bigger.')
+    ];
+    traps = [{ r: R(b - a), rule: 'neg-add', msg: 'You did ' + b + ' - ' + a + ' instead. Order matters in a subtraction: starting at ' + a + ' and going down ' + b + ' ends below zero.' }];
+  } else if (t < 0.52) {                /* a - (-b)  and  -a - (-b) */
+    a = ri(2, 15); b = ri(2, 15);
+    var negA = coin();
+    ans = (negA ? -a : a) + b; rule = 'neg-sub';
+    q = (negA ? '-' + a : String(a)) + ' - (-' + b + ')';
+    plain = (negA ? '-' + a : String(a)) + ' - (-' + b + ')';
+    steps = [
+      step(q, 'Start.', ''),
+      step((negA ? '-' + a : String(a)) + ' + ' + b, 'Two minus signs together become a plus.', 'Taking away a debt of ' + b + ' leaves you ' + b + ' better off.'),
+      step(String(ans), 'Now add.', '')
+    ];
+    traps = [{ r: R((negA ? -a : a) - b), rule: 'neg-sub', msg: 'You subtracted ' + b + '. There are two minus signs: - (-' + b + ') is + ' + b + '.' }];
+  } else if (t < 0.66) {                /* -a - b */
+    a = ri(2, 18); b = ri(2, 18);
+    ans = -a - b; rule = 'neg-add';
+    q = '-' + a + ' - ' + b; plain = '-' + a + ' - ' + b;
+    steps = [
+      step(q, 'Start.', ''),
+      step('start at -' + a + ', move ' + b + ' further left', 'Both moves go the same way, so they pile up.', ''),
+      step(String(ans), 'Down ' + a + ' then down ' + b + ' is down ' + (a + b) + '.', '')
+    ];
+    traps = [{ r: R(-a + b), rule: 'neg-add', msg: 'You moved back UP by ' + b + '. A minus after a negative keeps going down, it does not turn around.' }];
+  } else if (t < 0.86) {                /* products */
+    a = ri(2, 12); b = ri(2, 9);
+    var bothNeg = coin();
+    ans = bothNeg ? a * b : -(a * b); rule = 'neg-mul';
+    q = '-' + a + ' ' + MUL + ' ' + (bothNeg ? '(-' + b + ')' : String(b));
+    plain = '-' + a + '*' + (bothNeg ? '(-' + b + ')' : String(b));
+    steps = [
+      step(q, 'Start.', ''),
+      step(a + ' ' + MUL + ' ' + b + ' = ' + (a * b), 'Multiply the sizes first, ignoring signs.', ''),
+      step(String(ans), bothNeg ? 'Two negatives: the answer is positive.' : 'One negative: the answer is negative.', 'Count the minus signs. An even number of them cancels out.')
+    ];
+    traps = [{ r: R(bothNeg ? -(a * b) : a * b), rule: 'neg-mul', msg: 'The size is right, the sign is not. ' + (bothNeg ? 'Two negatives multiply to a POSITIVE.' : 'One negative and one positive multiply to a NEGATIVE.') }];
+  } else {                              /* quotients */
+    b = ri(2, 9); var k = ri(2, 12); a = b * k;
+    var bothNeg2 = coin();
+    ans = bothNeg2 ? k : -k; rule = 'neg-mul';
+    q = '-' + a + ' ' + DIV + ' ' + (bothNeg2 ? '(-' + b + ')' : String(b));
+    plain = '-' + a + '/' + (bothNeg2 ? '(-' + b + ')' : String(b));
+    steps = [
+      step(q, 'Start.', ''),
+      step(a + ' ' + DIV + ' ' + b + ' = ' + k, 'Divide the sizes first.', ''),
+      step(String(ans), bothNeg2 ? 'Two negatives: positive.' : 'One negative: negative.', 'Division follows the same sign law as multiplication.')
+    ];
+    traps = [{ r: R(bothNeg2 ? -k : k), rule: 'neg-mul', msg: 'Right size, wrong sign. ' + (bothNeg2 ? 'Negative divided by negative is POSITIVE.' : 'Negative divided by positive is NEGATIVE.') }];
+  }
+  return baseItem({ rung: 1, kind: 'expr', qhtml: q, plain: plain, ansR: R(ans),
+                    rule: rule, steps: steps, traps: traps, prefix: '=' });
+}
+
+/* ---- rung 2: evaluating by substitution -------------------------------- */
+function genSub() {
+  var t = rnd(), xv, yv, a, b, ans, q, plain, steps, traps, rule, given;
+  function inBr(v) { return v < 0 ? '(' + v + ')' : String(v); }
+  if (t < 0.30) {                       /* a x + b */
+    xv = ri(-8, 9); if (xv === 0) xv = 3;
+    a = ri(2, 9); b = ri(-12, 14);
+    ans = a * xv + b; rule = 'sub-par';
+    q = linTxt(a, b); plain = linPlain(a, b);
+    given = 'x = ' + xv;
+    steps = [
+      step(q, 'Start, with x = ' + xv + '.', ''),
+      step(a + ' ' + MUL + ' ' + inBr(xv) + addC(b), 'Put ' + inBr(xv) + ' in wherever x appears.', 'Brackets around the value keep its sign safe.'),
+      step((a * xv) + addC(b), 'Multiply.', a + ' ' + MUL + ' ' + inBr(xv) + ' = ' + (a * xv) + '.'),
+      step(String(ans), (b < 0 ? 'Subtract.' : 'Add.'), '')
+    ];
+    traps = [{ r: R(a * Math.abs(xv) + b), rule: 'sub-par', msg: 'You dropped the sign of x. x is ' + xv + ', so ' + a + 'x is ' + (a * xv) + ', not ' + (a * Math.abs(xv)) + '.' }];
+    if (xv < 0) traps.push({ r: R(-(a * Math.abs(xv)) - Math.abs(b)), rule: 'sub-par', msg: 'The x part is right but the ' + b + ' lost its sign on the way through.' });
+  } else if (t < 0.52) {                /* a - b x */
+    xv = ri(-7, 8); if (xv === 0) xv = -2;
+    a = ri(3, 20); b = ri(2, 8);
+    ans = a - b * xv; rule = 'sub-par';
+    q = a + ' - ' + xterm(b); plain = a + ' - ' + b + '*x';
+    given = 'x = ' + xv;
+    steps = [
+      step(q, 'Start, with x = ' + xv + '.', ''),
+      step(a + ' - ' + b + ' ' + MUL + ' ' + inBr(xv), 'Substitute, in brackets.', ''),
+      step(a + ' - ' + inBr(b * xv), 'Do the multiplication first.', 'Order of operations still applies after substituting.'),
+      step(String(ans), (b * xv < 0 ? 'Subtracting a negative adds.' : 'Subtract.'), (b * xv < 0 ? 'a - (-n) = a + n.' : ''))
+    ];
+    traps = [{ r: R(a - b * Math.abs(xv)), rule: 'sub-par', msg: 'x = ' + xv + ', so ' + b + 'x = ' + (b * xv) + '. Subtracting that ' + (b * xv < 0 ? 'ADDS to' : 'takes from') + ' the ' + a + '.' }];
+  } else if (t < 0.74) {                /* x squared plus a  */
+    xv = ri(-7, 8); if (xv === 0) xv = -4;
+    a = ri(-12, 14); b = ri(1, 2);
+    ans = b * xv * xv + a; rule = 'sub-pow';
+    q = (b === 1 ? sq('x') : b + sq('x')) + addC(a);
+    plain = (b === 1 ? 'x^2' : b + '*x^2') + (a < 0 ? ' - ' + (-a) : ' + ' + a);
+    given = 'x = ' + xv;
+    steps = [
+      step(q, 'Start, with x = ' + xv + '.', ''),
+      step((b === 1 ? '' : b + ' ' + MUL + ' ') + inBr(xv) + '<sup>2</sup>' + addC(a), 'Substitute in brackets.', 'The bracket is what makes the whole of ' + xv + ' get squared.'),
+      step((b === 1 ? '' : b + ' ' + MUL + ' ') + (xv * xv) + addC(a), inBr(xv) + '<sup>2</sup> = ' + inBr(xv) + ' ' + MUL + ' ' + inBr(xv) + ' = ' + (xv * xv) + '.', xv < 0 ? 'A negative times a negative is positive.' : ''),
+      step(String(ans), b === 1 ? (a < 0 ? 'Subtract.' : 'Add.') : 'Multiply, then ' + (a < 0 ? 'subtract' : 'add') + '.', '')
+    ];
+    traps = [];
+    if (xv < 0) traps.push({ r: R(-(b * xv * xv) + a), rule: 'sub-pow', msg: 'You kept the answer negative. ' + inBr(xv) + '<sup>2</sup> is ' + xv + ' ' + MUL + ' ' + xv + ' = ' + (xv * xv) + ', which is positive.' });
+    traps.push({ r: R(b * 2 * xv + a), rule: 'ord-pow', msg: 'x<sup>2</sup> is not 2x. It is x multiplied by itself: ' + inBr(xv) + ' ' + MUL + ' ' + inBr(xv) + ' = ' + (xv * xv) + '.' });
+  } else {                              /* two variables */
+    xv = ri(-6, 8); yv = ri(-6, 8);
+    if (xv === 0) xv = 2; if (yv === 0) yv = -3;
+    a = ri(2, 7); b = ri(2, 7);
+    var minusY = coin();
+    ans = a * xv + (minusY ? -b : b) * yv; rule = 'sub-par';
+    q = xterm(a) + (minusY ? ' - ' : ' + ') + xterm(b, 'y');
+    plain = a + '*x' + (minusY ? ' - ' : ' + ') + b + '*y';
+    given = 'x = ' + xv + ',  y = ' + yv;
+    steps = [
+      step(q, 'Start, with x = ' + xv + ' and y = ' + yv + '.', ''),
+      step(a + ' ' + MUL + ' ' + inBr(xv) + (minusY ? ' - ' : ' + ') + b + ' ' + MUL + ' ' + inBr(yv), 'Substitute both, each in brackets.', ''),
+      step((a * xv) + (minusY ? ' - ' : ' + ') + inBr(b * yv), 'Both multiplications first.', ''),
+      step(String(ans), 'Then the ' + (minusY ? 'subtraction' : 'addition') + '.', (minusY && b * yv < 0) ? 'Subtracting a negative adds.' : '')
+    ];
+    traps = [{ r: R(a * xv + (minusY ? -b : b) * Math.abs(yv)), rule: 'sub-par', msg: 'y = ' + yv + '. Its sign has to travel into the expression with it.' }];
+  }
+  return baseItem({ rung: 2, kind: 'sub', qhtml: q, plain: plain, ansR: R(ans),
+                    vars: (yv === undefined || yv === null) ? { x: xv } : { x: xv, y: yv },
+                    word: '', given: given, rule: rule, steps: steps, traps: traps, prefix: '=' });
+}
+
+/* ---- rung 3: combining like terms (the one multiple-choice rung) -------- */
+function renderTerms(ts, plainMode) {
+  var s = '', i, t, a;
+  for (i = 0; i < ts.length; i++) {
+    t = ts[i]; a = Math.abs(t.c);
+    var body = t.v ? (a === 1 ? t.v : (plainMode ? a + '*' + t.v : a + t.v)) : String(a);
+    if (i === 0) s += (t.c < 0 ? '-' : '') + body;
+    else s += (t.c < 0 ? ' - ' : ' + ') + body;
+  }
+  return s;
+}
+/* px + qy + c, written the way a person writes it (and in ASCII for the audit) */
+function triTxt(p, q, c, plainMode) {
+  var ts = [];
+  if (p !== 0) ts.push({ c: p, v: 'x' });
+  if (q !== 0) ts.push({ c: q, v: 'y' });
+  if (c !== 0 || ts.length === 0) ts.push({ c: c, v: '' });
+  return renderTerms(ts, plainMode);
+}
+function genLike() {
+  var twoVar = rnd() < 0.35, terms = [], i;
+  var p1, p2, c1, c2, q1, q2, P, Q, C;
+  if (!twoVar) {
+    p1 = ri(2, 8); p2 = ri(-6, 6); if (p2 === 0) p2 = -2;
+    c1 = ri(-12, 14); if (c1 === 0) c1 = 5; c2 = ri(-12, 14); if (c2 === 0) c2 = -3;
+    Q = 0; q1 = 0; q2 = 0;
+    terms = [{ c: p1, v: 'x' }, { c: c1, v: '' }, { c: p2, v: 'x' }, { c: c2, v: '' }];
+    P = p1 + p2; C = c1 + c2;
+  } else {
+    p1 = ri(2, 8); p2 = ri(-6, 6); if (p2 === 0) p2 = -3;
+    q1 = ri(2, 8); q2 = ri(-6, 6); if (q2 === 0) q2 = 2;
+    c1 = 0; c2 = 0;
+    terms = [{ c: p1, v: 'x' }, { c: q1, v: 'y' }, { c: p2, v: 'x' }, { c: q2, v: 'y' }];
+    P = p1 + p2; Q = q1 + q2; C = 0;
+  }
+  shuffle(terms);
+  /* the correct tidy-up, and three wrong ones that each come from a real slip */
+  var opts = [];
+  function addOpt(p, q, c, why, rule) {
+    for (var j = 0; j < opts.length; j++) if (opts[j].p === p && opts[j].q === q && opts[j].c === c) return false;
+    opts.push({ p: p, q: q, c: c, why: why || '', rule: rule || 'like' });
+    return true;
+  }
+  addOpt(P, Q, C, '', 'like');
+  if (!twoVar) {
+    addOpt(p1 - p2, Q, C, 'That is what you get if the ' + xterm(p2) + ' loses its sign on the way in. A term keeps the sign written in front of it.', 'like-sgn');
+    addOpt(P, Q, c1 - c2, 'The x terms are right, but one of the plain numbers changed sign. Check the sign in front of the ' + Math.abs(c2) + '.', 'like-sgn');
+    addOpt(P + C, 0, 0, 'Everything got swept into one x term. An x term and a plain number are different kinds of thing and can never merge.', 'like');
+    addOpt(P, 0, C + 1, 'The x term is right, but the plain numbers are one out. Add ' + c1 + ' and ' + c2 + ' again, each with the sign in front of it.', 'like');
+    addOpt(P + 1, Q, C, 'The plain numbers are right, but the x terms are one out. Count them again: ' + xterm(p1) + ' and ' + xterm(p2) + '.', 'like-sgn');
+  } else {
+    addOpt(p1 - p2, Q, 0, 'The x terms were added when one of them is being subtracted.', 'like-sgn');
+    addOpt(P, q1 - q2, 0, 'The y terms lost a sign. Look again at what is written in front of the ' + Math.abs(q2) + 'y.', 'like-sgn');
+    addOpt(P + Q, 0, 0, 'x and y were merged. They are different unknowns &mdash; they can sit side by side but never combine.', 'like');
+    addOpt(P, Q + 1, 0, 'The x terms are right, the y terms are one out. Add ' + xterm(q1, 'y') + ' and ' + xterm(q2, 'y') + ' again with their signs.', 'like-sgn');
+    addOpt(P + 1, Q, 0, 'The y terms are right, the x terms are one out. Add ' + xterm(p1) + ' and ' + xterm(p2) + ' again with their signs.', 'like-sgn');
+  }
+  opts = opts.slice(0, 4);
+  var correct = opts[0];
+  shuffle(opts);
+  var choices = [], ansIdx = 0;
+  for (i = 0; i < opts.length; i++) {
+    var o = opts[i];
+    if (o === correct) ansIdx = i;
+    choices.push({ html: triTxt(o.p, o.q, o.c, false), plain: triTxt(o.p, o.q, o.c, true),
+                   why: o.why, rule: o.rule, correct: o === correct });
+  }
+  var xs = [], ys = [], cs = [], j2;
+  for (j2 = 0; j2 < terms.length; j2++) {
+    if (terms[j2].v === 'x') xs.push(terms[j2]);
+    else if (terms[j2].v === 'y') ys.push(terms[j2]);
+    else cs.push(terms[j2]);
+  }
+  var regroup = renderTerms(xs.concat(ys).concat(cs), false);
+  var steps = [
+    step(renderTerms(terms, false), 'Start.', ''),
+    step(regroup, 'Shuffle the like terms next to each other.', 'Each term travels with the sign in front of it &mdash; that is the part people drop.'),
+    step(triTxt(P, Q, C, false), twoVar ? 'Add the x terms, then the y terms.' : 'Add the x terms, then the plain numbers.',
+         (twoVar ? xterm(p1) + ' and ' + xterm(p2) + ' make ' + xterm(P) + '; ' + xterm(q1, 'y') + ' and ' + xterm(q2, 'y') + ' make ' + xterm(Q, 'y') + '.'
+                 : xterm(p1) + ' and ' + xterm(p2) + ' make ' + xterm(P) + '; ' + c1 + ' and ' + c2 + ' make ' + C + '.')),
+    step(triTxt(P, Q, C, false), 'That is as tidy as it gets.', 'Nothing left is the same kind of term as anything else.')
+  ];
+  return baseItem({
+    rung: 3, kind: 'mc', qhtml: renderTerms(terms, false), plain: renderTerms(terms, true),
+    ansR: null, ansIdx: ansIdx, ansPlain: triTxt(P, Q, C, true), ansText: triTxt(P, Q, C, false),
+    choices: choices, vars: twoVar ? { x: 0, y: 0 } : { x: 0 },
+    rule: 'like', steps: steps, traps: [], prefix: '', ask: 'Tidy this up.'
+  });
+}
+
+/* ------------------------------ shared machinery for solving a x + b = c -- */
+function termTxtR(aR) {
+  if (Req(aR, R(1))) return 'x';
+  if (Req(aR, R(-1))) return '-x';
+  return Rstr(aR) + 'x';
+}
+function addCR(bR) { return bR.n < 0 ? ' - ' + Rstr(Rneg(bR)) : ' + ' + Rstr(bR); }
+/* Builds the worked solution for A*x + B = C.  opt.term / opt.undo let the
+   x/3 shape borrow the same machinery. */
+function stepsLinear(aR, bR, cR, rootR, opt) {
+  opt = opt || {};
+  var term = opt.term || termTxtR(aR);
+  var out = [], cur = cR;
+  out.push(step(term + (bR.n === 0 ? '' : addCR(bR)) + ' = ' + Rstr(cR), 'Start.', opt.startWhy || ''));
+  if (bR.n !== 0) {
+    cur = Rsub(cR, bR);
+    var v = Rstr(bR.n < 0 ? Rneg(bR) : bR);
+    out.push(step(term + ' = ' + Rstr(cur),
+      (bR.n < 0 ? 'Add ' + v + ' to both sides.' : 'Subtract ' + v + ' from both sides.'),
+      'That clears the number sitting next to the x. <u>Both</u> sides, always &mdash; the equation is a balance.'));
+  }
+  if (opt.undoAct) {
+    out.push(step('x = ' + Rstr(rootR), opt.undoAct, opt.undoWhy || ''));
+  } else if (!Req(aR, R(1))) {
+    out.push(step('x = ' + Rstr(rootR), 'Divide both sides by ' + Rstr(aR) + '.',
+      'x was being multiplied by ' + Rstr(aR) + ', so dividing is what undoes it.'));
+  }
+  if (out[out.length - 1].line.indexOf('x =') !== 0) {
+    out.push(step('x = ' + Rstr(rootR), 'x is on its own.', ''));
+  }
+  var last = out[out.length - 1];
+  last.why = (last.why ? last.why + ' ' : '') +
+    '<u>Check:</u> put ' + Rstr(rootR) + ' back into the first line and both sides come to ' + Rstr(cR) + '.';
+  return out;
+}
+
+/* ---- rung 4: one-step equations ---------------------------------------- */
+function genOne() {
+  var t = rnd(), root = ri(-9, 20), a, b, q, plain, steps, traps, rule;
+  if (t < 0.26) {                       /* x + a = b */
+    a = ri(2, 18); b = root + a; rule = 'inv-add';
+    q = 'x + ' + a + ' = ' + b; plain = 'x + ' + a + ' = ' + b;
+    steps = stepsLinear(R(1), R(a), R(b), R(root));
+    traps = [{ r: R(b + a), rule: 'inv-add', msg: 'You added ' + a + '. The ' + a + ' is already being added to x, so it comes off &mdash; you undo with the opposite.' }];
+  } else if (t < 0.50) {                /* x - a = b */
+    a = ri(2, 18); b = root - a; rule = 'inv-add';
+    q = 'x - ' + a + ' = ' + b; plain = 'x - ' + a + ' = ' + b;
+    steps = stepsLinear(R(1), R(-a), R(b), R(root));
+    traps = [{ r: R(b - a), rule: 'inv-add', msg: 'You subtracted ' + a + ' again. x has already had ' + a + ' taken off it, so you put it back on.' }];
+  } else if (t < 0.72) {                /* a x = b */
+    a = ri(2, 12); if (root === 0) root = 4; b = a * root; rule = 'inv-mul';
+    q = xterm(a) + ' = ' + b; plain = a + '*x = ' + b;
+    steps = stepsLinear(R(a), R(0), R(b), R(root));
+    traps = [{ r: R(a * b), rule: 'inv-mul', msg: 'You multiplied by ' + a + '. x is already multiplied by ' + a + ', so dividing is what undoes it.' },
+             { r: R(b - a), rule: 'inv-mul', msg: a + 'x means ' + a + ' ' + MUL + ' x, not ' + a + ' + x, so subtracting will not free the x.' }];
+  } else if (t < 0.88) {                /* x/a = b */
+    a = ri(2, 9); b = ri(-8, 12); root = a * b; rule = 'inv-div';
+    q = 'x/' + a + ' = ' + b; plain = 'x/' + a + ' = ' + b;
+    steps = stepsLinear(R(1, a), R(0), R(b), R(root),
+      { term: 'x/' + a, undoAct: 'Multiply both sides by ' + a + '.',
+        undoWhy: 'x has been divided by ' + a + '; multiplying by ' + a + ' puts it back whole.' });
+    traps = [{ r: R(b, a), rule: 'inv-div', msg: 'You divided by ' + a + ' as well. x is already split into ' + a + ' parts &mdash; multiply to make it whole again.' }];
+  } else {                              /* a + x = b, unknown written second */
+    a = ri(2, 18); b = root + a; rule = 'inv-add';
+    q = a + ' + x = ' + b; plain = a + ' + x = ' + b;
+    steps = [
+      step(a + ' + x = ' + b, 'Start.', ''),
+      step('x + ' + a + ' = ' + b, 'Write the x first.', 'Adding is the same either way round, so this changes nothing except how it looks.'),
+      step('x = ' + root, 'Subtract ' + a + ' from both sides.', 'Undo an add with a subtract.'),
+      step('x = ' + root, 'Check: ' + a + ' + ' + root + ' = ' + b + '.', '')
+    ];
+    traps = [{ r: R(b + a), rule: 'inv-add', msg: 'You added ' + a + ' instead of taking it off.' }];
+  }
+  return baseItem({ rung: 4, kind: 'eq', qhtml: q, plain: plain, ansR: R(root),
+                    rule: rule, steps: steps, traps: traps, prefix: 'x =' });
+}
+
+/* ---- rung 5: two-step equations ---------------------------------------- */
+function genTwo() {
+  var t = rnd(), root = ri(-8, 14), a, b, c, q, plain, steps, traps, rule;
+  if (t < 0.34) {                       /* a x + b = c */
+    a = ri(2, 9); b = ri(-15, 18); if (b === 0) b = 5;
+    c = a * root + b; rule = 'order2';
+    q = linTxt(a, b) + ' = ' + c; plain = linPlain(a, b) + ' = ' + c;
+    steps = stepsLinear(R(a), R(b), R(c), R(root));
+    traps = [{ r: R(c - b), rule: 'order2', msg: 'You cleared the ' + (b < 0 ? '- ' + (-b) : '+ ' + b) + ' correctly and then stopped. That line says ' + a + 'x = ' + (c - b) + ', not x = ' + (c - b) + ' &mdash; there is still a divide by ' + a + ' to do.' }];
+    var wrongSide = R(c + b, a);
+    if (Rint(wrongSide) && !Req(wrongSide, R(root))) {
+      traps.push({ r: wrongSide, rule: 'inv-add', msg: 'You moved the ' + b + ' across with the same sign. Crossing the equals sign flips it: ' + (b < 0 ? 'a - ' + (-b) + ' becomes + ' + (-b) : 'a + ' + b + ' becomes - ' + b) + '.' });
+    }
+  } else if (t < 0.60) {                /* a x - b = c */
+    a = ri(2, 9); b = ri(2, 18); c = a * root - b; rule = 'order2';
+    q = xterm(a) + ' - ' + b + ' = ' + c; plain = a + '*x - ' + b + ' = ' + c;
+    steps = stepsLinear(R(a), R(-b), R(c), R(root));
+    traps = [{ r: R(c + b), rule: 'order2', msg: 'That is ' + a + 'x, not x. You added the ' + b + ' back correctly, then forgot to divide by ' + a + '.' }];
+    var ws2 = R(c - b, a);
+    if (Rint(ws2) && !Req(ws2, R(root))) {
+      traps.push({ r: ws2, rule: 'inv-add', msg: 'You subtracted ' + b + '. It is already being subtracted on that side, so it comes back as an ADD to both sides.' });
+    }
+  } else if (t < 0.80) {                /* x/a + b = c */
+    a = ri(2, 8); b = ri(-12, 15); if (b === 0) b = -4;
+    var k = ri(-6, 10); root = a * k; c = k + b; rule = 'order2';
+    q = 'x/' + a + addC(b) + ' = ' + c; plain = 'x/' + a + (b < 0 ? ' - ' + (-b) : ' + ' + b) + ' = ' + c;
+    steps = stepsLinear(R(1, a), R(b), R(c), R(root),
+      { term: 'x/' + a, undoAct: 'Multiply both sides by ' + a + '.',
+        undoWhy: 'x is split into ' + a + ' parts, so multiply by ' + a + ' to get one whole x.' });
+    traps = [{ r: R(k), rule: 'inv-div', msg: 'That line reads x/' + a + ' = ' + k + '. You still have to multiply by ' + a + ' to get x itself.' }];
+  } else {                              /* b - a x = c */
+    a = ri(2, 8); root = ri(-6, 10); b = ri(2, 30); c = b - a * root; rule = 'order2';
+    q = b + ' - ' + xterm(a) + ' = ' + c; plain = b + ' - ' + a + '*x = ' + c;
+    steps = [
+      step(b + ' - ' + xterm(a) + ' = ' + c, 'Start.', 'The x term is being taken away here, so mind the signs.'),
+      step('-' + xterm(a).replace(/^-/, '') + ' = ' + (c - b), 'Subtract ' + b + ' from both sides.', 'Clear the plain number first, exactly as always.'),
+      step(xterm(a) + ' = ' + (a * root), 'Multiply both sides by -1.', 'Both sides change sign together, so the equation stays true.'),
+      step('x = ' + root, 'Divide both sides by ' + a + '.', ''),
+      step('x = ' + root, 'Check: ' + b + ' - ' + a + ' ' + MUL + ' ' + (root < 0 ? '(' + root + ')' : root) + ' = ' + c + '.', '')
+    ];
+    traps = [{ r: R(c - b, a), rule: 'neg-mul', msg: 'A sign got lost. After taking ' + b + ' off both sides the left is -' + a + 'x, so dividing by -' + a + ' flips the sign of the answer.' }];
+  }
+  return baseItem({ rung: 5, kind: 'eq', qhtml: q, plain: plain, ansR: R(root),
+                    rule: rule, steps: steps, traps: traps, prefix: 'x =' });
+}
+
+/* ---- rung 6: distributing, brackets, x on both sides -------------------- */
+function genDist() {
+  var t = rnd(), root, a, b, c, d, q, plain, steps, traps, rule, guard;
+  if (t < 0.40) {                       /* a(x + b) = c */
+    a = ri(2, 8); b = ri(-12, 14); if (b === 0) b = 3;
+    root = ri(-8, 12); c = a * (root + b); rule = 'dist';
+    q = a + '(' + linTxt(1, b) + ') = ' + c;
+    plain = a + '*(' + linPlain(1, b) + ') = ' + c;
+    steps = [
+      step(q, 'Start.', ''),
+      step(linTxt(a, a * b) + ' = ' + c, 'Multiply everything inside the bracket by ' + a + '.',
+           a + ' ' + MUL + ' x = ' + xterm(a) + ' <u>and</u> ' + a + ' ' + MUL + ' ' + (b < 0 ? '(' + b + ')' : b) + ' = ' + (a * b) + '. Every term inside, not just the first.'),
+      step(xterm(a) + ' = ' + (c - a * b), (a * b < 0 ? 'Add ' + (-a * b) + ' to both sides.' : 'Subtract ' + (a * b) + ' from both sides.'), ''),
+      step('x = ' + root, 'Divide both sides by ' + a + '.',
+           '<u>Check:</u> ' + a + '(' + (root < 0 ? '(' + root + ')' : root) + addC(b) + ') = ' + a + ' ' + MUL + ' ' + (root + b) + ' = ' + c + '.')
+    ];
+    traps = [];
+    var forgotB = R(c - b, a);
+    if (Rint(forgotB)) traps.push({ r: forgotB, rule: 'dist', msg: 'You multiplied the x by ' + a + ' but left the ' + b + ' alone. The ' + a + ' sits in front of the whole bracket, so it multiplies <em>every</em> term inside: ' + linTxt(a, a * b) + '.' });
+    traps.push({ r: R(c, a), rule: 'dist', msg: 'That is x + ' + b + ', not x. Dividing by ' + a + ' first is allowed, but then you still have to clear the ' + (b < 0 ? '- ' + (-b) : '+ ' + b) + '.' });
+  } else if (t < 0.75) {                /* a x + b = c x + d */
+    a = ri(3, 9); c = ri(1, a - 1); root = ri(-7, 11); b = ri(-14, 16);
+    d = (a - c) * root + b; rule = 'coll';
+    q = linTxt(a, b) + ' = ' + linTxt(c, d);
+    plain = linPlain(a, b) + ' = ' + linPlain(c, d);
+    steps = [
+      step(q, 'Start.', 'x is on both sides, so the first job is to get it all onto one side.'),
+      step(linTxt(a - c, b) + ' = ' + d, 'Subtract ' + xterm(c) + ' from both sides.',
+           'Take the SMALLER x term away &mdash; that keeps the x term positive and saves a sign slip later.'),
+      step(xterm(a - c) + ' = ' + (d - b), (b < 0 ? 'Add ' + (-b) + ' to both sides.' : 'Subtract ' + b + ' from both sides.'), ''),
+      step('x = ' + root, 'Divide both sides by ' + (a - c) + '.',
+           '<u>Check:</u> both sides come to ' + (a * root + b) + '.')
+    ];
+    traps = [];
+    var addedX = R(d - b, a + c);
+    if (Rint(addedX) && addedX.n !== root) traps.push({ r: addedX, rule: 'coll', msg: 'You added the two x terms. ' + xterm(c) + ' is on the other side of the equals sign, so it has to be SUBTRACTED from both sides, giving ' + xterm(a - c) + '.' });
+    var signB = R(d + b, a - c);
+    if (Rint(signB) && signB.n !== root) traps.push({ r: signB, rule: 'inv-add', msg: 'The ' + b + ' changed sign the wrong way. It is ' + (b < 0 ? 'being subtracted, so you ADD ' + (-b) : 'being added, so you SUBTRACT ' + b) + ' from both sides.' });
+  } else {                              /* a(x + b) = c(x + d) */
+    guard = 0;
+    do {
+      a = ri(2, 9); c = ri(2, 9); root = ri(-6, 10); b = ri(-9, 11);
+      if (a === c) { c = a === 9 ? 2 : a + 1; }
+      var V = a * (root + b);
+      d = (V - c * root);
+      guard++;
+    } while ((d % c !== 0 || b === 0) && guard < 80);
+    if (d % c !== 0 || b === 0) return genDist();
+    d = d / c;
+    rule = 'dist';
+    q = a + '(' + linTxt(1, b) + ') = ' + c + '(' + linTxt(1, d) + ')';
+    plain = a + '*(' + linPlain(1, b) + ') = ' + c + '*(' + linPlain(1, d) + ')';
+    steps = [
+      step(q, 'Start.', 'Two brackets: open both before anything else.'),
+      step(linTxt(a, a * b) + ' = ' + linTxt(c, c * d), 'Multiply out both brackets.',
+           'The number outside multiplies every term inside, on both sides.'),
+      step(linTxt(a - c, a * b) + ' = ' + (c * d), 'Subtract ' + xterm(c) + ' from both sides.', 'Gather the x on one side.'),
+      step(xterm(a - c) + ' = ' + (c * d - a * b), (a * b < 0 ? 'Add ' + (-a * b) + ' to both sides.' : 'Subtract ' + (a * b) + ' from both sides.'), ''),
+      step('x = ' + root, 'Divide both sides by ' + (a - c) + '.',
+           '<u>Check:</u> both sides come to ' + (a * (root + b)) + '.')
+    ];
+    traps = [];
+    var half = R(c * d - a * b, a + c);
+    if (Rint(half) && half.n !== root) traps.push({ r: half, rule: 'coll', msg: 'The x terms were added rather than subtracted. Moving ' + xterm(c) + ' across the equals sign means taking it off both sides: ' + xterm(a) + ' - ' + xterm(c) + ' = ' + xterm(a - c) + '.' });
+  }
+  return baseItem({ rung: 6, kind: 'eq', qhtml: q, plain: plain, ansR: R(root),
+                    rule: rule, steps: steps, traps: traps, prefix: 'x =' });
+}
+
+/* ---- rung 7: fractions, decimals, and sentences turned into equations --- */
+var WNAMES = ['Michael', 'Maya', 'Jordan', 'Riley', 'Sam', 'Alex', 'Nina'];
+
+function genWord() {
+  var t = rnd(), a, b, c, n, q, plain, steps, traps, prose, label, nm = pick(WNAMES);
+  if (t < 0.18) {                       /* tickets at a price plus a fee */
+    a = ri(6, 26); b = ri(3, 15); n = ri(2, 9); c = a * n + b;
+    prose = nm + ' buys some concert tickets at $' + a + ' each. There is a single $' + b +
+            ' booking fee on the order. The total comes to $' + c + '. How many tickets?';
+    label = 'the number of tickets';
+    plain = a + '*x + ' + b + ' = ' + c;
+    steps = [step(linTxt(a, b) + ' = ' + c, 'Write it as an equation.',
+      'x tickets at $' + a + ' each is ' + xterm(a) + '. The fee is charged once, so it is + ' + b + ', not ' + b + 'x. The total is ' + c + '.')]
+      .concat(stepsLinear(R(a), R(b), R(c), R(n)).slice(1));
+    traps = [{ r: R(c, a), rule: 'trans', msg: 'You divided the whole $' + c + ' by $' + a + '. The $' + b + ' fee is not part of the ticket money &mdash; take it off first.' }];
+  } else if (t < 0.34) {                /* saving a fixed amount each week */
+    b = ri(20, 120); a = ri(5, 25); n = ri(3, 12); c = b + a * n;
+    prose = nm + ' already has $' + b + ' saved and puts away $' + a + ' every week. After how many weeks will the savings reach $' + c + '?';
+    label = 'the number of weeks';
+    plain = a + '*x + ' + b + ' = ' + c;
+    steps = [step(linTxt(a, b) + ' = ' + c, 'Write it as an equation.',
+      'The $' + b + ' is already there whatever happens, so it is the constant. $' + a + ' arrives x times, so that is ' + xterm(a) + '.')]
+      .concat(stepsLinear(R(a), R(b), R(c), R(n)).slice(1));
+    traps = [{ r: R(c, a), rule: 'trans', msg: 'You divided the $' + c + ' target by $' + a + ' a week and ignored the $' + b + ' already saved.' },
+             { r: R(c - b - a), rule: 'trans', msg: 'Close, but that is the money left over, not the number of weeks. Divide the amount still needed by $' + a + '.' }];
+  } else if (t < 0.50) {                /* three consecutive numbers */
+    n = ri(4, 44); c = 3 * n + 3;
+    prose = 'Three consecutive whole numbers add up to ' + c + '. What is the smallest of the three?';
+    label = 'the smallest number';
+    plain = '3*x + 3 = ' + c;
+    steps = [step('x + (x + 1) + (x + 2) = ' + c, 'Name the smallest one x.',
+      'The next two are one more and two more than it, so they are x + 1 and x + 2.'),
+      step('3x + 3 = ' + c, 'Collect like terms.', 'Three x terms make 3x, and 1 + 2 makes 3.')]
+      .concat(stepsLinear(R(3), R(3), R(c), R(n)).slice(1));
+    traps = [{ r: R(c, 3), rule: 'trans', msg: 'That is the MIDDLE number. Dividing by three gives the average of the three, which is the middle one &mdash; the smallest is one less.' }];
+  } else if (t < 0.64) {                /* perimeter of a rectangle */
+    var L = ri(6, 26), W = ri(3, 22); c = 2 * (L + W); n = W;
+    prose = 'A rectangle has a perimeter of ' + c + ' cm. Its length is ' + L + ' cm. How wide is it?';
+    label = 'the width in cm';
+    plain = '2*x + ' + (2 * L) + ' = ' + c;
+    steps = [step('2x + ' + (2 * L) + ' = ' + c, 'Write it as an equation.',
+      'A rectangle has two widths and two lengths. Two lengths is 2 ' + MUL + ' ' + L + ' = ' + (2 * L) + ', and the two widths are 2x.')]
+      .concat(stepsLinear(R(2), R(2 * L), R(c), R(W)).slice(1));
+    traps = [{ r: R(c - L), rule: 'trans', msg: 'You took one length off the perimeter. There are TWO lengths and TWO widths around a rectangle.' },
+             { r: R(c, 2), rule: 'trans', msg: 'Half the perimeter is one length plus one width, not the width on its own.' }];
+  } else if (t < 0.80) {                /* doubled, then decreased */
+    n = ri(3, 24); b = ri(2, 18); c = 2 * n - b;
+    prose = 'A number is doubled and then ' + b + ' is taken away. The result is ' + c + '. What was the number?';
+    label = 'the number';
+    plain = '2*x - ' + b + ' = ' + c;
+    steps = [step('2x - ' + b + ' = ' + c, 'Write it as an equation.',
+      'Doubled means 2x. "Then ' + b + ' taken away" happens after, so it is - ' + b + ' on the same side.')]
+      .concat(stepsLinear(R(2), R(-b), R(c), R(n)).slice(1));
+    traps = [{ r: R(c + b, 1), rule: 'order2', msg: 'That is 2x, not x. You added the ' + b + ' back correctly and then forgot to halve it.' },
+             { r: R(c, 2), rule: 'order2', msg: 'You halved before putting the ' + b + ' back. Undo in reverse order: the subtraction went last, so it comes off first.' }];
+  } else {                              /* two plans that cost the same */
+    a = ri(12, 30); b = ri(4, a - 4); n = ri(2, 12); c = (a - b) * n;
+    prose = 'One gym charges $' + a + ' a month with no joining fee. A rival charges $' + b +
+            ' a month plus a $' + c + ' joining fee. After how many months do the two cost the same?';
+    label = 'the number of months';
+    plain = a + '*x = ' + b + '*x + ' + c;
+    steps = [
+      step(xterm(a) + ' = ' + linTxt(b, c), 'Write both costs and set them equal.',
+        'After x months the first gym has cost ' + xterm(a) + '. The second has cost ' + xterm(b) + ' plus the one-off $' + c + '.'),
+      step(xterm(a - b) + ' = ' + c, 'Subtract ' + xterm(b) + ' from both sides.', 'That puts all the x on one side.'),
+      step('x = ' + n, 'Divide both sides by ' + (a - b) + '.',
+        '<u>Check:</u> after ' + n + ' months both come to $' + (a * n) + '.')
+    ];
+    traps = [{ r: R(c, a), rule: 'trans', msg: 'The joining fee is only being made up at $' + (a - b) + ' a month &mdash; the DIFFERENCE between the two prices, not the full $' + a + '.' },
+             { r: R(c, b), rule: 'trans', msg: 'Divide the fee by the price GAP of $' + (a - b) + ' a month, which is how fast the cheaper plan catches up.' }];
+  }
+  q = '';
+  return baseItem({ rung: 7, kind: 'eq', qhtml: q, plain: plain, ansR: R(n),
+                    word: prose, label: label, rule: 'trans', steps: steps, traps: traps, prefix: 'x =' });
+}
+
+function genHard() {
+  var t = rnd(), a, b, c, q, plain, steps, traps, rule, root;
+  if (t >= 0.62) return genWord();
+  if (t < 0.24) {                       /* answer is a fraction */
+    var den = pick([2, 3, 4, 5]), num = ri(1, 3 * den) * (coin() ? 1 : -1);
+    if (gcd(num, den) !== 1) num = num > 0 ? den + 1 : -(den + 1);
+    if (gcd(num, den) !== 1) num = num > 0 ? 1 : -1;
+    var m = ri(1, 3);
+    a = den * m; b = ri(-14, 16); if (b === 0) b = 7;
+    root = R(num, den);
+    c = num * m + b;
+    rule = 'inv-mul';
+    q = linTxt(a, b) + ' = ' + c; plain = linPlain(a, b) + ' = ' + c;
+    steps = stepsLinear(R(a), R(b), R(c), root);
+    steps[steps.length - 1].why = 'The division does not come out whole, and that is fine &mdash; ' +
+      (c - b) + ' over ' + a + ' cancels down to ' + Rstr(root) + '. ' + steps[steps.length - 1].why;
+    traps = [{ r: R(c - b), rule: 'order2', msg: 'That is ' + a + 'x. There is still a divide by ' + a + ' to do, and this one does not land on a whole number.' },
+             { r: R(Math.round((c - b) / a)), rule: 'inv-mul', msg: 'You rounded. ' + (c - b) + ' &divide; ' + a + ' is exactly ' + Rstr(root) + ' &mdash; leave it as a fraction rather than forcing a whole number.' }];
+  } else if (t < 0.44) {                /* decimal coefficients */
+    var k = pick([2, 4, 5, 6, 8, 15, 25]);
+    var aR = R(k, 10);
+    root = ri(-6, 12); if (root === 0) root = 4;
+    var j = ri(-40, 50); if (j === 0) j = 15;
+    var bR = R(j, 10);
+    var cR = Radd(Rmul(aR, R(root)), bR);
+    rule = 'dec-eq';
+    q = Rstr(aR) + 'x' + addCR(bR) + ' = ' + Rstr(cR);
+    plain = Rstr(aR) + '*x' + (bR.n < 0 ? ' - ' + Rstr(Rneg(bR)) : ' + ' + Rstr(bR)) + ' = ' + Rstr(cR);
+    steps = stepsLinear(aR, bR, cR, R(root));
+    steps[steps.length - 1].why = 'A decimal in front of x is undone exactly like a whole number would be. ' + steps[steps.length - 1].why;
+    traps = [{ r: Rsub(cR, bR), rule: 'dec-eq', msg: 'That is ' + Rstr(aR) + 'x, not x. Dividing by a decimal below 1 makes the answer BIGGER, which is the part that feels wrong and is not.' }];
+    return baseItem({ rung: 7, kind: 'eq', qhtml: q, plain: plain, ansR: R(root),
+                      rule: rule, steps: steps, traps: traps, prefix: 'x =' });
+  } else {                              /* (x + b) / a = c */
+    a = ri(2, 7); b = ri(-12, 15); if (b === 0) b = 6;
+    c = ri(-6, 11); root = a * c - b; rule = 'frac-eq';
+    q = '(' + linTxt(1, b) + ')/' + a + ' = ' + c;
+    plain = '(' + linPlain(1, b) + ')/' + a + ' = ' + c;
+    steps = [
+      step(q, 'Start.', 'The whole of x ' + (b < 0 ? '- ' + (-b) : '+ ' + b) + ' is being divided by ' + a + '.'),
+      step(linTxt(1, b) + ' = ' + (a * c), 'Multiply both sides by ' + a + '.', 'That clears the fraction in one move, and it clears it from the WHOLE bracket.'),
+      step('x = ' + root, (b < 0 ? 'Add ' + (-b) + ' to both sides.' : 'Subtract ' + b + ' from both sides.'),
+        '<u>Check:</u> (' + root + addC(b) + ') &divide; ' + a + ' = ' + (a * c) + ' &divide; ' + a + ' = ' + c + '.')
+    ];
+    traps = [{ r: R(a * c), rule: 'frac-eq', msg: 'You multiplied by ' + a + ' and stopped. That line reads x ' + (b < 0 ? '- ' + (-b) : '+ ' + b) + ' = ' + (a * c) + ', so there is one more move.' },
+             { r: R(c - b), rule: 'frac-eq', msg: 'The ' + b + ' was cleared before the divide. The division wraps the whole bracket, so it has to come off first.' }];
+  }
+  return baseItem({ rung: 7, kind: 'eq', qhtml: q, plain: plain,
+                    ansR: (root && root.n !== undefined) ? root : R(root),
+                    rule: rule, steps: steps, traps: traps, prefix: 'x =' });
+}
+
+var GENS = [genOrder, genNeg, genSub, genLike, genOne, genTwo, genDist, genHard];
+function generate(rung) { return GENS[clamp(rung | 0, 0, MAX_RUNG)](); }
+
+/* Which rung each rule belongs to — this is how "the rule he keeps missing"
+   turns into "that kind of question comes back more often". */
+var RULE_RUNG = {
+  'ord-md': 0, 'ord-br': 0, 'ord-pow': 0, 'ord-lr': 0,
+  'neg-add': 1, 'neg-sub': 1, 'neg-mul': 1,
+  'sub-par': 2, 'sub-pow': 2,
+  'like': 3, 'like-sgn': 3,
+  'inv-add': 4, 'inv-mul': 4, 'inv-div': 4, 'both': 4,
+  'order2': 5,
+  'dist': 6, 'coll': 6,
+  'frac-eq': 7, 'dec-eq': 7, 'trans': 7
+};
+
+/* ======================================================= the save / state */
+/* Everything that survives a session.  The found rung is IN here: he is
+   placed once, ever, and resumes where he left off. */
+function freshSave() {
+  var i, rungs = [];
+  for (i = 0; i <= MAX_RUNG; i++) rungs.push({ n: 0, c: 0 });
+  return {
+    v: 1,
+    lvl: 0,                 /* the found rung */
+    streak: 0,              /* consecutive correct AT the rung */
+    recent: [],             /* last few results at the rung */
+    since: 0,               /* items since the last probe */
+    probeHit: 0,            /* a probe came back right and awaits confirmation */
+    played: 0,
+    solved: 0,
+    best: 0,                /* best run of correct answers */
+    run: 0,                 /* current run */
+    sets: 0,
+    hinted: 0,
+    rungs: rungs,           /* per-rung {n: seen, c: correct} */
+    rules: {},              /* rule id -> {w: missed, n: seen} */
+    hist: [[0, 0]]          /* [itemsPlayed, level] — how the level has moved */
+  };
+}
+function sanitize(o) {
+  var s = freshSave(), i, k;
+  if (!o || typeof o !== 'object' || Object.prototype.toString.call(o) === '[object Array]') return s;
+  if (isNum(o.lvl)) s.lvl = clamp(Math.floor(o.lvl), 0, MAX_RUNG);
+  if (isNum(o.streak) && o.streak >= 0) s.streak = Math.min(99, Math.floor(o.streak));
+  if (isNum(o.since) && o.since >= 0) s.since = Math.min(999, Math.floor(o.since));
+  if (isNum(o.probeHit) && o.probeHit >= 0) s.probeHit = Math.min(9, Math.floor(o.probeHit));
+  if (isNum(o.played) && o.played >= 0) s.played = Math.min(999999, Math.floor(o.played));
+  if (isNum(o.solved) && o.solved >= 0) s.solved = Math.min(999999, Math.floor(o.solved));
+  if (isNum(o.best) && o.best >= 0) s.best = Math.min(99999, Math.floor(o.best));
+  if (isNum(o.run) && o.run >= 0) s.run = Math.min(99999, Math.floor(o.run));
+  if (isNum(o.sets) && o.sets >= 0) s.sets = Math.min(99999, Math.floor(o.sets));
+  if (isNum(o.hinted) && o.hinted >= 0) s.hinted = Math.min(999999, Math.floor(o.hinted));
+  if (Object.prototype.toString.call(o.recent) === '[object Array]') {
+    for (i = 0; i < o.recent.length && s.recent.length < 12; i++) s.recent.push(o.recent[i] ? 1 : 0);
+  }
+  if (Object.prototype.toString.call(o.rungs) === '[object Array]') {
+    for (i = 0; i <= MAX_RUNG; i++) {
+      var r = o.rungs[i];
+      if (!r || typeof r !== 'object') continue;
+      s.rungs[i] = {
+        n: (isNum(r.n) && r.n >= 0) ? Math.min(999999, Math.floor(r.n)) : 0,
+        c: (isNum(r.c) && r.c >= 0) ? Math.min(999999, Math.floor(r.c)) : 0
+      };
+      if (s.rungs[i].c > s.rungs[i].n) s.rungs[i].c = s.rungs[i].n;
+    }
+  }
+  if (o.rules && typeof o.rules === 'object' && Object.prototype.toString.call(o.rules) !== '[object Array]') {
+    for (k in o.rules) {
+      if (!Object.prototype.hasOwnProperty.call(o.rules, k)) continue;
+      if (!RULES[k]) continue;
+      var v = o.rules[k];
+      if (!v || typeof v !== 'object') continue;
+      s.rules[k] = {
+        w: (isNum(v.w) && v.w >= 0) ? Math.min(99999, Math.floor(v.w)) : 0,
+        n: (isNum(v.n) && v.n >= 0) ? Math.min(99999, Math.floor(v.n)) : 0
+      };
+    }
+  }
+  if (Object.prototype.toString.call(o.hist) === '[object Array]') {
+    var h = [];
+    for (i = 0; i < o.hist.length && h.length < 60; i++) {
+      var e = o.hist[i];
+      if (Object.prototype.toString.call(e) !== '[object Array]') continue;
+      if (!isNum(e[0]) || !isNum(e[1])) continue;
+      h.push([Math.max(0, Math.floor(e[0])), clamp(Math.floor(e[1]), 0, MAX_RUNG)]);
+    }
+    if (h.length) s.hist = h;
+  }
+  return s;
+}
+function loadSave() {
+  var raw = null, o = null;
+  try { raw = localStorage.getItem(K_SAVE); } catch (e) { raw = null; }
+  if (!raw) return freshSave();
+  try { o = JSON.parse(raw); } catch (e) { return freshSave(); }
+  try { return sanitize(o); } catch (e) { return freshSave(); }
+}
+var S = loadSave();
+function saveNow() { try { localStorage.setItem(K_SAVE, JSON.stringify(S)); } catch (e) {} }
+
+/* ============================================ the level, found and moved == */
+/* The constants come from Char, with the corrections Echo and Tally paid for
+   and one more measured here:
+
+     - A probe must CONFIRM itself.  Two right in a row at the rung above, or
+       three on the one multiple-choice rung, where 1 in 4 wrong guesses come
+       back right.  Typed numeric entry has no guess floor at all, which is
+       exactly why every equation rung is typed rather than buttons.
+     - Demotion needs three misses in five, not two.
+     - A RUN AT HIS OWN RUNG DOES NOT PROMOTE HIM.  It buys him an immediate
+       probe instead.  Promoting straight off a run of correct answers put the
+       simulated learner half a rung above his true ability at 66% accuracy;
+       making the run buy a probe rather than a level fixed it (drift 0.41 ->
+       0.06 rungs, accuracy 65.9% -> 79.7%, and the level settles inside the
+       75-85% band at every one of eight tested abilities). */
+var RECENT_WINDOW = 5;
+var DEMOTE_MISSES = 3;      /* three misses inside the window drops a rung */
+var PROMOTE_WIN = 0.8;      /* ...and the recent window has to back the run up */
+var PROBE_EVERY = 12;       /* items between quiet tries at the rung above */
+var REVIEW_CHANCE = 0.25;   /* how often an older rung comes back as practice */
+
+function noteHist() {
+  if (Object.prototype.toString.call(S.hist) !== '[object Array]') S.hist = [];
+  S.hist.push([S.played, S.lvl]);
+  while (S.hist.length > 60) S.hist.shift();
+}
+function promote() {
+  if (S.lvl >= MAX_RUNG) { S.streak = 0; return false; }
+  S.lvl++; S.streak = 0; S.recent = []; S.probeHit = 0; S.since = 0;
+  noteHist();
+  return true;
+}
+function demote() {
+  if (S.lvl <= 0) { S.recent = []; S.streak = 0; return false; }
+  S.lvl--; S.streak = 0; S.recent = []; S.probeHit = 0;
+  noteHist();
+  return true;
+}
+/* Returns 'up' | 'down' | ''.  mode is 'level' | 'probe' | 'review'. */
+function adapt(right, mode, hinted) {
+  var moved = '', i, misses = 0;
+  S.played++;
+  if (mode === 'probe') {
+    S.since = 0;
+    /* A probe costs him nothing.  It must come back right TWICE running (three
+       times on the multiple-choice rung) before it hands over a level — one
+       lucky answer parking him above his real level turns study into guessing. */
+    if (right && !hinted) {
+      S.probeHit++;
+      if (S.probeHit >= (rungAt(Math.min(MAX_RUNG, S.lvl + 1)).probeHits || 2)) {
+        if (promote()) moved = 'up';
+      }
+    } else {
+      /* A missed probe ends the run.  Without this the run that BOUGHT the
+         probe is still standing afterwards, so every following item is another
+         probe at a rung he cannot do — the ladder rig caught exactly that,
+         as a simulated learner sitting through 55 wrong answers in a row. */
+      S.probeHit = 0;
+      S.streak = 0;
+    }
+    return moved;
+  }
+  S.since++;
+  if (mode === 'review') {
+    /* Old ground.  It can break a run — he should not be climbing while the
+       floor is falling in — but it can never earn a promotion, because an
+       easier question is not evidence about the rung he is on. */
+    if (!right) S.streak = 0;
+    return moved;
+  }
+  if (Object.prototype.toString.call(S.recent) !== '[object Array]') S.recent = [];
+  S.recent.push(right ? 1 : 0);
+  while (S.recent.length > RECENT_WINDOW) S.recent.shift();
+  if (right) {
+    /* A run at his own rung never promotes him by itself.  It EARNS HIM A
+       PROBE — see readyToClimb() — and only two right answers in a row at the
+       rung above actually move him.  Nothing gets handed over on the strength
+       of questions he has already shown he can do. */
+    if (!hinted) S.streak++;
+  } else {
+    S.streak = 0;
+    for (i = 0; i < S.recent.length; i++) if (!S.recent[i]) misses++;
+    if (misses >= DEMOTE_MISSES) { if (demote()) moved = 'down'; }
+  }
+  return moved;
+}
+
+/* Which older rung deserves another look?  Weighted by how badly it has gone
+   and by the rules he keeps breaking there. */
+function reviewRung() {
+  var w = [], total = 0, i, k;
+  var ruleHeat = [];
+  for (i = 0; i <= MAX_RUNG; i++) ruleHeat.push(0);
+  for (k in S.rules) {
+    if (!Object.prototype.hasOwnProperty.call(S.rules, k)) continue;
+    var home = RULE_RUNG[k];
+    if (home === undefined) continue;
+    var rr = S.rules[k];
+    if (rr && isNum(rr.w)) ruleHeat[home] += rr.w;
+  }
+  for (i = 0; i < S.lvl; i++) {
+    var st = S.rungs[i] || { n: 0, c: 0 };
+    var missRate = st.n ? (st.n - st.c) / st.n : 0.3;
+    var v = 1 + 2.4 * missRate + Math.min(2.5, 0.5 * ruleHeat[i]);
+    w.push(v); total += v;
+  }
+  if (!w.length) return -1;
+  var r = rnd() * total;
+  for (i = 0; i < w.length; i++) { r -= w[i]; if (r <= 0) return i; }
+  return w.length - 1;
+}
+
+/* A good run at his own rung buys an immediate try at the rung above, rather
+   than a free level.  It is what stops a strong player grinding the floor for
+   an hour, without loosening the gate by a single answer. */
+function readyToClimb() {
+  var cfg = rungAt(S.lvl), i, hits = 0;
+  if (S.streak < (cfg.gate || 4)) return false;
+  if (Object.prototype.toString.call(S.recent) !== '[object Array]') return false;
+  if (S.recent.length < Math.min(RECENT_WINDOW, cfg.gate || 4)) return false;
+  for (i = 0; i < S.recent.length; i++) if (S.recent[i]) hits++;
+  return hits / S.recent.length >= PROMOTE_WIN;
+}
+function nextItemSpec() {
+  var lvl = S.lvl, it, mode = 'level', rung = lvl;
+  var due = S.since >= PROBE_EVERY + Math.floor(rnd() * 6) || readyToClimb();
+  if (lvl < MAX_RUNG && (due || S.probeHit > 0)) { mode = 'probe'; rung = lvl + 1; }
+  else if (lvl >= 2 && rnd() < REVIEW_CHANCE) {
+    var rr = reviewRung();
+    if (rr >= 0 && rr !== lvl) { mode = 'review'; rung = rr; }
+  }
+  it = generate(rung);
+  it.mode = mode;
+  it.rung = rung;
+  it.hints = buildHints(it);
+  return it;
+}
+
+/* A hint is the NEXT STEP, never the answer.  The first one is always the rule
+   itself, so there is always something to give; after that come the step
+   instructions, with any line that would give the number away filtered out. */
+function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&'); }
+/* Superscripts become ^n rather than vanishing, so 4<sup>2</sup> cannot be read
+   as the number 42 - and so an exponent is never mistaken for the answer. */
+function stripTags(s) {
+  return String(s).replace(/<sup>([^<]*)<\/sup>/g, '^$1 ').replace(/<[^>]*>/g, '');
+}
+function buildHints(it) {
+  var out = ['<u>The rule here:</u> ' + ruleTxt(it.rule)], i;
+  var ansTxt = it.ansR ? Rstr(it.ansR) : (it.ansText || '');
+  var re = ansTxt ? new RegExp('(^|[^0-9.^\\/-])' + escapeRe(ansTxt) + '([^0-9.\\/]|$)') : null;
+  for (i = 1; i < it.steps.length; i++) {
+    var a = it.steps[i].act;
+    if (!a) continue;
+    var flat = stripTags(a);
+    if (re && re.test(flat)) continue;
+    if (out.length >= 4) break;
+    out.push(a);
+  }
+  return out;
+}
+
+/* ================================================================== DOM == */
+var stage = document.getElementById('stage');
+var bg = document.getElementById('bg');
+var bgx = bg.getContext('2d');
+var overlay = document.getElementById('overlay');
+var elQtext = document.getElementById('qtext');
+var elQline = document.getElementById('qline');
+var elAns = document.getElementById('ansline');
+var elPre = document.getElementById('qpre');
+var elSlot = document.getElementById('slot');
+var elWork = document.getElementById('work');
+var elPanel = document.getElementById('panel');
+var elFb = document.getElementById('fb');
+var elPad = document.getElementById('pad');
+var elCh = document.getElementById('choices');
+var elTb = document.getElementById('teachbtns');
+var elHintRow = document.getElementById('hintrow');
+var elHint = document.getElementById('hintBtn');
+var elLabel = document.getElementById('hlabel');
+var elStreak = document.getElementById('hstreak');
+var elFill = document.getElementById('hfill');
+
+var G = {
+  state: 'title',      /* title | ask | right | teach | pause */
+  it: null,
+  entry: '',
+  hintI: 0,
+  usedHint: false,
+  teachI: 0,
+  blocks: [],
+  head: null,
+  holdT: 0,
+  setI: 0,
+  setRight: 0,
+  moves: [],
+  padSel: -1,
+  pendingNext: false,
+  prevState: null,
+  pausedFrom: null
+};
+
+/* ------------------------------------------------------- procedural bg -- */
+var glyphs = [];
+(function seedGlyphs() {
+  var chars = ['x', '=', '+', '-', '×', '÷', '(', ')', '2', '7', 'y', '<', '>'];
+  for (var i = 0; i < 46; i++) {
+    glyphs.push({
+      x: Math.random(), y: Math.random(),
+      s: 10 + Math.random() * 26,
+      v: 0.004 + Math.random() * 0.012,
+      a: 0.04 + Math.random() * 0.07,
+      c: chars[(Math.random() * chars.length) | 0]
+    });
+  }
+})();
+var view = { w: 600, h: 400, dpr: 1 };
+function resize() {
+  var w = Math.max(80, stage.clientWidth || 320);
+  var h = Math.max(80, stage.clientHeight || 480);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  bg.width = Math.round(w * dpr); bg.height = Math.round(h * dpr);
+  drawBg();
+}
+function drawBg() {
+  if (!bgx) return;
+  var d = view.dpr;
+  bgx.setTransform(d, 0, 0, d, 0, 0);
+  bgx.clearRect(0, 0, view.w, view.h);
+  bgx.strokeStyle = 'rgba(111,216,255,0.05)';
+  bgx.lineWidth = 1;
+  var gsz = 44, i;
+  for (i = 0; i * gsz < view.w; i++) {
+    bgx.beginPath(); bgx.moveTo(i * gsz + 0.5, 0); bgx.lineTo(i * gsz + 0.5, view.h); bgx.stroke();
+  }
+  for (i = 0; i * gsz < view.h; i++) {
+    bgx.beginPath(); bgx.moveTo(0, i * gsz + 0.5); bgx.lineTo(view.w, i * gsz + 0.5); bgx.stroke();
+  }
+  for (i = 0; i < glyphs.length; i++) {
+    var g = glyphs[i];
+    bgx.font = '700 ' + Math.round(g.s) + 'px "Segoe UI", system-ui, sans-serif';
+    bgx.fillStyle = 'rgba(234,240,255,' + g.a.toFixed(3) + ')';
+    bgx.fillText(g.c, g.x * view.w, g.y * view.h);
+  }
+}
+function stepBg(dt) {
+  for (var i = 0; i < glyphs.length; i++) {
+    var g = glyphs[i];
+    g.y -= g.v * dt * 6;
+    if (g.y < -0.05) { g.y = 1.06; g.x = Math.random(); }
+  }
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 140); });
+
+/* ============================================================== the pad == */
+var PAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'neg', '0', 'dot', 'sl', 'del', 'ok'];
+var PAD_LABEL = { neg: '−', dot: '.', sl: '/', del: '⌫', ok: 'ENTER' };
+(function buildPad() {
+  var html = '', i;
+  for (i = 0; i < PAD_KEYS.length; i++) {
+    var k = PAD_KEYS[i];
+    var act = (k === 'del' || k === 'ok' || k === 'sl' || k === 'neg' || k === 'dot');
+    html += '<button class="key' + (act ? ' act' : '') + '" type="button" data-k="' + k + '">' +
+            (PAD_LABEL[k] || k) + '</button>';
+  }
+  elPad.innerHTML = html;
+})();
+function pressKey(k) {
+  if (G.state === 'right') { nextQuestion(); return; }
+  if (G.state === 'teach') { teachNext(); return; }
+  if (G.state !== 'ask' || !G.it || G.it.kind === 'mc') return;
+  var e = G.entry;
+  if (k === 'del') { G.entry = e.slice(0, -1); sfx.del(); paintEntry(); return; }
+  if (k === 'ok') { submit(G.entry); return; }
+  if (k === 'neg') {
+    G.entry = (e.charAt(0) === '-') ? e.slice(1) : ('-' + e);
+    sfx.tap(); paintEntry(); return;
+  }
+  if (e.replace('-', '').length >= 7) return;
+  if (k === 'dot') {
+    if (e.indexOf('.') >= 0 || e.indexOf('/') >= 0) return;
+    if (!e || e === '-') G.entry = e + '0.'; else G.entry = e + '.';
+    sfx.tap(); paintEntry(); return;
+  }
+  if (k === 'sl') {
+    if (e.indexOf('/') >= 0 || e.indexOf('.') >= 0 || !e || e === '-') return;
+    G.entry = e + '/'; sfx.tap(); paintEntry(); return;
+  }
+  if (/^[0-9]$/.test(k)) {
+    if (e === '0') G.entry = k;
+    else if (e === '-0') G.entry = '-' + k;
+    else G.entry = e + k;
+    sfx.tap(); paintEntry();
+  }
+}
+function paintEntry() {
+  elSlot.textContent = G.entry.length ? G.entry : ' ';
+}
+elPad.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('[data-k]') : null;
+  if (!b) return;
+  initAudio();
+  pressKey(b.getAttribute('data-k'));
+});
+elCh.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('[data-i]') : null;
+  if (!b) return;
+  initAudio();
+  if (G.state !== 'ask') return;
+  submit(parseInt(b.getAttribute('data-i'), 10));
+});
+elTb.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('[data-t]') : null;
+  if (!b) return;
+  initAudio(); teachNext();
+});
+elHint.addEventListener('click', function () { initAudio(); giveHint(); });
+
+/* ============================================================== painting = */
+function pushBlock(html) {
+  G.blocks.push(html);
+  elPanel.innerHTML = G.blocks.join('');
+  elWork.classList.remove('blank');
+  try { elPanel.scrollTop = elPanel.scrollHeight; } catch (e) {}
+}
+function clearPanel() { G.blocks = []; elPanel.innerHTML = ''; elWork.classList.add('blank'); }
+
+function askText(it) {
+  if (it.kind === 'mc') return 'Which one is this tidied up?';
+  if (it.word) return 'Solve for x, then type the number.';
+  if (it.kind === 'sub') return 'Put the value in and work it out.';
+  if (it.kind === 'eq') return 'Solve for x.';
+  return 'Work it out.';
+}
+function paintHead() {
+  var r = rungAt(S.lvl);
+  elLabel.textContent = 'RUNG ' + (S.lvl + 1) + '/' + RUNGS.length + ' · ' + r.short;
+  elStreak.textContent = S.run > 1 ? (S.run + ' IN A ROW') : '';
+  elFill.style.width = Math.round(((S.lvl + (G.setI / SET_LEN)) / RUNGS.length) * 100) + '%';
+}
+function paintQuestion() {
+  var it = G.it;
+  if (!it) return;
+  if (it.word) {
+    elQtext.className = 'on';
+    elQtext.innerHTML = it.word + '<br><b style="color:var(--cool)">Let x = ' + it.label + '.</b>';
+  } else if (it.given) {
+    elQtext.className = 'on';
+    elQtext.innerHTML = 'When <b style="color:var(--cool)">' + it.given + '</b>, work this out:';
+  } else {
+    elQtext.className = ''; elQtext.innerHTML = '';
+  }
+  elQline.innerHTML = it.qhtml || '';
+  elQline.style.display = it.qhtml ? '' : 'none';
+  if (it.kind === 'mc') {
+    elAns.className = 'off';
+    var html = '', i;
+    for (i = 0; i < it.choices.length; i++) {
+      html += '<button class="ch" type="button" data-i="' + i + '"><small>' + (i + 1) + '</small>' +
+              it.choices[i].html + '</button>';
+    }
+    elCh.innerHTML = html;
+    elCh.classList.remove('off');
+    elPad.classList.add('off');
+  } else {
+    elAns.className = '';
+    elPre.textContent = it.prefix + ' ';
+    paintEntry();
+    elCh.classList.add('off');
+    elPad.classList.remove('off');
+  }
+  elTb.classList.add('off');
+  elHintRow.classList.remove('off');
+  elHint.className = 'hintbtn';
+  elHint.textContent = 'HINT';
+  elFb.className = '';
+  elFb.textContent = askText(it);
+  clearPanel();
+  paintHead();
+}
+function nextQuestion() {
+  if (G.setI >= SET_LEN) { setScreen(); return; }
+  G.it = nextItemSpec();
+  G.entry = ''; G.hintI = 0; G.usedHint = false; G.teachI = 0; G.padSel = -1;
+  G.state = 'ask';
+  paintQuestion();
+}
+function giveHint() {
+  if (G.state !== 'ask' || !G.it) return;
+  var hs = G.it.hints || [];
+  if (G.hintI >= hs.length) {
+    if (!G.usedHint) { G.usedHint = true; S.hinted++; }
+    pushBlock('<div class="hline"><i>NEXT</i><span>That is every step. Work the arithmetic through carefully &mdash; the method is right.</span></div>');
+    elHint.className = 'hintbtn dead';
+    sfx.hint();
+    return;
+  }
+  if (!G.usedHint) { G.usedHint = true; S.hinted++; }
+  pushBlock('<div class="hline"><i>' + (G.hintI === 0 ? 'RULE' : 'NEXT STEP') + '</i><span>' + hs[G.hintI] + '</span></div>');
+  G.hintI++;
+  if (G.hintI >= hs.length) elHint.textContent = 'HINT (LAST)';
+  sfx.hint();
+}
+
+/* ------------------------------------------------------------- answering */
+function noteRule(id, wrong) {
+  if (!RULES[id]) return;
+  if (!S.rules[id]) S.rules[id] = { w: 0, n: 0 };
+  S.rules[id].n++;
+  if (wrong) S.rules[id].w++;
+}
+function submit(val) {
+  var it = G.it;
+  if (!it || G.state !== 'ask') return;
+  var right, chosen = null, parsed = null;
+  if (it.kind === 'mc') {
+    if (!isNum(val) || val < 0 || val >= it.choices.length) return;
+    chosen = it.choices[val];
+    right = !!chosen.correct;
+  } else {
+    parsed = parseAns(val);
+    if (!parsed || parsed.bad) {
+      elFb.className = 'teach';
+      elFb.textContent = 'Finish typing a number first — then ENTER.';
+      return;
+    }
+    right = Req(parsed, it.ansR);
+  }
+  S.rungs[it.rung] = S.rungs[it.rung] || { n: 0, c: 0 };
+  S.rungs[it.rung].n++;
+  noteRule(it.rule, !right);
+  G.setI++;
+  if (right) {
+    S.rungs[it.rung].c++;
+    S.solved++; S.run++;
+    if (S.run > S.best) S.best = S.run;
+    G.setRight++;
+  } else {
+    S.run = 0;
+  }
+  var moved = adapt(right, it.mode, G.usedHint);
+  if (moved) G.moves.push(moved);
+  saveNow();
+  if (right) {
+    G.state = 'right';
+    G.holdT = 0.95;
+    elFb.className = 'good';
+    elFb.textContent = (G.usedHint ? 'Right — and you found it yourself from the step. '
+                                   : (['Yes.', 'Correct.', 'That is it.', 'Clean.', 'Nice.'])[(rnd() * 5) | 0] + ' ') +
+                       (S.run > 2 ? S.run + ' in a row.' : '');
+    if (it.kind !== 'mc') { elSlot.textContent = Rstr(it.ansR); elPad.classList.add('off'); }
+    else markChoices(it, val);      /* leave the options up so the tick is seen */
+    elHintRow.classList.add('off');
+    sfx.right();
+    if (moved === 'up') { sfx.climb(); levelToast('up'); }
+    paintHead();
+  } else {
+    if (moved === 'down') levelToast('down');
+    startTeach(chosen, parsed);
+  }
+}
+function markChoices(it, chosen) {
+  var kids = elCh.children, i;
+  for (i = 0; i < kids.length; i++) {
+    if (it.choices[i] && it.choices[i].correct) {
+      kids[i].style.borderColor = 'rgba(99,226,168,0.85)';
+      kids[i].style.background = 'rgba(99,226,168,0.16)';
+    } else if (i === chosen) {
+      kids[i].style.borderColor = 'rgba(255,159,110,0.7)';
+    }
+  }
+}
+function levelToast(dir) {
+  var r = rungAt(S.lvl);
+  elFb.className = dir === 'up' ? 'good' : 'teach';
+  elFb.innerHTML = dir === 'up'
+    ? '&#9650; MOVED UP &mdash; rung ' + (S.lvl + 1) + ', ' + r.name.toLowerCase() + '.'
+    : '&#9660; Back to rung ' + (S.lvl + 1) + ' for a bit &mdash; ' + r.name.toLowerCase() + '.';
+}
+
+/* ---------------------------------------------- the teaching, on a miss -- */
+function startTeach(chosen, parsed) {
+  var it = G.it, i, head = null;
+  G.state = 'teach';
+  G.teachI = 0;
+  clearPanel();
+  if (it.kind === 'mc' && chosen && chosen.why) {
+    /* Name what he actually picked. "That is wrong" teaches nothing; "you
+       picked 7x + 2, which is what you get if..." teaches the slip. */
+    head = { t: ruleName(chosen.rule), b: 'You picked <b style="color:var(--fg)">' + chosen.html + '</b>. ' + chosen.why };
+    noteRule(chosen.rule, true);
+  } else if (parsed) {
+    for (i = 0; i < it.traps.length; i++) {
+      if (Req(parsed, it.traps[i].r)) {
+        head = { t: ruleName(it.traps[i].rule), b: it.traps[i].msg };
+        noteRule(it.traps[i].rule, true);
+        break;
+      }
+    }
+  }
+  if (!head) head = { t: ruleName(it.rule), b: ruleTxt(it.rule) };
+  saveNow();
+  pushBlock('<div class="rulehead"><b>' + head.t + '</b><span>' + head.b + '</span></div>');
+  elFb.className = 'teach';
+  elFb.textContent = 'Not this time. Here it is, line by line.';
+  elPad.classList.add('off');
+  elCh.classList.add('off');
+  elHintRow.classList.add('off');
+  elTb.classList.remove('off');
+  sfx.gentle();
+  showStep(0);
+  paintTeachBtn();
+}
+function showStep(i) {
+  var st = G.it.steps[i], j;
+  if (!st) return;
+  for (j = 0; j < G.blocks.length; j++) G.blocks[j] = G.blocks[j].replace('sline now', 'sline');
+  pushBlock('<div class="sline now"><b>' + st.line + '</b><em>' +
+            (st.act ? '<u>' + st.act + '</u> ' : '') + (st.why || '') + '</em></div>');
+}
+function paintTeachBtn() {
+  var last = G.teachI >= G.it.steps.length - 1;
+  elTb.innerHTML = '<button class="btn' + (last ? '' : ' ghost') + '" type="button" data-t="1" style="margin-top:0">' +
+                   (last ? 'GOT IT' : 'NEXT STEP') + '</button>';
+  if (last && G.it.kind !== 'mc') elSlot.textContent = Rstr(G.it.ansR);
+}
+function teachNext() {
+  if (G.state !== 'teach') return;
+  if (G.teachI < G.it.steps.length - 1) {
+    G.teachI++;
+    sfx.step();
+    showStep(G.teachI);
+    paintTeachBtn();
+  } else {
+    nextQuestion();
+  }
+}
+
+/* ============================================================== overlays = */
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+
+function titleScreen() {
+  G.state = 'title';
+  document.body.classList.remove('playing');
+  var r = rungAt(S.lvl);
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>SOLVE</h1>' +
+      '<div class="tagline">Pre-algebra and algebra, eight rungs deep. Nobody picks a level &mdash; it works out where you are by playing, then keeps pushing. Get one wrong and it names the rule you broke and works the whole thing through, one line at a time.</div>' +
+      '<div class="keys">' +
+        '<div>Type the answer<span>Keypad, or the number keys</span></div>' +
+        '<div>Negatives and fractions<span>&minus; key &middot; / key &middot; . key</span></div>' +
+        '<div>Submit<span>ENTER</span></div>' +
+        '<div>Stuck?<span>HINT gives the next step, never the answer</span></div>' +
+        '<div>Pause / mute<span>P or Esc &middot; M</span></div>' +
+      '</div>' +
+      '<div class="note">' + (S.played
+        ? 'Picking up at <b style="color:var(--accent)">rung ' + (S.lvl + 1) + ' &mdash; ' + r.name + '</b> &middot; ' + S.solved + ' solved &middot; best run ' + S.best
+        : 'It starts at the bottom and finds your level in the first few minutes. That is the whole idea.') +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="start">START</button>' +
+        '<button class="btn ghost" data-act="progress">PROGRESS</button>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn ghost" data-act="ladder">THE LADDER</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function ladderScreen() {
+  var rows = '', i;
+  for (i = 0; i < RUNGS.length; i++) {
+    var st = S.rungs[i] || { n: 0, c: 0 };
+    var pct = st.n ? Math.round(100 * st.c / st.n) : 0;
+    rows += '<div class="srow' + (i === S.lvl ? ' cur' : (i > S.lvl ? ' above' : '')) + '">' +
+      '<div class="sn">' + (i + 1) + '. ' + RUNGS[i].name +
+        '<em>' + RUNGS[i].blurb + '</em>' +
+        '<div class="mini"><i style="width:' + pct + '%"></i></div>' +
+      '</div><div class="sp">' + (st.n ? pct + '%' : '&mdash;') + '</div></div>';
+  }
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Eight rungs, low floor, real ceiling</div>' +
+      '<h2>THE LADDER</h2>' +
+      '<div class="slist">' + rows + '</div>' +
+      '<div class="note">You are on rung ' + (S.lvl + 1) + '. There is no way to pick a rung by hand, on purpose &mdash; the game finds it, and every so often it quietly tries you one above to make sure you are not being held back.</div>' +
+      '<div class="btnrow"><button class="btn ghost" data-act="back">BACK</button></div>' +
+    '</div>');
+}
+
+function progressScreen() {
+  var rows = '', i, k;
+  for (i = 0; i < RUNGS.length; i++) {
+    var st = S.rungs[i] || { n: 0, c: 0 };
+    var pct = st.n ? Math.round(100 * st.c / st.n) : 0;
+    rows += '<div class="srow' + (i === S.lvl ? ' cur' : '') + '">' +
+      '<div class="sn">' + (i + 1) + '. ' + RUNGS[i].short +
+        '<em>' + (st.n ? st.c + ' right of ' + st.n + ' tried' : 'not reached yet') + '</em>' +
+        '<div class="mini"><i style="width:' + pct + '%"></i></div>' +
+      '</div><div class="sp">' + (st.n ? pct + '%' : '&mdash;') + '</div></div>';
+  }
+  var weak = [], seen = {};
+  for (k in S.rules) {
+    if (!Object.prototype.hasOwnProperty.call(S.rules, k)) continue;
+    if (!RULES[k] || !S.rules[k] || !S.rules[k].w) continue;
+    weak.push({ k: k, w: S.rules[k].w, n: S.rules[k].n });
+  }
+  weak.sort(function (a, b) { return b.w - a.w; });
+  var chips = '';
+  for (i = 0; i < weak.length && i < 5; i++) {
+    if (seen[weak[i].k]) continue; seen[weak[i].k] = 1;
+    chips += '<b>' + RULES[weak[i].k].name + ' &middot; missed ' + weak[i].w + '&times;</b>';
+  }
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">For the grown-ups</div>' +
+      '<h2>PROGRESS</h2>' +
+      '<div class="grid2">' +
+        '<div class="stat"><b>' + (S.lvl + 1) + '</b><span>Rung now</span></div>' +
+        '<div class="stat"><b>' + S.solved + '</b><span>Solved</span></div>' +
+        '<div class="stat"><b>' + S.best + '</b><span>Best run</span></div>' +
+      '</div>' +
+      '<canvas class="spark" id="spark"></canvas>' +
+      '<div class="note" style="margin-top:4px">Where the level has moved, oldest on the left. Rung ' + (S.lvl + 1) +
+        ' of ' + RUNGS.length + ' right now: <b style="color:var(--accent)">' + rungAt(S.lvl).name + '</b>.</div>' +
+      '<div class="slist">' + rows + '</div>' +
+      (chips ? '<div class="note" style="margin-top:10px">Rules he is dropping most &mdash; these come back more often on purpose:</div><div class="weak">' + chips + '</div>' : '') +
+      '<div class="note">' + S.played + ' questions asked' + (S.hinted ? ', ' + S.hinted + ' with a hint' : '') + '.</div>' +
+      '<div class="btnrow"><button class="btn ghost" data-act="back">BACK</button></div>' +
+    '</div>');
+  drawSpark();
+}
+function drawSpark() {
+  var c = document.getElementById('spark');
+  if (!c) return;
+  var w = c.clientWidth || 300, h = c.clientHeight || 62;
+  var d = Math.min(window.devicePixelRatio || 1, 2);
+  c.width = Math.round(w * d); c.height = Math.round(h * d);
+  var x = c.getContext('2d');
+  if (!x) return;
+  x.setTransform(d, 0, 0, d, 0, 0);
+  x.clearRect(0, 0, w, h);
+  var hist = (Object.prototype.toString.call(S.hist) === '[object Array]' && S.hist.length) ? S.hist : [[0, S.lvl]];
+  var pts = hist.slice();
+  pts.push([S.played, S.lvl]);
+  var pad = 8, iw = w - pad * 2, ih = h - pad * 2, i;
+  var maxN = Math.max(1, pts[pts.length - 1][0]);
+  function px(n) { return pad + (maxN ? (n / maxN) * iw : 0); }
+  function py(l) { return pad + ih - (l / MAX_RUNG) * ih; }
+  x.strokeStyle = 'rgba(234,240,255,0.10)'; x.lineWidth = 1;
+  for (i = 0; i <= MAX_RUNG; i += 2) {
+    x.beginPath(); x.moveTo(pad, py(i) + 0.5); x.lineTo(w - pad, py(i) + 0.5); x.stroke();
+  }
+  x.strokeStyle = '#ffcc4d'; x.lineWidth = 2;
+  x.beginPath();
+  for (i = 0; i < pts.length; i++) {
+    var X = px(pts[i][0]), Y = py(pts[i][1]);
+    if (i === 0) x.moveTo(X, Y);
+    else { x.lineTo(px(pts[i][0]), py(pts[i - 1][1])); x.lineTo(X, Y); }
+  }
+  x.stroke();
+  x.fillStyle = '#6fd8ff';
+  x.beginPath(); x.arc(px(pts[pts.length - 1][0]), py(pts[pts.length - 1][1]), 3.2, 0, 6.284); x.fill();
+}
+
+function setScreen() {
+  G.state = 'pause';
+  S.sets++;
+  var ups = 0, downs = 0, i;
+  for (i = 0; i < G.moves.length; i++) { if (G.moves[i] === 'up') ups++; else downs++; }
+  saveNow();
+  var note = ups && !downs ? 'You moved up a rung. Harder from here.'
+    : (downs && !ups ? 'Dropped back a rung to steady it. That is the game working, not you failing.'
+    : (ups && downs ? 'The level moved around a bit — it is still settling.'
+    : 'Level held steady.'));
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Set of ' + SET_LEN + '</div>' +
+      '<h2>' + G.setRight + ' OF ' + SET_LEN + '</h2>' +
+      '<div class="grid2">' +
+        '<div class="stat"><b>' + (S.lvl + 1) + '</b><span>Rung</span></div>' +
+        '<div class="stat"><b>' + S.solved + '</b><span>Solved</span></div>' +
+        '<div class="stat"><b>' + S.best + '</b><span>Best run</span></div>' +
+      '</div>' +
+      '<div class="tagline" style="margin-top:10px">' + rungAt(S.lvl).name + ' &mdash; ' + note + '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="again">KEEP GOING</button>' +
+        '<button class="btn ghost" data-act="progress">PROGRESS</button>' +
+      '</div>' +
+      '<div class="btnrow"><button class="btn ghost" data-act="title">MENU</button></div>' +
+    '</div>');
+}
+
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="tagline" style="margin-top:10px">Rung ' + (S.lvl + 1) + ' &mdash; ' + rungAt(S.lvl).name + '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="progress">PROGRESS</button>' +
+      '</div>' +
+      '<div class="btnrow"><button class="btn ghost" data-act="title">MENU</button></div>' +
+    '</div>');
+}
+
+overlay.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!b) return;
+  initAudio();
+  var act = b.getAttribute('data-act');
+  if (act === 'start' || act === 'again') { startPlay(act === 'again'); return; }
+  if (act === 'progress') { G.prevState = G.prevState || G.state; progressScreen(); return; }
+  if (act === 'ladder') { G.prevState = G.prevState || G.state; ladderScreen(); return; }
+  if (act === 'back') { backFromInfo(); return; }
+  if (act === 'resume') { resumePlay(); return; }
+  if (act === 'title') { G.prevState = null; titleScreen(); return; }
+});
+function backFromInfo() {
+  var p = G.prevState; G.prevState = null;
+  if (p === 'title' || p === null || p === undefined) { titleScreen(); return; }
+  if (G.setI >= SET_LEN) { setScreen(); return; }
+  resumePlay();
+}
+function startPlay(continueSet) {
+  hideOverlay();
+  document.body.classList.add('playing');
+  G.prevState = null;
+  G.setI = 0; G.setRight = 0; G.moves = [];
+  if (!continueSet) { /* fresh sitting */ }
+  nextQuestion();
+  setTimeout(resize, 0);
+}
+function resumePlay() {
+  hideOverlay();
+  document.body.classList.add('playing');
+  G.prevState = null;
+  if (G.pendingNext || !G.it) { G.pendingNext = false; nextQuestion(); setTimeout(resize, 0); return; }
+  if (G.state === 'pause') G.state = G.pausedFrom || 'ask';
+  G.pausedFrom = null;
+  if (G.state === 'teach') paintTeachBtn();
+  setTimeout(resize, 0);
+}
+function togglePause() {
+  if (G.state === 'ask' || G.state === 'right' || G.state === 'teach') {
+    if (G.state === 'right') G.pendingNext = true;
+    G.pausedFrom = (G.state === 'right') ? 'ask' : G.state;
+    G.prevState = null;
+    G.state = 'pause';
+    pauseScreen();
+  } else if (G.state === 'pause' && overlay.querySelector('[data-act="resume"]')) resumePlay();
+}
+
+/* ================================================================ input == */
+document.getElementById('menuBtn').addEventListener('click', function () {
+  initAudio();
+  if (G.state === 'right') G.pendingNext = true;
+  G.pausedFrom = (G.state === 'right') ? 'ask' : G.state;
+  G.prevState = null;
+  G.state = 'pause';
+  pauseScreen();
+});
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { initAudio(); togglePause(); });
+
+window.addEventListener('keydown', function (e) {
+  var k = e.key;
+  if (k === 'm' || k === 'M') { initAudio(); setMuted(!muted); return; }
+  if (G.state === 'title') {
+    if (k === 'Enter' || k === ' ') { e.preventDefault(); startPlay(false); }
+    return;
+  }
+  if (k === 'Escape' || k === 'p' || k === 'P') { e.preventDefault(); togglePause(); return; }
+  if (G.state === 'pause') return;
+  initAudio();
+  if (G.state === 'teach') { if (k === 'Enter' || k === ' ') { e.preventDefault(); teachNext(); } return; }
+  if (G.state === 'right') { if (k === 'Enter' || k === ' ') { e.preventDefault(); nextQuestion(); } return; }
+  if (G.state !== 'ask' || !G.it) return;
+  if (k === 'h' || k === 'H') { e.preventDefault(); giveHint(); return; }
+  if (G.it.kind === 'mc') {
+    var n = parseInt(k, 10);
+    if (n >= 1 && n <= G.it.choices.length) { e.preventDefault(); submit(n - 1); }
+    return;
+  }
+  if (/^[0-9]$/.test(k)) { e.preventDefault(); pressKey(k); }
+  else if (k === '-') { e.preventDefault(); pressKey('neg'); }
+  else if (k === '.') { e.preventDefault(); pressKey('dot'); }
+  else if (k === '/') { e.preventDefault(); pressKey('sl'); }
+  else if (k === 'Backspace') { e.preventDefault(); pressKey('del'); }
+  else if (k === 'Enter') { e.preventDefault(); pressKey('ok'); }
+}, false);
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+/* gamepad: dpad walks the pad, A presses, B deletes, Start pauses */
+var padPrev = {};
+function pollPad() {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null, i;
+  for (i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  function btn(n) { return !!(p.buttons[n] && p.buttons[n].pressed); }
+  function edge(n) { var v = btn(n), was = padPrev[n]; padPrev[n] = v; return v && !was; }
+  var ax = p.axes && p.axes.length ? p.axes[0] : 0;
+  var ay = p.axes && p.axes.length > 1 ? p.axes[1] : 0;
+  var l = edge(14) || (ax < -0.6 && !padPrev.lx), r = edge(15) || (ax > 0.6 && !padPrev.rx);
+  var u = edge(12) || (ay < -0.6 && !padPrev.uy), dn = edge(13) || (ay > 0.6 && !padPrev.dy);
+  padPrev.lx = ax < -0.6; padPrev.rx = ax > 0.6; padPrev.uy = ay < -0.6; padPrev.dy = ay > 0.6;
+  if (G.state === 'title') { if (edge(0)) startPlay(false); return; }
+  if (edge(9)) { togglePause(); return; }
+  if (G.state === 'teach') { if (edge(0)) teachNext(); return; }
+  if (G.state === 'right') { if (edge(0)) nextQuestion(); return; }
+  if (G.state !== 'ask' || !G.it) return;
+  if (edge(3)) { giveHint(); return; }
+  if (G.it.kind === 'mc') {
+    if (l || u) G.padSel = (G.padSel <= 0 ? G.it.choices.length : G.padSel) - 1;
+    if (r || dn) G.padSel = (G.padSel + 1) % G.it.choices.length;
+    if (l || r || u || dn) highlightPad();
+    if (edge(0) && G.padSel >= 0) submit(G.padSel);
+    return;
+  }
+  if (G.padSel < 0) G.padSel = 0;
+  if (l) G.padSel = (G.padSel + PAD_KEYS.length - 1) % PAD_KEYS.length;
+  if (r) G.padSel = (G.padSel + 1) % PAD_KEYS.length;
+  if (u) G.padSel = (G.padSel + PAD_KEYS.length - 3) % PAD_KEYS.length;
+  if (dn) G.padSel = (G.padSel + 3) % PAD_KEYS.length;
+  if (l || r || u || dn) highlightPad();
+  if (edge(0)) pressKey(PAD_KEYS[G.padSel]);
+  if (edge(1)) pressKey('del');
+}
+function highlightPad() {
+  var kids = elPad.children, i;
+  for (i = 0; i < kids.length; i++) kids[i].classList.toggle('sel', i === G.padSel);
+  var chs = elCh.children;
+  for (i = 0; i < chs.length; i++) chs[i].classList.toggle('sel', i === G.padSel);
+}
+
+window.addEventListener('blur', function () {
+  if (G.state === 'ask' || G.state === 'right' || G.state === 'teach') togglePause();
+});
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && (G.state === 'ask' || G.state === 'right' || G.state === 'teach')) togglePause();
+});
+
+/* ================================================================== loop = */
+var lastT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  pollPad();
+  stepBg(dt);
+  drawBg();
+  if (G.state === 'right') {
+    G.holdT -= dt;
+    if (G.holdT <= 0) nextQuestion();
+  }
+}
+
+/* ================================================================== boot = */
+setMuted(muted);
+titleScreen();
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+window.requestAnimationFrame(frame);
+
+/* Test hooks.  The content audit and the ladder simulation drive these — the
+   real generators and the real adapt(), never a copy. */
+window.SOLVE_TEST = {
+  marker: SOLVE_MARKER,
+  RUNGS: RUNGS, RULES: RULES, MAX_RUNG: MAX_RUNG, SET_LEN: SET_LEN,
+  R: R, Rstr: Rstr, Req: Req, Radd: Radd, Rsub: Rsub, Rmul: Rmul, Rdiv: Rdiv,
+  parseAns: parseAns, setRandom: setRandom,
+  generate: generate, nextItemSpec: nextItemSpec, buildHints: buildHints,
+  adapt: adapt, promote: promote, demote: demote, reviewRung: reviewRung, readyToClimb: readyToClimb,
+  freshSave: freshSave, sanitize: sanitize,
+  state: function () { return S; },
+  setState: function (o) { S = o; },
+  game: function () { return G; },
+  submit: function (v) { return submit(v); },
+  press: function (k) { return pressKey(k); },
+  /* Put a specific generated item on screen through the real paint path, so a
+     scripted test can reach a rung's rarer shapes without waiting for one. */
+  inject: function (it) {
+    it.hints = buildHints(it);
+    if (it.mode === undefined) it.mode = 'level';
+    G.it = it; G.entry = ''; G.hintI = 0; G.usedHint = false; G.teachI = 0; G.padSel = -1;
+    G.state = 'ask';
+    paintQuestion();
+    return it;
+  },
+  /* The ladder rig tunes the REAL constants — nothing is tuned on a copy. */
+  tune: function (o) {
+    var i;
+    o = o || {};
+    if (isNum(o.recentWindow)) RECENT_WINDOW = o.recentWindow;
+    if (isNum(o.demoteMisses)) DEMOTE_MISSES = o.demoteMisses;
+    if (isNum(o.promoteWin)) PROMOTE_WIN = o.promoteWin;
+    if (isNum(o.probeEvery)) PROBE_EVERY = o.probeEvery;
+    if (isNum(o.reviewChance)) REVIEW_CHANCE = o.reviewChance;
+    if (isNum(o.gate)) for (i = 0; i < RUNGS.length; i++) RUNGS[i].gate = o.gate + (RUNGS[i].mc ? 1 : 0);
+    if (isNum(o.probeHits)) for (i = 0; i < RUNGS.length; i++) RUNGS[i].probeHits = o.probeHits + (RUNGS[i].mc ? 1 : 0);
+    return { RECENT_WINDOW: RECENT_WINDOW, DEMOTE_MISSES: DEMOTE_MISSES, PROMOTE_WIN: PROMOTE_WIN,
+             PROBE_EVERY: PROBE_EVERY, REVIEW_CHANCE: REVIEW_CHANCE,
+             gates: RUNGS.map(function (r) { return r.gate; }),
+             probeHits: RUNGS.map(function (r) { return r.probeHits; }) };
+  }
+};
+</script>
+</body>
+</html>

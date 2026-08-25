@@ -1,0 +1,2341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Ember</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="A precision platformer. Coyote time, wall jumps and a dash — twenty-two single-screen rooms.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; overscroll-behavior: none;
+    background: #0b0f1e;
+    color: #fff;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  #stage {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at 50% -10%, #182052 0%, #0b0f1e 62%);
+  }
+  canvas#c {
+    display: block;
+    image-rendering: auto;
+    box-shadow: 0 0 0 1px rgba(255,204,77,0.14), 0 24px 70px rgba(0,0,0,0.6);
+    border-radius: 4px;
+  }
+
+  /* ---------- overlays ---------- */
+  .ov {
+    position: fixed; inset: 0; z-index: 40;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: 18px;
+    overflow-y: auto;
+    background: rgba(6,9,20,0.86);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .ov.show { display: flex; }
+  .card {
+    width: min(520px, 100%);
+    margin: auto;
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+    border: 1px solid rgba(255,204,77,0.28);
+    border-radius: 18px;
+    padding: clamp(18px, 4vw, 30px);
+    text-align: center;
+    box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+  }
+  .card h1 {
+    margin: 0 0 2px;
+    font-size: clamp(38px, 12vw, 66px);
+    font-weight: 800; letter-spacing: 0.16em;
+    color: #ffcc4d;
+    text-shadow: 0 0 26px rgba(255,204,77,0.45);
+  }
+  .card h2 {
+    margin: 0 0 12px; font-size: clamp(19px, 5vw, 26px);
+    font-weight: 700; letter-spacing: 0.06em; color: #ffcc4d;
+  }
+  .sub {
+    margin: 0 0 18px; font-size: 11px; letter-spacing: 0.3em;
+    text-transform: uppercase; color: rgba(255,255,255,0.5);
+  }
+  .keys {
+    display: grid; gap: 7px 14px; margin: 0 0 18px;
+    grid-template-columns: auto auto; justify-content: center;
+    font-size: 13px; color: rgba(255,255,255,0.72); text-align: left;
+  }
+  .keys b { color: #ffcc4d; font-weight: 600; white-space: nowrap; }
+  .btnrow { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+  button.b {
+    font: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #0b0f1e; background: #ffcc4d;
+    border: none; border-radius: 10px;
+    padding: 0 20px; min-height: 46px; min-width: 116px;
+    cursor: pointer;
+    transition: transform .12s ease, filter .12s ease;
+  }
+  button.b.ghost { background: rgba(255,255,255,0.08); color: #ffcc4d; border: 1px solid rgba(255,204,77,0.35); }
+  button.b:hover { transform: translateY(-2px); filter: brightness(1.08); }
+  button.b:active { transform: translateY(0); }
+
+  .stats { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 0 0 18px; }
+  .stat {
+    min-width: 92px; padding: 10px 12px; border-radius: 12px;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09);
+  }
+  .stat .v { font-size: 22px; font-weight: 800; color: #ffcc4d; line-height: 1.15; }
+  .stat .l { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-top: 3px; }
+
+  /* level select */
+  #selGrid {
+    display: grid; gap: 8px; margin: 0 0 18px;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  }
+  .lv {
+    position: relative;
+    min-height: 56px; border-radius: 10px; cursor: pointer;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #fff; font: inherit; font-weight: 700; font-size: 15px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    transition: transform .12s ease, border-color .12s ease, background .12s ease;
+  }
+  .lv:hover:not(.lock) { transform: translateY(-2px); border-color: #ffcc4d; background: rgba(255,204,77,0.12); }
+  .lv.lock { opacity: 0.32; cursor: not-allowed; }
+  .lv .t { font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.55); letter-spacing: 0.04em; }
+  .lv .e { position: absolute; top: 3px; right: 5px; font-size: 10px; color: #ffcc4d; }
+  .lv.done { border-color: rgba(255,204,77,0.45); }
+
+  .note { font-size: 11px; color: rgba(255,255,255,0.42); line-height: 1.6; margin: 14px 0 0; }
+
+  /* ---------- touch controls ---------- */
+  #touch { position: fixed; inset: 0; z-index: 30; pointer-events: none; display: none; }
+  body.touch #touch { display: block; }
+  body.forcetouch #touch { display: block; }
+  /* Touch controls sit at the screen edges and this page is viewport-fit=cover,
+     so raw px offsets put the D-pad under the home indicator and the notch in
+     landscape. Offsets below are wrapped in env(safe-area-inset-*) per
+     GAME-RULES 4; buttons keep their relative spacing via calc(). */
+  .pbtn {
+    position: absolute; pointer-events: auto;
+    width: 62px; height: 62px; min-width: 44px; min-height: 44px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,204,77,0.30);
+    color: #ffcc4d;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 800; letter-spacing: 0.04em;
+    backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  }
+  .pbtn.on { background: rgba(255,204,77,0.34); }
+  .pbtn.round { border-radius: 50%; width: 74px; height: 74px; font-size: 13px; }
+  #bLeft  { left: max(12px, env(safe-area-inset-left));  bottom: calc(84px + env(safe-area-inset-bottom)); }
+  #bRight { left: calc(84px + env(safe-area-inset-left));  bottom: calc(84px + env(safe-area-inset-bottom)); }
+  #bDown  { left: calc(48px + env(safe-area-inset-left));  bottom: max(14px, env(safe-area-inset-bottom)); }
+  #bUp    { left: calc(48px + env(safe-area-inset-left));  bottom: calc(154px + env(safe-area-inset-bottom)); }
+  #bJump  { right: max(14px, env(safe-area-inset-right)); bottom: max(20px, env(safe-area-inset-bottom)); }
+  #bDash  { right: calc(100px + env(safe-area-inset-right)); bottom: calc(74px + env(safe-area-inset-bottom)); }
+  #bPause { right: max(14px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); width: 46px; height: 46px; font-size: 15px; }
+  #bRetry { right: calc(70px + env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); width: 46px; height: 46px; font-size: 15px; }
+  /* landscape: tuck them into the corners */
+  @media (orientation: landscape) and (max-height: 520px) {
+    #bLeft  { bottom: calc(66px + env(safe-area-inset-bottom)); } #bRight { bottom: calc(66px + env(safe-area-inset-bottom)); }
+    #bUp { bottom: calc(132px + env(safe-area-inset-bottom)); } #bDown { bottom: max(6px, env(safe-area-inset-bottom)); }
+    .pbtn { width: 56px; height: 56px; }
+    .pbtn.round { width: 66px; height: 66px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage"><canvas id="c"></canvas></div>
+
+<!-- touch pad: always in the DOM so it can be driven programmatically; hidden unless touch -->
+<div id="touch">
+  <div class="pbtn" id="bLeft"  data-k="left">&#9664;</div>
+  <div class="pbtn" id="bRight" data-k="right">&#9654;</div>
+  <div class="pbtn" id="bUp"    data-k="up">&#9650;</div>
+  <div class="pbtn" id="bDown"  data-k="down">&#9660;</div>
+  <div class="pbtn round" id="bJump" data-k="jump">JUMP</div>
+  <div class="pbtn round" id="bDash" data-k="dash">DASH</div>
+  <div class="pbtn" id="bPause" data-k="pause">II</div>
+  <div class="pbtn" id="bRetry" data-k="retry">&#8635;</div>
+</div>
+
+<!-- ---------- TITLE ---------- -->
+<div class="ov show" id="ovTitle">
+  <div class="card">
+    <h1>EMBER</h1>
+    <p class="sub">Twenty-two rooms &middot; one spark</p>
+    <div class="keys">
+      <b>Move</b><span>Arrows / WASD / stick</span>
+      <b>Jump</b><span>Space, Z, Up or A</span>
+      <b>Dash</b><span>Shift, X, C or X&nbsp;/&nbsp;RT</span>
+      <b>Retry</b><span>R</span>
+      <b>Pause</b><span>P or Esc</span>
+    </div>
+    <div class="btnrow">
+      <button class="b" id="btnPlay">Play</button>
+      <button class="b ghost" id="btnSelect">Rooms</button>
+      <button class="b ghost" id="btnMute">Sound: on</button>
+    </div>
+    <p class="note">One dash in the air, refilled when you land. You can jump a moment after
+      walking off a ledge, and a jump pressed just before you land still fires. Slide down a wall
+      and jump to kick off it.</p>
+  </div>
+</div>
+
+<!-- ---------- LEVEL SELECT ---------- -->
+<div class="ov" id="ovSelect">
+  <div class="card">
+    <h2>ROOMS</h2>
+    <div id="selGrid"></div>
+    <div class="btnrow">
+      <button class="b ghost" id="btnSelBack">Back</button>
+      <button class="b ghost" id="btnWipe">Erase data</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- PAUSE ---------- -->
+<div class="ov" id="ovPause">
+  <div class="card">
+    <h2>PAUSED</h2>
+    <div class="stats" id="pauseStats"></div>
+    <div class="btnrow">
+      <button class="b" id="btnResume">Resume</button>
+      <button class="b ghost" id="btnRetry2">Retry</button>
+      <button class="b ghost" id="btnMute2">Sound</button>
+      <button class="b ghost" id="btnQuit">Rooms</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- COMPLETE ---------- -->
+<div class="ov" id="ovDone">
+  <div class="card">
+    <h1>CLEARED</h1>
+    <p class="sub">Every room, every wall, every gap</p>
+    <div class="stats" id="doneStats"></div>
+    <div class="btnrow">
+      <button class="b" id="btnAgain">Play again</button>
+      <button class="b ghost" id="btnDoneSel">Rooms</button>
+    </div>
+    <p class="note" id="doneNote"></p>
+  </div>
+</div>
+
+<script>
+(function () {
+"use strict";
+
+/* ============================================================================
+   EMBER — a single-screen precision platformer.
+   Everything is drawn procedurally; no assets, no dependencies.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- constants */
+const T    = 16;                 // tile size, logical px
+const COLS = 32, ROWS = 18;
+const W = COLS * T, H = ROWS * T;   // 512 x 288 logical
+
+const PW = 11, PH = 14;          // player box
+
+// movement
+const RUN       = 170;
+const G_ACC     = 1500,  G_DEC = 1900;
+const A_ACC     = 1000,  A_DEC = 700;
+const ICE_ACC   = 420,   ICE_DEC = 190;
+
+const GRAV_UP   = 1500, GRAV_DN = 1850, MAX_FALL = 430;
+const JUMP_V    = 440,  JUMP_CUT = 0.42;
+const COYOTE    = 0.10, BUFFER = 0.12;
+
+const WALL_SLIDE = 95;
+const WJ_VX = 250, WJ_VY = 400, WALL_LOCK = 0.16, NO_GRAB = 0.10;
+
+const DASH_SPD = 460, DASH_TIME = 0.15, DASH_FREEZE = 0.055, DASH_END = 0.62;
+const DASH_COOL = 0.12;
+
+const SPRING_V = 560;
+const DEATH_T  = 0.22;           // instant respawn: well under 0.4s
+const CRUMBLE_T = 0.32, CRUMBLE_BACK = 2.2;
+
+const STEP = 1 / 120;            // fixed physics step
+
+const SKEY = "overclock.ember.v1";
+
+/* --------------------------------------------------------------- level data
+   LEGEND
+     .  or space  empty
+     #            solid block
+     %            solid block, but slippery (ice levels use the level flag too)
+     =            one-way platform  (stand on it, jump up through it, hold Down+Jump to drop)
+     ~            crumbling platform (breaks a third of a second after you touch it)
+     ^ v < >      spikes, pointing up / down / left / right
+     S            spring
+     P            player spawn
+     E            exit portal
+     *            the ember
+     1-9          moving platform: the SAME digit appears exactly twice, marking
+                  the two ends of its path. It starts at the first one.
+     A-D F-H      sawblade on a path: same letter twice = the two ends of its run.
+     @            sawblade, fixed in place
+   Optional per-level keys: pw {digit: width in tiles}, ps {digit or letter: speed},
+   sr {letter: radius}, ice true.
+---------------------------------------------------------------------------- */
+const LEVELS = [
+{ name: "First Light", hint: "Arrows or WASD to run. Space to jump.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..........*...................#",
+"#..............................#",
+"#..............................#",
+"#.........#####................#",
+"#..............................#",
+"#..P.....................E.....#",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "Mind the Gap", hint: "You still have a moment to jump after leaving a ledge.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............*...............#",
+"#..............................#",
+"#..............................#",
+"#............######............#",
+"#..............................#",
+"#..P........................E..#",
+"##########^^^^#########^^^######",
+"################################",
+"################################"]},
+
+{ name: "Low Ceiling", hint: "Let go of jump early and you rise less.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............*...............#",
+"#........############..........#",
+"#........vvvvvvvvvvvv..........#",
+"#.......................##.....#",
+"#..............................#",
+"#..P........#....#.......E.....#",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "Bounce", hint: "Springs throw you higher than any jump.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..*...........................#",
+"#######..................E.....#",
+"#....................###########",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..P.....S.........S...........#",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "Through", hint: "Thin platforms let you jump up through them. Down + jump drops you.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#....................E.........#",
+"#..*.............==========....#",
+"#.====.........................#",
+"#..............................#",
+"#......========................#",
+"#..............................#",
+"#..............========........#",
+"#..............................#",
+"#..............................#",
+"#......========................#",
+"#..............................#",
+"#..P...........................#",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "The Chimney", hint: "Press into a wall to slide. Jump to kick off it.", map: [
+"################################",
+"#..........*..........E........#",
+"#.........#...##################",
+"#.........#...#................#",
+"#.........#...#................#",
+"#.........#...#................#",
+"#.........#...#................#",
+"#.........#...#................#",
+"#.........#...#................#",
+"#.........#...#................#",
+"#.........#...#................#",
+"#.........#...#................#",
+"#.........#...#................#",
+"#.........#...#................#",
+"#.........#.P.#................#",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "Kick Off", hint: "Climb the shaft, then take the ledges right.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#........#####.................#",
+"#...............#####..........#",
+"#...##.....................E...#",
+"#...##..................########",
+"#...##.*.......................#",
+"#...##.........................#",
+"#...##.........................#",
+"#...##.........................#",
+"#...##.........................#",
+"#...##.........................#",
+"#...##.........................#",
+"#...........P..................#",
+"#################^^^^^^^^^^^^^^#",
+"################################",
+"################################"]},
+
+{ name: "Both Sides", hint: "Left wall, right wall, left wall.", map: [
+"################################",
+"#........................*.....#",
+"#.....................##########",
+"#..............................#",
+"#..........#########...........#",
+"#..........#.......#...........#",
+"#..........#.......#......E....#",
+"#..........#.......#############",
+"#..........#.......#...........#",
+"#..........#.......#...........#",
+"#..........#.......#...........#",
+"#..........#.......#...........#",
+"#..........#.......#...........#",
+"#..........#.......#...........#",
+"#..P.......#.......#...........#",
+"###########^^^^^^^^#############",
+"################################",
+"################################"]},
+
+{ name: "Overclock", hint: "Shift or X to dash. One in the air, back when you land.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............*...............#",
+"#..............................#",
+"#..............................#",
+"#..P.....................E.....#",
+"##########.............#########",
+"##########^^^^^^^^^^^^^#########",
+"################################",
+"################################"]},
+
+{ name: "Skyward", hint: "Dash straight up to reach what a jump cannot.", map: [
+"################################",
+"#..*...........................#",
+"#####..........................#",
+"#..............................#",
+"#..........................E...#",
+"#.....................##########",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..P...........................#",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "Angles", hint: "Dash goes eight ways. Hold a direction as you press it.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............*...............#",
+"#..............................#",
+"#.......................E......#",
+"#.....................##########",
+"#..............................#",
+"#..............................#",
+"#.........#####................#",
+"#..............................#",
+"#..P...........................#",
+"########^^^^^^^^^^^^^^^^^^^^^^^#",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "Fragile", hint: "Those cracked slabs will not hold you long.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#.....................*........#",
+"#..............................#",
+"#....................~~~.......#",
+"#..............................#",
+"#..............~~~.............#",
+"#..............................#",
+"#........~~~...................#",
+"#..............................#",
+"#..........................E...#",
+"#..P...................#########",
+"#####^^^^^^^^^^^^^^^^^^^########",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "Collapse", hint: "Land, leave. Dash if the floor runs out.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#.......~~~~........~~~~.......#",
+"#..............*...............#",
+"#..............................#",
+"#..............................#",
+"#...~~~~..........~~~~.........#",
+"#..............................#",
+"#..............................#",
+"#..P.......................E...#",
+"#####^^^^^^^^^^^^^^^^^^^^^######",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "Ferry", hint: "Ride it. Do not out-run it.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............*...............#",
+"#..............................#",
+"#..............................#",
+"#.......1............1.........#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..P.......................E...#",
+"#######^^^^^^^^^^^^^^^^^^^######",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "Drift", hint: "Two ferries, and a low roof between them.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#....................*.........#",
+"#..............................#",
+"#.......1.......1..............#",
+"#..............................#",
+"#....vvvvvvvvvvvvvvvvvv........#",
+"#..............................#",
+"#....2..................2......#",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..P.......................E...#",
+"#####^^^^^^^^^^^^^^^^^^^^^^####",
+"################################",
+"################################",
+"################################"], ps: { "1": 52, "2": 38 } },
+
+{ name: "Teeth", hint: "Saws do not move. You do.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#..............................#",
+"#..............*...............#",
+"#..........#########...........#",
+"#..............................#",
+"#....@..........@.........@....#",
+"#..............................#",
+"#####........................###",
+"#..............................#",
+"#.......@..........@...........#",
+"#..............................#",
+"#..P.......................E...#",
+"####^^^^^^^^^^^^^^^^^^^^^^^^####",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "Patrol", hint: "Read the pattern before you commit.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#....A....................A....#",
+"#..............................#",
+"#..............*...............#",
+"#..........########............#",
+"#..............................#",
+"#....B..................B......#",
+"#..............................#",
+"#..............................#",
+"#....C..............C..........#",
+"#..............................#",
+"#..P.......................E...#",
+"####^^^^^^^^^^^^^^^^^^^^^^^^####",
+"################################",
+"################################",
+"################################"], ps: { A: 78, B: 62, C: 92 } },
+
+{ name: "Black Ice", hint: "No grip. Plan your stops.", ice: true, map: [
+"################################",
+"################################",
+"#..............................#",
+"#..............................#",
+"#..........*...................#",
+"#..........................E...#",
+"#.......................########",
+"#..............................#",
+"#.........########.............#",
+"#..............................#",
+"#..............................#",
+"#....######....................#",
+"#..............................#",
+"#..P...........................#",
+"####^^^^^^^^^^^^^^^^^^^^^^^^^^^#",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "Needle", hint: "Wall, saw, wall.", map: [
+"################################",
+"#..........#.......#...........#",
+"#....*.....#.......#...........#",
+"#..........#.......#......E....#",
+"#..........#...A...#############",
+"#..........#.......#...........#",
+"#..........#.......#...........#",
+"#..........#.......#...........#",
+"#..........#...A...#...........#",
+"#..........#.......#...........#",
+"#..........#.......#...........#",
+"#..........#.......#...........#",
+"#..........#.......#...........#",
+"#..........#.......#...........#",
+"#..P.......#.......#...........#",
+"###########^^^^^^^^#############",
+"################################",
+"################################"], ps: { A: 58 }, sr: { A: 8 } },
+
+{ name: "Freefall", hint: "Nothing here stays put.", map: [
+"################################",
+"#..............................#",
+"#..............................#",
+"#..............*...............#",
+"#..............................#",
+"#.....~~~~.........~~~~........#",
+"#..............................#",
+"#..............................#",
+"#.......1.............1........#",
+"#..............................#",
+"#..............................#",
+"#..........@...................#",
+"#..............................#",
+"#..P..S....................E...#",
+"####^^^^^^^^^^^^^^^^^^^^^^^^####",
+"################################",
+"################################",
+"################################"]},
+
+{ name: "The Gauntlet", hint: "Everything you know, in one room.", map: [
+"################################",
+"#..............................#",
+"#..........................*...#",
+"#.....................##########",
+"#..............................#",
+"#........~~~~..................#",
+"#..............................#",
+"#....B.............B...........#",
+"#..............................#",
+"#..#####.......................#",
+"#..............1...........1...#",
+"#..............................#",
+"#.........................E....#",
+"#..P..................##########",
+"#####^^^^^^^^^^^^^^^^^^#########",
+"################################",
+"################################",
+"################################"], ps: { B: 70, "1": 46 } },
+
+{ name: "Ember", hint: "Last room. Go get it.", map: [
+"################################",
+"#........*.....................#",
+"#.......###....................#",
+"#..............................#",
+"#..............................#",
+"#...##..............@..........#",
+"#.......~~~~...................#",
+"#..............................#",
+"#.....A..............A.........#",
+"#..............................#",
+"#..........#####...............#",
+"#..............................#",
+"#..............2..........2....#",
+"#..............................#",
+"#..P.S.....................E...#",
+"####^^^^^^^^^^^^^^^^^^^^^^^^^^^#",
+"################################",
+"################################"], ps: { A: 66, "2": 50 } }
+];
+
+/* ------------------------------------------------------------------ storage */
+function loadSave() {
+  const d = { best: {}, deaths: {}, embers: {}, max: 0, muted: false, total: null };
+  try {
+    const raw = localStorage.getItem(SKEY);
+    if (raw) Object.assign(d, JSON.parse(raw));
+  } catch (e) { /* storage unavailable — play without it */ }
+  if (typeof d.best   !== "object" || !d.best)   d.best = {};
+  if (typeof d.deaths !== "object" || !d.deaths) d.deaths = {};
+  if (typeof d.embers !== "object" || !d.embers) d.embers = {};
+  return d;
+}
+let save = loadSave();
+function persist() {
+  try { localStorage.setItem(SKEY, JSON.stringify(save)); } catch (e) { /* ignore */ }
+}
+
+/* -------------------------------------------------------------------- audio */
+const Audio2 = {
+  ctx: null, master: null, muted: save.muted === true,
+  boot() {
+    if (this.ctx) { if (this.ctx.state === "suspended") this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try {
+      this.ctx = new AC();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = this.muted ? 0 : 0.32;
+      this.master.connect(this.ctx.destination);
+    } catch (e) { this.ctx = null; }
+  },
+  setMute(m) {
+    this.muted = m; save.muted = m; persist();
+    if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 0.32, this.ctx.currentTime, 0.01);
+  },
+  tone(type, f0, f1, dur, vol, delay) {
+    if (!this.ctx || this.muted) return;
+    const t0 = this.ctx.currentTime + (delay || 0);
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t0);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  },
+  noise(dur, vol, freq) {
+    if (!this.ctx || this.muted) return;
+    const t0 = this.ctx.currentTime;
+    const n = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const s = this.ctx.createBufferSource(); s.buffer = buf;
+    const bp = this.ctx.createBiquadFilter(); bp.type = "bandpass";
+    bp.frequency.value = freq; bp.Q.value = 0.8;
+    const g = this.ctx.createGain(); g.gain.value = vol;
+    s.connect(bp); bp.connect(g); g.connect(this.master);
+    s.start(t0);
+  },
+  jump()    { this.tone("square",   380, 700, 0.10, 0.16); },
+  wall()    { this.tone("square",   300, 560, 0.09, 0.14); },
+  dash()    { this.tone("sawtooth", 880, 160, 0.18, 0.13); this.noise(0.16, 0.09, 1800); },
+  land()    { this.tone("triangle", 190,  90, 0.07, 0.13); },
+  spring()  { this.tone("triangle", 300, 900, 0.14, 0.18); },
+  die()     { this.tone("square",   300,  60, 0.32, 0.17); this.noise(0.22, 0.10, 500); },
+  collect() { this.tone("sine",  880,  880, 0.09, 0.16); this.tone("sine", 1320, 1320, 0.13, 0.14, 0.07); },
+  crumble() { this.noise(0.12, 0.07, 900); },
+  clear()   {
+    [523, 659, 784, 1046].forEach((f, i) => this.tone("triangle", f, f, 0.16, 0.14, i * 0.075));
+  }
+};
+
+/* -------------------------------------------------------------------- input */
+const held = Object.create(null);
+const touchKeys = Object.create(null);
+const KEY_ROLE = {
+  ArrowLeft: "left", KeyA: "left",
+  ArrowRight: "right", KeyD: "right",
+  ArrowUp: "up", KeyW: "up",
+  ArrowDown: "down", KeyS: "down",
+  Space: "jump", KeyZ: "jump", KeyJ: "jump",
+  ShiftLeft: "dash", ShiftRight: "dash", KeyX: "dash", KeyC: "dash", KeyK: "dash",
+  KeyR: "retry", KeyP: "pause", Escape: "pause", Enter: "confirm", KeyM: "mute"
+};
+const roleOn = Object.create(null);   // merged this frame
+const rolePrev = Object.create(null);
+
+window.addEventListener("keydown", function (e) {
+  const role = KEY_ROLE[e.code];
+  if (!role) return;
+  if (role === "up" && held.ArrowUp === undefined) { /* noop */ }
+  e.preventDefault();
+  if (e.repeat) return;
+  held[e.code] = true;
+  Audio2.boot();
+  if (role === "retry") requestRetry();
+  if (role === "pause") togglePause();
+  if (role === "mute")  { Audio2.setMute(!Audio2.muted); syncMuteLabels(); }
+}, { passive: false });
+
+window.addEventListener("keyup", function (e) {
+  if (!KEY_ROLE[e.code]) return;
+  e.preventDefault();
+  held[e.code] = false;
+}, { passive: false });
+
+window.addEventListener("blur", function () {
+  for (const k in held) held[k] = false;
+  for (const k in touchKeys) touchKeys[k] = false;
+});
+
+// touch buttons — pointer events so they can also be driven programmatically
+document.querySelectorAll(".pbtn").forEach(function (el) {
+  const role = el.dataset.k;
+  const down = function (e) {
+    e.preventDefault();
+    Audio2.boot();
+    if (role === "pause") { togglePause(); return; }
+    if (role === "retry") { requestRetry(); return; }
+    touchKeys[role] = true; el.classList.add("on");
+  };
+  const up = function (e) {
+    if (e) e.preventDefault();
+    touchKeys[role] = false; el.classList.remove("on");
+  };
+  el.addEventListener("pointerdown", down);
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+  el.addEventListener("pointerleave", up);
+  el.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+});
+
+let padIdx = -1;
+window.addEventListener("gamepadconnected", function (e) { padIdx = e.gamepad.index; });
+window.addEventListener("gamepaddisconnected", function () { padIdx = -1; });
+
+function pollInput() {
+  for (const r in roleOn) rolePrev[r] = roleOn[r];
+  const cur = { left: false, right: false, up: false, down: false, jump: false, dash: false };
+
+  for (const code in held) {
+    if (!held[code]) continue;
+    const r = KEY_ROLE[code];
+    if (r in cur) cur[r] = true;
+  }
+  for (const r in touchKeys) if (touchKeys[r] && r in cur) cur[r] = true;
+
+  // gamepad
+  if (navigator.getGamepads) {
+    const pads = navigator.getGamepads();
+    for (let i = 0; i < pads.length; i++) {
+      const gp = pads[i];
+      if (!gp || !gp.connected) continue;
+      const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
+      if (ax < -0.35) cur.left = true;
+      if (ax >  0.35) cur.right = true;
+      if (ay < -0.45) cur.up = true;
+      if (ay >  0.45) cur.down = true;
+      const b = gp.buttons;
+      const bp = function (n) { return b[n] && (b[n].pressed || b[n].value > 0.4); };
+      if (bp(12)) cur.up = true;
+      if (bp(13)) cur.down = true;
+      if (bp(14)) cur.left = true;
+      if (bp(15)) cur.right = true;
+      if (bp(0)) cur.jump = true;                 // A
+      if (bp(2) || bp(7) || bp(5)) cur.dash = true; // X, RT, RB
+      if (bp(9) && !rolePrev.padStart) { togglePause(); }
+      roleOn.padStart = bp(9);
+      break;
+    }
+  }
+  for (const r in cur) roleOn[r] = cur[r];
+
+  // Edge flags are latched once per FRAME and consumed by the fixed physics
+  // step, so a single press can never fire twice across sub-steps.
+  edgeJump = roleOn.jump && !rolePrev.jump;
+  edgeDash = roleOn.dash && !rolePrev.dash;
+}
+let edgeJump = false, edgeDash = false;
+function pressed(role) { return roleOn[role] && !rolePrev[role]; }
+
+/* ---------------------------------------------------------- canvas / scaling */
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d", { alpha: false });
+let scale = 1, dpr = 1;
+
+function resize() {
+  const stage = document.getElementById("stage");
+  const availW = stage.clientWidth  - 12;
+  const availH = stage.clientHeight - 12;
+  const isTouch = document.body.classList.contains("touch") || document.body.classList.contains("forcetouch");
+  // leave room for the touch pad in portrait
+  let padH = 0;
+  if (isTouch && availH > availW) padH = Math.min(230, availH * 0.34);
+  const usableH = Math.max(120, availH - padH);
+  scale = Math.min(availW / W, usableH / H);
+  scale = Math.max(scale, 0.35);
+  dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const cssW = Math.round(W * scale), cssH = Math.round(H * scale);
+  canvas.style.width  = cssW + "px";
+  canvas.style.height = cssH + "px";
+  canvas.width  = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  if (isTouch && availH > availW) {
+    canvas.style.marginBottom = Math.round(padH * 0.55) + "px";
+  } else {
+    canvas.style.marginBottom = "0px";
+  }
+  ctx.imageSmoothingEnabled = true;
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 220); });
+
+if (("ontouchstart" in window) || navigator.maxTouchPoints > 0) document.body.classList.add("touch");
+if (/[?&]touch=1/.test(location.search)) document.body.classList.add("forcetouch");
+
+/* ---------------------------------------------------------------- world data */
+const EMPTY = 0, SOLID = 1, ONEWAY = 2, CRUMB = 3;
+const SPIKE_U = 10, SPIKE_D = 11, SPIKE_L = 12, SPIKE_R = 13;
+
+let world = null;
+
+function normaliseMap(rows) {
+  const out = [];
+  for (let y = 0; y < ROWS; y++) {
+    let r = rows[y] !== undefined ? String(rows[y]) : "";
+    r = r.replace(/ /g, ".");
+    if (r.length > COLS) r = r.slice(0, COLS);
+    while (r.length < COLS) r += ".";
+    out.push(r.split(""));
+  }
+  // the frame is always sealed unless the author deliberately put something there
+  for (let x = 0; x < COLS; x++) {
+    if (out[0][x] === ".") out[0][x] = "#";
+    if (out[ROWS - 1][x] === ".") out[ROWS - 1][x] = "#";
+  }
+  for (let y = 0; y < ROWS; y++) {
+    if (out[y][0] === ".") out[y][0] = "#";
+    if (out[y][COLS - 1] === ".") out[y][COLS - 1] = "#";
+  }
+  return out;
+}
+
+function buildWorld(def) {
+  const g = normaliseMap(def.map);
+  const w = {
+    def: def,
+    tile: [],            // ROWS x COLS of type codes
+    spike: [],           // ROWS x COLS of spike codes or 0
+    crumbles: [],
+    springs: [],
+    movers: [],
+    saws: [],
+    ember: null,
+    exit: null,
+    spawn: { x: 3 * T, y: 13 * T },
+    ice: def.ice === true
+  };
+  for (let y = 0; y < ROWS; y++) { w.tile.push(new Array(COLS).fill(EMPTY)); w.spike.push(new Array(COLS).fill(0)); }
+
+  const marks = Object.create(null);
+
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const ch = g[y][x];
+      switch (ch) {
+        case "#": case "%": w.tile[y][x] = SOLID; break;
+        case "=": w.tile[y][x] = ONEWAY; break;
+        case "~":
+          w.tile[y][x] = CRUMB;
+          w.crumbles.push({ x: x, y: y, state: 0, t: 0 });
+          break;
+        case "^": w.spike[y][x] = SPIKE_U; break;
+        case "v": w.spike[y][x] = SPIKE_D; break;
+        case "<": w.spike[y][x] = SPIKE_L; break;
+        case ">": w.spike[y][x] = SPIKE_R; break;
+        case "S": w.springs.push({ x: x * T, y: y * T + T - 7, w: T, h: 7, t: 0 }); break;
+        case "P": w.spawn = { x: x * T + (T - PW) / 2, y: y * T + (T - PH) }; break;
+        case "E": w.exit = { x: x * T - 2, y: y * T - 4, w: T + 4, h: T + 4, cx: x * T + T / 2, cy: y * T + T / 2 }; break;
+        case "*": w.ember = { cx: x * T + T / 2, cy: y * T + T / 2, got: false }; break;
+        default:
+          if (/[1-9]/.test(ch) || /[A-DF-H]/.test(ch)) {
+            (marks[ch] = marks[ch] || []).push({ x: x, y: y });
+          }
+      }
+    }
+  }
+
+  for (const key in marks) {
+    const pts = marks[key];
+    const a = pts[0], b = pts[1] || pts[0];
+    const speed = (def.ps && def.ps[key]) || (/[1-9]/.test(key) ? 45 : 70);
+    if (/[1-9]/.test(key)) {
+      const tw = (def.pw && def.pw[key]) || 3;
+      w.movers.push({
+        ax: a.x * T, ay: a.y * T, bx: b.x * T, by: b.y * T,
+        x: a.x * T, y: a.y * T + 4, w: tw * T, h: 8,
+        dx: 0, dy: 0, p: 0, dir: 1, speed: speed
+      });
+    } else {
+      const r = (def.sr && def.sr[key]) || 9;
+      w.saws.push({
+        ax: a.x * T + T / 2, ay: a.y * T + T / 2,
+        bx: b.x * T + T / 2, by: b.y * T + T / 2,
+        x: a.x * T + T / 2, y: a.y * T + T / 2,
+        r: r, p: 0, dir: 1, speed: speed, spin: Math.random() * 6.28
+      });
+    }
+  }
+  // static saws
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    if (g[y][x] === "@") {
+      w.saws.push({ ax: x * T + T / 2, ay: y * T + T / 2, bx: x * T + T / 2, by: y * T + T / 2,
+        x: x * T + T / 2, y: y * T + T / 2, r: 9, p: 0, dir: 1, speed: 0, spin: Math.random() * 6.28 });
+    }
+  }
+  return w;
+}
+
+function tileAt(x, y) {
+  if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return SOLID;
+  return world.tile[y][x];
+}
+function isBlocking(tx, ty) {
+  const t = tileAt(tx, ty);
+  if (t === SOLID) return true;
+  if (t === CRUMB) {
+    const c = crumbleAt(tx, ty);
+    return !c || c.state !== 2;
+  }
+  return false;
+}
+function crumbleAt(tx, ty) {
+  for (let i = 0; i < world.crumbles.length; i++) {
+    const c = world.crumbles[i];
+    if (c.x === tx && c.y === ty) return c;
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------------- player */
+const P = {
+  x: 0, y: 0, vx: 0, vy: 0,
+  grounded: false, wasGrounded: false,
+  coyote: 0, buffer: 0,
+  jumping: false,
+  face: 1,
+  wall: 0,            // -1 left wall, 1 right wall, 0 none
+  wallTimer: 0,
+  noGrabDir: 0, noGrabT: 0,
+  lockT: 0,           // horizontal input lock after a wall jump
+  dashes: 1, dashT: 0, dashCool: 0, dashDX: 0, dashDY: 0,
+  dead: false, deadT: 0,
+  ridePlat: null,
+  sqX: 1, sqY: 1,
+  trail: []
+};
+
+/* ------------------------------------------------------------------ effects */
+const parts = [];
+function burst(x, y, n, opt) {
+  opt = opt || {};
+  for (let i = 0; i < n; i++) {
+    const a = opt.angle !== undefined ? opt.angle + (Math.random() - 0.5) * (opt.spread || 6.283)
+                                      : Math.random() * 6.283;
+    const sp = (opt.spdMin || 30) + Math.random() * ((opt.spdMax || 160) - (opt.spdMin || 30));
+    parts.push({
+      x: x, y: y,
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      life: (opt.life || 0.5) * (0.6 + Math.random() * 0.7),
+      t: 0,
+      size: (opt.size || 2.4) * (0.6 + Math.random() * 0.9),
+      col: opt.col || ["#ffcc4d", "#ff9a3c", "#ff6b6b"][(Math.random() * 3) | 0],
+      grav: opt.grav === undefined ? 340 : opt.grav,
+      glow: opt.glow !== false
+    });
+  }
+}
+function updateParts(dt) {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.t += dt;
+    if (p.t >= p.life) { parts.splice(i, 1); continue; }
+    p.vy += p.grav * dt;
+    p.vx *= (1 - 1.6 * dt);
+    p.x += p.vx * dt; p.y += p.vy * dt;
+  }
+}
+
+let shake = 0, freeze = 0, flash = 0;
+function addShake(v) { shake = Math.min(9, shake + v); }
+
+/* ------------------------------------------------------------- game control */
+const S_TITLE = "title", S_SELECT = "select", S_PLAY = "play",
+      S_PAUSE = "pause", S_CLEAR = "clear", S_DONE = "done";
+let state = S_TITLE;
+
+let levelIndex = 0;
+let levelTime = 0, runTime = 0, levelDeaths = 0, runDeaths = 0;
+let clearTimer = 0, clearInfo = null;
+let introT = 0;
+let runActive = false;
+
+const ovTitle  = document.getElementById("ovTitle");
+const ovSelect = document.getElementById("ovSelect");
+const ovPause  = document.getElementById("ovPause");
+const ovDone   = document.getElementById("ovDone");
+
+function showOv(el) {
+  [ovTitle, ovSelect, ovPause, ovDone].forEach(function (o) { o.classList.toggle("show", o === el); });
+}
+
+function fmt(t) {
+  if (t === null || t === undefined || !isFinite(t)) return "--";
+  const m = Math.floor(t / 60), s = t - m * 60;
+  if (m > 0) return m + ":" + (s < 10 ? "0" : "") + s.toFixed(2);
+  return s.toFixed(2) + "s";
+}
+
+function loadLevel(i, resetRunStats) {
+  levelIndex = i;
+  world = buildWorld(LEVELS[i]);
+  levelTime = 0;
+  levelDeaths = 0;
+  parts.length = 0;
+  P.trail.length = 0;
+  introT = 0.55;
+  respawn(true);
+  if (resetRunStats) { runTime = 0; runDeaths = 0; }
+  if (save.max < i) { save.max = i; persist(); }
+}
+
+function respawn(silent) {
+  P.x = world.spawn.x; P.y = world.spawn.y;
+  P.vx = 0; P.vy = 0;
+  P.grounded = false; P.wasGrounded = false;
+  P.coyote = 0; P.buffer = 0; P.jumping = false;
+  P.wall = 0; P.wallTimer = 0; P.noGrabDir = 0; P.noGrabT = 0; P.lockT = 0;
+  P.dashes = 1; P.dashT = 0; P.dashCool = 0;
+  P.dead = false; P.deadT = 0;
+  P.ridePlat = null; P.face = 1;
+  P.sqX = 1; P.sqY = 1;
+  P.trail.length = 0;
+  // reset the room's moving parts
+  for (const c of world.crumbles) { c.state = 0; c.t = 0; }
+  for (const m of world.movers) { m.p = 0; m.dir = 1; m.x = m.ax; m.y = m.ay + 4; m.dx = 0; m.dy = 0; }
+  for (const s of world.saws) { s.p = 0; s.dir = 1; s.x = s.ax; s.y = s.ay; }
+  for (const s of world.springs) s.t = 0;
+  if (world.ember) world.ember.got = false;
+  if (!silent) flash = 0.16;
+}
+
+function killPlayer() {
+  if (P.dead) return;
+  P.dead = true; P.deadT = DEATH_T;
+  levelDeaths++; runDeaths++;
+  save.deaths[levelIndex] = (save.deaths[levelIndex] || 0) + 1;
+  persist();
+  burst(P.x + PW / 2, P.y + PH / 2, 26, { spdMin: 60, spdMax: 250, life: 0.55, size: 2.6, grav: 260 });
+  addShake(5);
+  Audio2.die();
+}
+
+function requestRetry() {
+  if (state !== S_PLAY) return;
+  if (!P.dead) killPlayer();
+}
+
+function togglePause() {
+  if (state === S_PLAY) { state = S_PAUSE; showOv(ovPause); renderPauseStats(); }
+  else if (state === S_PAUSE) { state = S_PLAY; showOv(null); }
+}
+
+/* Auto-pause (GAME-RULES 3): a game whose tab stops compositing freezes
+   mid-frame, which reads as a hang rather than a pause. Declared here, in
+   togglePause's own scope, because the state vars are not visible at file
+   scope. Guarded so it can only ever pause an actively-playing game and
+   never toggle back OUT of a pause the player chose. */
+window.addEventListener('blur', function () { if (state === S_PLAY) togglePause(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden && (state === S_PLAY)) togglePause(); });
+
+function renderPauseStats() {
+  const best = save.best[levelIndex];
+  document.getElementById("pauseStats").innerHTML =
+    stat(String(levelIndex + 1) + "/" + LEVELS.length, "Room") +
+    stat(fmt(levelTime), "This try") +
+    stat(best ? fmt(best) : "--", "Best") +
+    stat(String(levelDeaths), "Deaths here") +
+    stat(fmt(runTime), "Run time");
+}
+function stat(v, l) { return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + "</div></div>"; }
+
+function completeLevel() {
+  const prev = save.best[levelIndex];
+  const isBest = prev === undefined || levelTime < prev;
+  if (isBest) save.best[levelIndex] = levelTime;
+  if (world.ember && world.ember.got) save.embers[levelIndex] = true;
+  if (save.max < levelIndex + 1) save.max = levelIndex + 1;
+  persist();
+  clearInfo = { t: levelTime, best: save.best[levelIndex], isBest: isBest, d: levelDeaths };
+  clearTimer = 1.15;
+  state = S_CLEAR;
+  Audio2.clear();
+  burst(world.exit.cx, world.exit.cy, 30, { spdMin: 40, spdMax: 200, life: 0.8, size: 2.6, grav: 120 });
+  flash = 0.22;
+}
+
+function nextLevel() {
+  if (levelIndex + 1 >= LEVELS.length) {
+    state = S_DONE;
+    save.total = (save.total === null || runTime < save.total) ? runTime : save.total;
+    persist();
+    const embers = Object.keys(save.embers).filter(function (k) { return save.embers[k]; }).length;
+    document.getElementById("doneStats").innerHTML =
+      stat(fmt(runTime), "Total time") +
+      stat(String(runDeaths), "Deaths") +
+      stat(embers + "/" + LEVELS.length, "Embers");
+    document.getElementById("doneNote").textContent =
+      embers === LEVELS.length
+        ? "Every ember collected. There is nothing left in here for you."
+        : "You left " + (LEVELS.length - embers) + " ember" + (LEVELS.length - embers === 1 ? "" : "s") + " behind.";
+    showOv(ovDone);
+    runActive = false;
+  } else {
+    loadLevel(levelIndex + 1, false);
+    state = S_PLAY;
+  }
+}
+
+/* ---------------------------------------------------------------- collision */
+function rectHit(ax, ay, aw, ah, bx, by, bw, bh) {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+function moveX(dx) {
+  P.x += dx;
+  const y0 = Math.floor(P.y / T), y1 = Math.floor((P.y + PH - 0.01) / T);
+  if (dx > 0) {
+    const x1 = Math.floor((P.x + PW - 0.01) / T);
+    const x0 = Math.floor(P.x / T);
+    for (let tx = x0; tx <= x1; tx++) {
+      for (let ty = y0; ty <= y1; ty++) {
+        if (isBlocking(tx, ty)) {
+          P.x = tx * T - PW - 0.001; P.vx = 0;
+          touchCrumble(tx, ty);
+          return 1;
+        }
+      }
+    }
+  } else if (dx < 0) {
+    const x0 = Math.floor(P.x / T);
+    const x1 = Math.floor((P.x + PW - 0.01) / T);
+    for (let tx = x1; tx >= x0; tx--) {
+      for (let ty = y0; ty <= y1; ty++) {
+        if (isBlocking(tx, ty)) {
+          P.x = (tx + 1) * T + 0.001; P.vx = 0;
+          touchCrumble(tx, ty);
+          return -1;
+        }
+      }
+    }
+  }
+  // moving platforms
+  for (const m of world.movers) {
+    if (rectHit(P.x, P.y, PW, PH, m.x, m.y, m.w, m.h)) {
+      if (dx > 0) { P.x = m.x - PW - 0.001; P.vx = 0; return 1; }
+      if (dx < 0) { P.x = m.x + m.w + 0.001; P.vx = 0; return -1; }
+    }
+  }
+  return 0;
+}
+
+let dropThrough = 0;
+
+function moveY(dy) {
+  const prevBottom = P.y + PH;
+  P.y += dy;
+  const x0 = Math.floor(P.x / T), x1 = Math.floor((P.x + PW - 0.01) / T);
+  let hit = 0;
+  if (dy > 0) {
+    const y1 = Math.floor((P.y + PH - 0.01) / T);
+    const y0 = Math.floor(P.y / T);
+    outer:
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        let block = isBlocking(tx, ty);
+        if (!block && tileAt(tx, ty) === ONEWAY && dropThrough <= 0) {
+          if (prevBottom <= ty * T + 1.5) block = true;
+        }
+        if (block) {
+          P.y = ty * T - PH - 0.001; P.vy = 0; hit = 1;
+          touchCrumble(tx, ty);
+          break outer;
+        }
+      }
+    }
+  } else if (dy < 0) {
+    const y0 = Math.floor(P.y / T);
+    const y1 = Math.floor((P.y + PH - 0.01) / T);
+    outer2:
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        if (isBlocking(tx, ty)) {
+          P.y = (ty + 1) * T + 0.001; P.vy = 0; hit = -1;
+          touchCrumble(tx, ty);
+          break outer2;
+        }
+      }
+    }
+  }
+  // moving platforms
+  for (const m of world.movers) {
+    if (rectHit(P.x, P.y, PW, PH, m.x, m.y, m.w, m.h)) {
+      if (dy >= 0 && prevBottom <= m.y + Math.abs(m.dy) + 3) {
+        P.y = m.y - PH - 0.001; P.vy = 0; hit = 1; P.ridePlat = m;
+      } else if (dy < 0) {
+        P.y = m.y + m.h + 0.001; P.vy = 0; hit = -1;
+      }
+    }
+  }
+  return hit;
+}
+
+function touchCrumble(tx, ty) {
+  if (tileAt(tx, ty) !== CRUMB) return;
+  const c = crumbleAt(tx, ty);
+  if (c && c.state === 0) { c.state = 1; c.t = CRUMBLE_T; Audio2.crumble(); }
+}
+
+/* -------------------------------------------------------------- world update */
+function updateWorld(dt) {
+  for (const m of world.movers) {
+    const dxT = m.bx - m.ax, dyT = m.by - m.ay;
+    const len = Math.hypot(dxT, dyT) || 1;
+    m.p += m.dir * (m.speed / len) * dt;
+    if (m.p >= 1) { m.p = 1; m.dir = -1; }
+    if (m.p <= 0) { m.p = 0; m.dir = 1; }
+    const nx = m.ax + dxT * m.p, ny = m.ay + dyT * m.p + 4;
+    m.dx = nx - m.x; m.dy = ny - m.y;
+    m.x = nx; m.y = ny;
+  }
+  for (const s of world.saws) {
+    s.spin += dt * 9;
+    if (s.speed > 0) {
+      const dxT = s.bx - s.ax, dyT = s.by - s.ay;
+      const len = Math.hypot(dxT, dyT) || 1;
+      s.p += s.dir * (s.speed / len) * dt;
+      if (s.p >= 1) { s.p = 1; s.dir = -1; }
+      if (s.p <= 0) { s.p = 0; s.dir = 1; }
+      s.x = s.ax + dxT * s.p; s.y = s.ay + dyT * s.p;
+    }
+  }
+  for (const c of world.crumbles) {
+    if (c.state === 1) {
+      c.t -= dt;
+      if (c.t <= 0) {
+        c.state = 2; c.t = CRUMBLE_BACK;
+        burst(c.x * T + T / 2, c.y * T + T / 2, 9, { col: "#7f8bc4", spdMin: 20, spdMax: 90, life: 0.5, size: 2, grav: 420 });
+      }
+    } else if (c.state === 2) {
+      c.t -= dt;
+      if (c.t <= 0) {
+        // only come back if the player is not standing in the space
+        if (!rectHit(P.x, P.y, PW, PH, c.x * T, c.y * T, T, T)) { c.state = 0; c.t = 0; }
+      }
+    }
+  }
+  for (const s of world.springs) if (s.t > 0) s.t -= dt;
+}
+
+/* ------------------------------------------------------------ player physics */
+function updatePlayer(dt) {
+  const iceLevel = world.ice;
+
+  if (P.dead) {
+    P.deadT -= dt;
+    if (P.deadT <= 0) respawn(false);
+    return;
+  }
+
+  // ---- carry with the platform we are standing on
+  if (P.ridePlat) {
+    P.x += P.ridePlat.dx;
+    P.y += P.ridePlat.dy;
+  }
+
+  const wantL = roleOn.left, wantR = roleOn.right;
+  let ix = (wantR ? 1 : 0) - (wantL ? 1 : 0);
+  const iy = (roleOn.down ? 1 : 0) - (roleOn.up ? 1 : 0);
+
+  if (ix !== 0 && P.dashT <= 0) P.face = ix;
+
+  // ---- timers
+  P.coyote  = Math.max(0, P.coyote - dt);
+  P.lockT   = Math.max(0, P.lockT - dt);
+  P.noGrabT = Math.max(0, P.noGrabT - dt);
+  P.dashCool = Math.max(0, P.dashCool - dt);
+  dropThrough = Math.max(0, dropThrough - dt);
+
+  if (pressed("jump")) P.buffer = BUFFER;
+  else P.buffer = Math.max(0, P.buffer - dt);
+
+  // ---- dash start
+  if (pressed("dash") && P.dashes > 0 && P.dashT <= 0 && P.dashCool <= 0) {
+    let dx = ix, dy = iy;
+    if (dx === 0 && dy === 0) { dx = P.face; dy = 0; }
+    const len = Math.hypot(dx, dy) || 1;
+    P.dashDX = dx / len; P.dashDY = dy / len;
+    P.dashT = DASH_TIME;
+    P.dashes--;
+    P.dashCool = DASH_COOL;
+    P.vx = P.dashDX * DASH_SPD;
+    P.vy = P.dashDY * DASH_SPD;
+    freeze = DASH_FREEZE;
+    addShake(2.2);
+    flash = 0.10;
+    Audio2.dash();
+    burst(P.x + PW / 2, P.y + PH / 2, 14, {
+      angle: Math.atan2(-P.dashDY, -P.dashDX), spread: 1.5,
+      spdMin: 60, spdMax: 220, life: 0.35, size: 2.2, grav: 60
+    });
+  }
+
+  // ---- dashing
+  if (P.dashT > 0) {
+    P.dashT -= dt;
+    P.vx = P.dashDX * DASH_SPD;
+    P.vy = P.dashDY * DASH_SPD;
+    if (P.dashT <= 0) {
+      P.vx *= DASH_END;
+      P.vy *= (P.dashDY < 0 ? 0.42 : DASH_END);
+      P.dashT = 0;
+    }
+    P.trail.push({ x: P.x, y: P.y, t: 0 });
+  } else {
+    // ---- horizontal
+    let acc, dec;
+    if (P.grounded) {
+      acc = iceLevel ? ICE_ACC : G_ACC;
+      dec = iceLevel ? ICE_DEC : G_DEC;
+    } else {
+      acc = iceLevel ? ICE_ACC * 1.5 : A_ACC;
+      dec = iceLevel ? ICE_DEC : A_DEC;
+    }
+    let effIx = ix;
+    if (P.lockT > 0) effIx = ix * 0.35;   // brief reduced control after a wall jump
+
+    if (effIx !== 0) {
+      const target = RUN * (effIx > 0 ? 1 : -1);
+      if (Math.sign(P.vx) !== Math.sign(target) && P.vx !== 0) {
+        P.vx += Math.sign(target) * (acc + dec) * Math.abs(effIx) * dt;
+      } else {
+        P.vx += Math.sign(target) * acc * Math.abs(effIx) * dt;
+      }
+      if (Math.abs(P.vx) > RUN && Math.sign(P.vx) === Math.sign(target)) {
+        P.vx = Math.max(Math.abs(target), Math.abs(P.vx) - dec * 0.5 * dt) * Math.sign(P.vx);
+      }
+    } else {
+      const d = dec * dt;
+      if (Math.abs(P.vx) <= d) P.vx = 0; else P.vx -= Math.sign(P.vx) * d;
+    }
+
+    // ---- gravity
+    const sliding = P.wall !== 0 && !P.grounded && P.vy > 0 &&
+                    ((P.wall === 1 && wantR) || (P.wall === -1 && wantL));
+    const g = P.vy < 0 ? GRAV_UP : GRAV_DN;
+    P.vy += g * dt;
+    if (sliding) P.vy = Math.min(P.vy, WALL_SLIDE);
+    if (P.vy > MAX_FALL) P.vy = MAX_FALL;
+  }
+
+  // ---- jump / wall jump
+  if (P.buffer > 0) {
+    if (P.grounded || P.coyote > 0) {
+      P.vy = -JUMP_V;
+      P.grounded = false; P.coyote = 0; P.buffer = 0; P.jumping = true;
+      P.ridePlat = null;
+      P.dashT = 0;
+      P.sqX = 0.76; P.sqY = 1.3;
+      Audio2.jump();
+      burst(P.x + PW / 2, P.y + PH, 6, { angle: 1.57, spread: 1.6, spdMin: 20, spdMax: 70, life: 0.25, size: 1.6, col: "#ffcc4d" });
+    } else if (P.wall !== 0 && P.noGrabT <= 0) {
+      P.vy = -WJ_VY;
+      P.vx = -P.wall * WJ_VX;
+      P.face = -P.wall;
+      P.lockT = WALL_LOCK;
+      P.noGrabDir = P.wall; P.noGrabT = NO_GRAB;
+      P.buffer = 0; P.jumping = true;
+      P.dashT = 0;
+      P.dashes = 1;               // generous: kicking off a wall refills the dash
+      P.sqX = 0.8; P.sqY = 1.25;
+      Audio2.wall();
+      burst(P.x + PW / 2 + P.wall * 6, P.y + PH / 2, 8,
+        { angle: P.wall > 0 ? 0 : Math.PI, spread: 1.8, spdMin: 40, spdMax: 130, life: 0.3, size: 2, col: "#ffd782" });
+    }
+  }
+  // variable height
+  if (P.jumping && P.vy < 0 && !roleOn.jump) { P.vy *= JUMP_CUT; P.jumping = false; }
+  if (P.vy >= 0) P.jumping = false;
+
+  // drop through one-ways
+  if (roleOn.down && pressed("jump") && P.grounded) { dropThrough = 0.18; P.grounded = false; P.coyote = 0; }
+
+  // ---- integrate
+  P.wasGrounded = P.grounded;
+  P.ridePlat = null;
+  const hx = moveX(P.vx * dt);
+  const hy = moveY(P.vy * dt);
+
+  // ---- ground state
+  P.grounded = (hy === 1);
+  if (P.grounded) {
+    P.coyote = COYOTE;
+    if (!P.wasGrounded) {
+      const impact = Math.abs(P.vyPrev || 0);
+      P.sqX = 1.3; P.sqY = 0.7;
+      Audio2.land();
+      if (impact > 320) { addShake(2.6); burst(P.x + PW / 2, P.y + PH, 8, { angle: -1.57, spread: 2.4, spdMin: 30, spdMax: 110, life: 0.3, size: 1.8, col: "#8f9ad8" }); }
+    }
+    P.dashes = 1;
+    if (P.dashT <= 0) P.jumping = false;
+  } else if (P.wasGrounded && P.vy >= 0) {
+    P.coyote = COYOTE;   // walked off a ledge — grace window
+  }
+  P.vyPrev = P.vy;
+
+  // ---- wall detection
+  P.wall = 0;
+  if (!P.grounded) {
+    if (wallProbe(1))  P.wall = 1;
+    if (wallProbe(-1)) P.wall = -1;
+    if (P.wall !== 0 && P.noGrabT > 0 && P.wall === P.noGrabDir) P.wall = 0;
+  }
+  if (P.wall !== 0 && P.vy > 0 && ((P.wall === 1 && wantR) || (P.wall === -1 && wantL))) {
+    if (Math.random() < 0.28) {
+      parts.push({ x: P.x + (P.wall > 0 ? PW : 0), y: P.y + 3 + Math.random() * PH * 0.7,
+        vx: -P.wall * 25, vy: -20 - Math.random() * 30, life: 0.3, t: 0, size: 1.6,
+        col: "#ffcc4d", grav: 0, glow: true });
+    }
+  }
+
+  // ---- ceiling bump kills upward speed already handled in moveY
+
+  // ---- squash/stretch relax
+  P.sqX += (1 - P.sqX) * Math.min(1, dt * 14);
+  P.sqY += (1 - P.sqY) * Math.min(1, dt * 14);
+
+  // ---- springs
+  for (const s of world.springs) {
+    if (rectHit(P.x, P.y, PW, PH, s.x, s.y - 2, s.w, s.h + 4) && P.vy >= -10) {
+      P.vy = -SPRING_V;
+      P.grounded = false; P.jumping = true; P.coyote = 0;
+      P.dashes = 1;
+      s.t = 0.28;
+      P.sqX = 0.7; P.sqY = 1.4;
+      Audio2.spring();
+      addShake(1.6);
+      burst(s.x + s.w / 2, s.y, 10, { angle: -1.57, spread: 1.6, spdMin: 60, spdMax: 190, life: 0.4, size: 2.2, col: "#ffcc4d" });
+    }
+  }
+
+  // ---- hazards
+  if (hitSpikes()) { killPlayer(); return; }
+  for (const s of world.saws) {
+    const cx = Math.max(P.x + 1.5, Math.min(s.x, P.x + PW - 1.5));
+    const cy = Math.max(P.y + 1.5, Math.min(s.y, P.y + PH - 1.5));
+    const d = Math.hypot(s.x - cx, s.y - cy);
+    if (d < s.r - 1.5) { killPlayer(); return; }
+  }
+  if (P.y > H + 40 || P.y < -60) { killPlayer(); return; }
+
+  // ---- ember
+  if (world.ember && !world.ember.got) {
+    if (rectHit(P.x, P.y, PW, PH, world.ember.cx - 7, world.ember.cy - 7, 14, 14)) {
+      world.ember.got = true;
+      Audio2.collect();
+      burst(world.ember.cx, world.ember.cy, 18, { spdMin: 40, spdMax: 170, life: 0.6, size: 2.4, grav: 40, col: "#ffcc4d" });
+      flash = 0.12;
+    }
+  }
+
+  // ---- exit
+  if (world.exit && rectHit(P.x, P.y, PW, PH, world.exit.x + 3, world.exit.y + 3, world.exit.w - 6, world.exit.h - 6)) {
+    completeLevel();
+  }
+
+  // ---- trail bookkeeping
+  for (let i = P.trail.length - 1; i >= 0; i--) {
+    P.trail[i].t += dt;
+    if (P.trail[i].t > 0.28) P.trail.splice(i, 1);
+  }
+}
+
+function wallProbe(dir) {
+  const px = dir > 0 ? P.x + PW + 1.2 : P.x - 1.2;
+  const tx = Math.floor(px / T);
+  const y0 = Math.floor((P.y + 2) / T), y1 = Math.floor((P.y + PH - 2) / T);
+  for (let ty = y0; ty <= y1; ty++) if (isBlocking(tx, ty)) return true;
+  for (const m of world.movers) {
+    if (rectHit(dir > 0 ? P.x + PW : P.x - 1.4, P.y + 2, 1.4, PH - 4, m.x, m.y, m.w, m.h)) return true;
+  }
+  return false;
+}
+
+function hitSpikes() {
+  const x0 = Math.floor((P.x + 1) / T), x1 = Math.floor((P.x + PW - 1) / T);
+  const y0 = Math.floor((P.y + 1) / T), y1 = Math.floor((P.y + PH - 1) / T);
+  for (let ty = y0; ty <= y1; ty++) {
+    for (let tx = x0; tx <= x1; tx++) {
+      if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) continue;
+      const s = world.spike[ty][tx];
+      if (!s) continue;
+      let bx = tx * T, by = ty * T, bw = T, bh = T;
+      if (s === SPIKE_U) { by = ty * T + 6; bh = 10; }
+      else if (s === SPIKE_D) { bh = 10; }
+      else if (s === SPIKE_L) { bw = 10; }
+      else if (s === SPIKE_R) { bx = tx * T + 6; bw = 10; }
+      if (rectHit(P.x + 1.5, P.y + 1.5, PW - 3, PH - 3, bx, by, bw, bh)) return true;
+    }
+  }
+  return false;
+}
+
+/* ------------------------------------------------------------------- render */
+// static tile layer cache
+const tileCv = document.createElement("canvas");
+tileCv.width = W; tileCv.height = H;
+const tctx = tileCv.getContext("2d");
+let tileDirty = true;
+let lastCrumbSig = "";
+
+const noiseCv = document.createElement("canvas");
+noiseCv.width = 48; noiseCv.height = 48;
+(function () {
+  const n = noiseCv.getContext("2d");
+  const img = n.createImageData(48, 48);
+  for (let i = 0; i < 48 * 48; i++) {
+    const v = Math.random() * 26;
+    img.data[i * 4] = 255; img.data[i * 4 + 1] = 255; img.data[i * 4 + 2] = 255;
+    img.data[i * 4 + 3] = v;
+  }
+  n.putImageData(img, 0, 0);
+})();
+let noisePat = null;
+
+function drawTiles() {
+  tctx.clearRect(0, 0, W, H);
+  if (!noisePat) noisePat = tctx.createPattern(noiseCv, "repeat");
+
+  // solids
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const t = world.tile[y][x];
+      if (t === SOLID) {
+        const px = x * T, py = y * T;
+        const gd = tctx.createLinearGradient(px, py, px, py + T);
+        gd.addColorStop(0, "#1e2750");
+        gd.addColorStop(1, "#141a36");
+        tctx.fillStyle = gd;
+        tctx.fillRect(px, py, T, T);
+        // edges
+        if (tileAt(x, y - 1) !== SOLID) {
+          tctx.fillStyle = "#3a4a90";
+          tctx.fillRect(px, py, T, 2);
+          tctx.fillStyle = "rgba(255,204,77,0.20)";
+          tctx.fillRect(px, py, T, 1);
+        }
+        if (tileAt(x, y + 1) !== SOLID) { tctx.fillStyle = "rgba(0,0,0,0.34)"; tctx.fillRect(px, py + T - 2, T, 2); }
+        if (tileAt(x - 1, y) !== SOLID) { tctx.fillStyle = "rgba(80,100,190,0.30)"; tctx.fillRect(px, py, 1.5, T); }
+        if (tileAt(x + 1, y) !== SOLID) { tctx.fillStyle = "rgba(0,0,0,0.24)"; tctx.fillRect(px + T - 1.5, py, 1.5, T); }
+      } else if (t === ONEWAY) {
+        const px = x * T, py = y * T;
+        tctx.fillStyle = "#2b3a74";
+        tctx.fillRect(px, py + 1, T, 4);
+        tctx.fillStyle = "rgba(255,204,77,0.55)";
+        tctx.fillRect(px, py + 1, T, 1.4);
+        tctx.fillStyle = "rgba(255,255,255,0.06)";
+        tctx.fillRect(px + 2, py + 5, T - 4, 1.4);
+      }
+    }
+  }
+  // texture wash over solids
+  tctx.globalAlpha = 0.5;
+  tctx.globalCompositeOperation = "overlay";
+  tctx.fillStyle = noisePat;
+  tctx.fillRect(0, 0, W, H);
+  tctx.globalCompositeOperation = "source-over";
+  tctx.globalAlpha = 1;
+
+  // crumbling slabs
+  for (const c of world.crumbles) {
+    if (c.state === 2) continue;
+    const px = c.x * T, py = c.y * T;
+    const warn = c.state === 1;
+    tctx.fillStyle = warn ? "#5a4870" : "#39406e";
+    tctx.fillRect(px, py, T, T);
+    tctx.fillStyle = warn ? "rgba(255,120,120,0.85)" : "rgba(150,165,235,0.55)";
+    tctx.fillRect(px, py, T, 2);
+    tctx.strokeStyle = warn ? "rgba(255,140,140,0.75)" : "rgba(10,14,30,0.55)";
+    tctx.lineWidth = 1;
+    tctx.beginPath();
+    tctx.moveTo(px + 3, py + 2); tctx.lineTo(px + 6, py + 8); tctx.lineTo(px + 3, py + T - 2);
+    tctx.moveTo(px + T - 3, py + 3); tctx.lineTo(px + T - 7, py + 9); tctx.lineTo(px + T - 2, py + T - 3);
+    tctx.stroke();
+  }
+
+  // spikes
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const s = world.spike[y][x];
+      if (!s) continue;
+      const px = x * T, py = y * T;
+      tctx.save();
+      tctx.fillStyle = "#ff5a7a";
+      tctx.shadowColor = "rgba(255,90,122,0.85)";
+      tctx.shadowBlur = 8;
+      const n = 3, step = T / n;
+      for (let i = 0; i < n; i++) {
+        tctx.beginPath();
+        if (s === SPIKE_U) {
+          tctx.moveTo(px + i * step, py + T);
+          tctx.lineTo(px + i * step + step / 2, py + 3);
+          tctx.lineTo(px + i * step + step, py + T);
+        } else if (s === SPIKE_D) {
+          tctx.moveTo(px + i * step, py);
+          tctx.lineTo(px + i * step + step / 2, py + T - 3);
+          tctx.lineTo(px + i * step + step, py);
+        } else if (s === SPIKE_L) {
+          tctx.moveTo(px + T, py + i * step);
+          tctx.lineTo(px + 3, py + i * step + step / 2);
+          tctx.lineTo(px + T, py + i * step + step);
+        } else {
+          tctx.moveTo(px, py + i * step);
+          tctx.lineTo(px + T - 3, py + i * step + step / 2);
+          tctx.lineTo(px, py + i * step + step);
+        }
+        tctx.closePath();
+        tctx.fill();
+      }
+      tctx.restore();
+    }
+  }
+  tileDirty = false;
+}
+
+let bgStars = [];
+(function () {
+  for (let i = 0; i < 90; i++) {
+    bgStars.push({
+      x: Math.random() * W, y: Math.random() * H,
+      r: 0.4 + Math.random() * 1.5,
+      d: 0.25 + Math.random() * 0.9,
+      a: 0.15 + Math.random() * 0.55,
+      ph: Math.random() * 6.28
+    });
+  }
+})();
+let bgTime = 0;
+
+function drawBackground() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#131a3c");
+  g.addColorStop(0.55, "#0d1228");
+  g.addColorStop(1, "#0b0f1e");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  const px = world ? (P.x / W - 0.5) : 0;
+  const py = world ? (P.y / H - 0.5) : 0;
+
+  // far ridges
+  ctx.save();
+  ctx.translate(-px * 8, -py * 5);
+  const seedBase = levelIndex * 37;
+  ctx.fillStyle = "rgba(30,40,88,0.55)";
+  ctx.beginPath();
+  ctx.moveTo(-40, H + 20);
+  for (let i = 0; i <= 14; i++) {
+    const x = -40 + i * ((W + 80) / 14);
+    const hgt = H * 0.62 + Math.sin(i * 1.7 + seedBase) * 34 + Math.cos(i * 0.6 + seedBase) * 18;
+    ctx.lineTo(x, hgt);
+  }
+  ctx.lineTo(W + 40, H + 20);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // near ridges
+  ctx.save();
+  ctx.translate(-px * 18, -py * 10);
+  ctx.fillStyle = "rgba(20,27,62,0.75)";
+  ctx.beginPath();
+  ctx.moveTo(-40, H + 20);
+  for (let i = 0; i <= 10; i++) {
+    const x = -40 + i * ((W + 80) / 10);
+    const hgt = H * 0.78 + Math.sin(i * 2.3 + seedBase * 0.7) * 26 + Math.cos(i * 1.1) * 14;
+    ctx.lineTo(x, hgt);
+  }
+  ctx.lineTo(W + 40, H + 20);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // drifting motes
+  ctx.save();
+  for (const s of bgStars) {
+    const tw = 0.55 + 0.45 * Math.sin(bgTime * 1.6 + s.ph);
+    const x = (s.x - px * 26 * s.d + bgTime * 6 * s.d) % (W + 20);
+    const y = s.y - py * 14 * s.d;
+    ctx.globalAlpha = s.a * tw;
+    ctx.fillStyle = s.d > 0.7 ? "#ffcc4d" : "#8fa2ff";
+    ctx.beginPath();
+    ctx.arc(x < 0 ? x + W + 20 : x, y, s.r, 0, 6.283);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+function roundRect(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+function drawPlayerBody(c, x, y, w, h, alpha, dim) {
+  c.save();
+  c.globalAlpha = alpha;
+  c.shadowColor = dim ? "rgba(120,190,255,0.9)" : "rgba(255,204,77,0.95)";
+  c.shadowBlur = 14;
+  const g = c.createLinearGradient(x, y, x, y + h);
+  if (dim) { g.addColorStop(0, "#bfe6ff"); g.addColorStop(1, "#5aa8e0"); }
+  else { g.addColorStop(0, "#fff0b8"); g.addColorStop(0.5, "#ffcc4d"); g.addColorStop(1, "#ff8a3c"); }
+  c.fillStyle = g;
+  roundRect(c, x, y, w, h, 3.5);
+  c.fill();
+  c.restore();
+}
+
+function drawPlayer() {
+  if (P.dead) return;
+  // dash after-images
+  for (const t of P.trail) {
+    const a = (1 - t.t / 0.28) * 0.45;
+    drawPlayerBody(ctx, t.x, t.y, PW, PH, a, P.dashes <= 0);
+  }
+
+  const cx = P.x + PW / 2, cy = P.y + PH / 2;
+  const w = PW * P.sqX, h = PH * P.sqY;
+  const x = cx - w / 2, y = P.y + PH - h;
+
+  // flame tuft
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  ctx.shadowColor = "rgba(255,140,60,0.9)";
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = "#ff9a3c";
+  const fl = 4 + Math.sin(bgTime * 12) * 1.6;
+  ctx.beginPath();
+  ctx.moveTo(cx - 3, y + 1);
+  ctx.quadraticCurveTo(cx, y - fl, cx + 3, y + 1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  drawPlayerBody(ctx, x, y, w, h, 1, P.dashes <= 0 && P.dashT <= 0);
+
+  // eyes
+  ctx.save();
+  ctx.fillStyle = "rgba(12,16,34,0.9)";
+  const ox = P.face > 0 ? 1.2 : -1.2;
+  ctx.beginPath(); ctx.arc(cx - 2.2 + ox, y + h * 0.38, 1.25, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 2.2 + ox, y + h * 0.38, 1.25, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+
+function drawMovers() {
+  for (const m of world.movers) {
+    ctx.save();
+    ctx.shadowColor = "rgba(120,160,255,0.5)";
+    ctx.shadowBlur = 8;
+    const g = ctx.createLinearGradient(m.x, m.y, m.x, m.y + m.h);
+    g.addColorStop(0, "#5f74c8");
+    g.addColorStop(1, "#2b3568");
+    ctx.fillStyle = g;
+    roundRect(ctx, m.x, m.y, m.w, m.h, 3);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,204,77,0.7)";
+    ctx.fillRect(m.x + 2, m.y + 1, m.w - 4, 1.2);
+    ctx.restore();
+    // rail
+    ctx.save();
+    ctx.globalAlpha = 0.16;
+    ctx.strokeStyle = "#9fb0ff";
+    ctx.setLineDash([3, 4]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(m.ax + m.w / 2, m.ay + 8);
+    ctx.lineTo(m.bx + m.w / 2, m.by + 8);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawSaws() {
+  for (const s of world.saws) {
+    if (s.speed > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.14;
+      ctx.strokeStyle = "#ff8a5a";
+      ctx.setLineDash([3, 4]);
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(s.ax, s.ay); ctx.lineTo(s.bx, s.by); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.spin);
+    ctx.shadowColor = "rgba(255,110,90,0.9)";
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = "#ff6b5a";
+    const teeth = 9;
+    ctx.beginPath();
+    for (let i = 0; i < teeth; i++) {
+      const a0 = (i / teeth) * 6.283;
+      const a1 = ((i + 0.5) / teeth) * 6.283;
+      ctx.lineTo(Math.cos(a0) * (s.r + 3), Math.sin(a0) * (s.r + 3));
+      ctx.lineTo(Math.cos(a1) * (s.r * 0.7), Math.sin(a1) * (s.r * 0.7));
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#2a1830";
+    ctx.beginPath(); ctx.arc(0, 0, s.r * 0.34, 0, 6.283); ctx.fill();
+    ctx.fillStyle = "#ffcc4d";
+    ctx.beginPath(); ctx.arc(0, 0, s.r * 0.15, 0, 6.283); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawSprings() {
+  for (const s of world.springs) {
+    const comp = s.t > 0 ? 4 : 0;
+    ctx.save();
+    ctx.shadowColor = "rgba(255,204,77,0.7)";
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = "#3a4480";
+    ctx.fillRect(s.x + 1, s.y + s.h - 2, s.w - 2, 2);
+    ctx.strokeStyle = "#ffcc4d";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    const top = s.y + comp;
+    for (let i = 0; i <= 3; i++) {
+      ctx.moveTo(s.x + 2, s.y + s.h - 2 - i * ((s.h - 3 - comp) / 3));
+      ctx.lineTo(s.x + s.w - 2, s.y + s.h - 2 - (i + 0.5) * ((s.h - 3 - comp) / 3));
+    }
+    ctx.stroke();
+    ctx.fillStyle = "#ffcc4d";
+    ctx.fillRect(s.x + 1, top, s.w - 2, 2.4);
+    ctx.restore();
+  }
+}
+
+function drawExit() {
+  if (!world.exit) return;
+  const e = world.exit;
+  const t = bgTime;
+  ctx.save();
+  ctx.shadowColor = "rgba(255,204,77,0.9)";
+  ctx.shadowBlur = 18;
+  for (let i = 0; i < 3; i++) {
+    const ph = (t * 0.9 + i / 3) % 1;
+    ctx.globalAlpha = (1 - ph) * 0.55;
+    ctx.strokeStyle = "#ffcc4d";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(e.cx, e.cy, 4 + ph * 12, 7 + ph * 16, 0, 0, 6.283);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  const g = ctx.createRadialGradient(e.cx, e.cy, 1, e.cx, e.cy, 11);
+  g.addColorStop(0, "rgba(255,240,190,0.95)");
+  g.addColorStop(0.5, "rgba(255,204,77,0.6)");
+  g.addColorStop(1, "rgba(255,140,60,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(e.cx, e.cy, 8, 12, 0, 0, 6.283);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawEmber() {
+  if (!world.ember || world.ember.got) return;
+  const e = world.ember;
+  const bob = Math.sin(bgTime * 3) * 2;
+  ctx.save();
+  ctx.translate(e.cx, e.cy + bob);
+  ctx.shadowColor = "rgba(255,204,77,1)";
+  ctx.shadowBlur = 16;
+  ctx.rotate(Math.sin(bgTime * 2) * 0.2);
+  const g = ctx.createLinearGradient(0, -7, 0, 6);
+  g.addColorStop(0, "#fff6d0");
+  g.addColorStop(0.5, "#ffcc4d");
+  g.addColorStop(1, "#ff6b3c");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, -8);
+  ctx.bezierCurveTo(5.5, -3, 6, 3, 0, 7);
+  ctx.bezierCurveTo(-6, 3, -5.5, -3, 0, -8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 0.8;
+  ctx.fillStyle = "#fffdf0";
+  ctx.beginPath();
+  ctx.ellipse(0, 2.2, 1.8, 2.6, 0, 0, 6.283);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawParticles() {
+  ctx.save();
+  for (const p of parts) {
+    const a = 1 - p.t / p.life;
+    ctx.globalAlpha = Math.max(0, a);
+    if (p.glow) { ctx.shadowColor = p.col; ctx.shadowBlur = 8; } else ctx.shadowBlur = 0;
+    ctx.fillStyle = p.col;
+    const s = p.size * (0.4 + a * 0.6);
+    ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
+  }
+  ctx.restore();
+}
+
+function drawHud() {
+  const L = LEVELS[levelIndex];
+  ctx.save();
+  ctx.shadowBlur = 0;
+  ctx.textBaseline = "top";
+
+  ctx.font = "700 9px 'Segoe UI', system-ui, sans-serif";
+  ctx.fillStyle = "rgba(255,204,77,0.92)";
+  ctx.textAlign = "left";
+  ctx.fillText((levelIndex + 1) + "/" + LEVELS.length + "  " + L.name.toUpperCase(), 6, 5);
+
+  ctx.font = "600 8px 'Segoe UI', system-ui, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
+  const best = save.best[levelIndex];
+  ctx.textAlign = "right";
+  ctx.fillText("DEATHS " + levelDeaths + "   BEST " + (best ? fmt(best) : "--"), W - 6, 5);
+  ctx.font = "700 10px 'Segoe UI', system-ui, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.82)";
+  ctx.fillText(fmt(levelTime), W - 6, 15);
+  ctx.font = "600 8px 'Segoe UI', system-ui, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.38)";
+  ctx.fillText("RUN " + fmt(runTime), W - 6, 27);
+
+  // ember pip
+  if (world.ember) {
+    ctx.textAlign = "left";
+    ctx.fillStyle = world.ember.got ? "rgba(255,204,77,0.95)" : "rgba(255,255,255,0.25)";
+    ctx.font = "700 9px 'Segoe UI', system-ui, sans-serif";
+    ctx.fillText(world.ember.got ? "EMBER ◆" : "EMBER ◇", 6, 16);
+  }
+
+  // hint
+  if (introT > 0 || levelDeaths >= 2) {
+    const a = introT > 0 ? Math.min(1, introT / 0.45) : 0.34;
+    ctx.globalAlpha = a * 0.9;
+    ctx.textAlign = "center";
+    ctx.font = "600 9px 'Segoe UI', system-ui, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.fillText(L.hint, W / 2, H - 16);
+    ctx.globalAlpha = 1;
+  }
+
+  // dash pip
+  ctx.textAlign = "center";
+  ctx.restore();
+}
+
+function drawClearBanner() {
+  if (!clearInfo) return;
+  const a = Math.min(1, clearTimer / 0.3);
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = "rgba(8,11,24,0.62)";
+  ctx.fillRect(0, H / 2 - 34, W, 68);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "#ffcc4d";
+  ctx.shadowColor = "rgba(255,204,77,0.7)"; ctx.shadowBlur = 14;
+  ctx.font = "800 20px 'Segoe UI', system-ui, sans-serif";
+  ctx.fillText(clearInfo.isBest ? "NEW BEST" : "ROOM CLEAR", W / 2, H / 2 - 10);
+  ctx.shadowBlur = 0;
+  ctx.font = "600 11px 'Segoe UI', system-ui, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.8)";
+  ctx.fillText(fmt(clearInfo.t) + "   ·   " + clearInfo.d + " death" + (clearInfo.d === 1 ? "" : "s"), W / 2, H / 2 + 14);
+  ctx.restore();
+}
+
+function drawVignette() {
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.85);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.5)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 0.045;
+  ctx.fillStyle = "#000";
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.globalAlpha = 1;
+}
+
+function render() {
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+
+  drawBackground();
+
+  if (!world) { drawVignette(); return; }
+
+  const sh = shake;
+  ctx.save();
+  if (sh > 0.05) ctx.translate((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh);
+
+  // crumble signature — redraw the static layer only when something changed
+  let sig = "";
+  for (const c of world.crumbles) sig += c.state;
+  if (sig !== lastCrumbSig) { tileDirty = true; lastCrumbSig = sig; }
+  if (tileDirty) drawTiles();
+  ctx.drawImage(tileCv, 0, 0);
+
+  drawSprings();
+  drawMovers();
+  drawExit();
+  drawEmber();
+  drawSaws();
+  drawPlayer();
+  drawParticles();
+
+  ctx.restore();
+
+  drawVignette();
+  drawHud();
+  if (state === S_CLEAR) drawClearBanner();
+
+  if (flash > 0) {
+    ctx.globalAlpha = Math.min(0.55, flash * 2.4);
+    ctx.fillStyle = "#ffe9ac";
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+  if (introT > 0) {
+    ctx.globalAlpha = Math.min(1, introT / 0.55) * 0.6;
+    ctx.fillStyle = "#0b0f1e";
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* --------------------------------------------------------------- main loop */
+let lastT = 0, acc = 0;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  let dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.25) dt = 0.25;      // tab was hidden — do not simulate the gap
+  bgTime += dt;
+
+  pollInput();
+
+  shake *= Math.pow(0.0016, dt);
+  if (shake < 0.05) shake = 0;
+  flash = Math.max(0, flash - dt * 1.9);
+  introT = Math.max(0, introT - dt);
+
+  if (state === S_PLAY) {
+    if (freeze > 0) {
+      freeze -= dt;
+    } else {
+      acc += dt;
+      let guard = 0;
+      while (acc >= STEP && guard < 8) {
+        acc -= STEP; guard++;
+        updateWorld(STEP);
+        updatePlayer(STEP);
+        if (state !== S_PLAY) break;
+      }
+      if (guard >= 8) acc = 0;
+      if (state === S_PLAY) { levelTime += dt; runTime += dt; }
+    }
+    updateParts(dt);
+  } else if (state === S_CLEAR) {
+    updateParts(dt);
+    updateWorld(dt);
+    clearTimer -= dt;
+    if (clearTimer <= 0 || pressed("jump") || pressed("dash")) nextLevel();
+  } else {
+    updateParts(dt);
+  }
+
+  render();
+}
+
+/* ------------------------------------------------------------------ menus */
+function buildSelect() {
+  const grid = document.getElementById("selGrid");
+  grid.innerHTML = "";
+  for (let i = 0; i < LEVELS.length; i++) {
+    const b = document.createElement("button");
+    const locked = i > save.max;
+    b.className = "lv" + (locked ? " lock" : "") + (save.best[i] !== undefined ? " done" : "");
+    b.innerHTML = "<span>" + (i + 1) + "</span>" +
+      '<span class="t">' + (save.best[i] !== undefined ? fmt(save.best[i]) : LEVELS[i].name.split(" ")[0]) + "</span>" +
+      (save.embers[i] ? '<span class="e">◆</span>' : "");
+    if (!locked) b.addEventListener("click", function () {
+      Audio2.boot();
+      startRun(i, false);
+    });
+    grid.appendChild(b);
+  }
+}
+
+function startRun(i, resetRun) {
+  loadLevel(i, resetRun);
+  if (resetRun) { runTime = 0; runDeaths = 0; }
+  runActive = true;
+  state = S_PLAY;
+  showOv(null);
+  resize();
+}
+
+function syncMuteLabels() {
+  const txt = "Sound: " + (Audio2.muted ? "off" : "on");
+  document.getElementById("btnMute").textContent = txt;
+  document.getElementById("btnMute2").textContent = txt;
+}
+
+document.getElementById("btnPlay").addEventListener("click", function () {
+  Audio2.boot();
+  const start = Math.min(save.max, LEVELS.length - 1);
+  startRun(start, true);
+});
+document.getElementById("btnSelect").addEventListener("click", function () {
+  Audio2.boot(); buildSelect(); state = S_SELECT; showOv(ovSelect);
+});
+document.getElementById("btnSelBack").addEventListener("click", function () {
+  state = S_TITLE; showOv(ovTitle);
+});
+document.getElementById("btnWipe").addEventListener("click", function () {
+  save = { best: {}, deaths: {}, embers: {}, max: 0, muted: Audio2.muted, total: null };
+  persist(); buildSelect();
+});
+document.getElementById("btnMute").addEventListener("click", function () {
+  Audio2.boot(); Audio2.setMute(!Audio2.muted); syncMuteLabels();
+});
+document.getElementById("btnMute2").addEventListener("click", function () {
+  Audio2.setMute(!Audio2.muted); syncMuteLabels();
+});
+document.getElementById("btnResume").addEventListener("click", function () { togglePause(); });
+document.getElementById("btnRetry2").addEventListener("click", function () {
+  state = S_PLAY; showOv(null); killPlayer();
+});
+document.getElementById("btnQuit").addEventListener("click", function () {
+  buildSelect(); state = S_SELECT; showOv(ovSelect);
+});
+document.getElementById("btnAgain").addEventListener("click", function () { startRun(0, true); });
+document.getElementById("btnDoneSel").addEventListener("click", function () {
+  buildSelect(); state = S_SELECT; showOv(ovSelect);
+});
+
+/* --------------------------------------------------------------------- boot */
+syncMuteLabels();
+resize();
+
+// jump straight to a room with ?lvl=N (1-based) — handy for checking a room
+const m = /[?&]lvl=(\d+)/.exec(location.search);
+if (m) {
+  const i = Math.max(0, Math.min(LEVELS.length - 1, parseInt(m[1], 10) - 1));
+  startRun(i, true);
+} else {
+  world = buildWorld(LEVELS[0]);   // so the title screen has something behind it
+  respawn(true);
+  state = S_TITLE;
+}
+
+requestAnimationFrame(frame);
+
+// expose a tiny handle for debugging in the console; harmless in play
+window.EMBER = { get level() { return levelIndex; }, P: P, LEVELS: LEVELS,
+                 goto: function (n) { startRun(n - 1, true); } };
+})();
+</script>
+</body>
+</html>

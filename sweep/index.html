@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Sweep — Minesweeper</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="Minesweeper done right. Every board is generated fresh after your first click and proved solvable by pure logic — no guessing, ever. Three sizes, chording, flag mode and a clock that never lies.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sweep">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eaf2ff;
+    --dim: rgba(234,242,255,0.58);
+    --panel: rgba(9,13,30,0.62);
+    --line: rgba(255,255,255,0.13);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+  #satop { position: absolute; top: 0; left: 0; width: 1px; height: env(safe-area-inset-top); pointer-events: none; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.22); }
+  body:not(.playing) #topbtns { display: none; }
+
+  /* ------- HUD: mine counter · face · clock ------- */
+  #hud {
+    position: absolute; z-index: 6;
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    right: 112px; height: 44px;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    pointer-events: none;
+  }
+  body:not(.playing) #hud { display: none; }
+  .pill {
+    min-width: 74px; height: 40px; padding: 0 9px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 11px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .pill .pk { font-size: 8px; letter-spacing: 0.22em; color: var(--dim); line-height: 1; }
+  .pill .pv {
+    font-size: 17px; font-weight: 800; line-height: 1.15;
+    font-variant-numeric: tabular-nums; letter-spacing: 0.06em;
+    color: var(--accent);
+  }
+  #timeVal { color: #7de2ff; }
+  #faceBtn {
+    width: 44px; height: 44px; min-width: 44px; border-radius: 12px;
+    background: rgba(255,204,77,0.14); border: 1px solid rgba(255,204,77,0.55);
+    padding: 0; cursor: pointer; pointer-events: auto;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #faceBtn:active { background: rgba(255,204,77,0.34); }
+  #faceBtn svg { display: block; width: 28px; height: 28px; }
+  @media (max-width: 400px) {
+    .pill { min-width: 62px; padding: 0 6px; }
+    .pill .pv { font-size: 15px; }
+    #hud { gap: 6px; }
+  }
+
+  /* ------- touch controls ------- */
+  #touchui { position: absolute; inset: 0; z-index: 5; pointer-events: none; display: none; }
+  body.touch.playing #touchui { display: block; }
+  .tbtn {
+    position: absolute; pointer-events: auto;
+    height: 60px; min-width: 60px; padding: 0 14px; border-radius: 14px;
+    background: rgba(255,255,255,0.07); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 11px; font-weight: 800; letter-spacing: 0.12em;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  }
+  .tbtn .g { font-size: 19px; line-height: 1; }
+  .tbtn:active { background: rgba(255,204,77,0.28); }
+  #tFlag { right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); }
+  #tFlag.on { background: rgba(255,204,77,0.85); color: #14100a; border-color: rgba(255,204,77,0.9); }
+  #tZoom { left: max(12px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); }
+  #tZoom.on { background: rgba(125,226,255,0.3); border-color: rgba(125,226,255,0.7); }
+
+  /* ------- overlay cards ------- */
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(11,15,30,0.80), rgba(6,8,18,0.95));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  #overlay.result { background: radial-gradient(120% 90% at 50% 0%, rgba(11,15,30,0.34), rgba(6,8,18,0.62)); }
+  .card {
+    width: min(520px, 100%);
+    background: rgba(10,14,30,0.9);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 20px 18px 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 5px 0 2px;
+    font-size: clamp(30px, 9vw, 52px);
+    letter-spacing: 0.18em; font-weight: 800; line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 24px rgba(255,204,77,0.45);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(19px, 6vw, 29px); letter-spacing: 0.08em; font-weight: 800; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.04em; margin-bottom: 10px; }
+  .sizes { display: flex; gap: 8px; justify-content: center; margin: 10px 0 4px; flex-wrap: wrap; }
+  .chip {
+    flex: 1 1 0; min-width: 92px; min-height: 46px; padding: 5px 6px;
+    border-radius: 12px; border: 1px solid var(--line);
+    background: rgba(255,255,255,0.05); color: var(--fg);
+    font-family: inherit; font-weight: 800; font-size: 11.5px; letter-spacing: 0.12em;
+    cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  }
+  .chip small { font-weight: 700; font-size: 9.5px; letter-spacing: 0.08em; color: var(--dim); }
+  .chip.on { background: rgba(255,204,77,0.16); border-color: rgba(255,204,77,0.6); color: var(--accent); }
+  .chip.on small { color: rgba(255,204,77,0.75); }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 10px auto 4px; max-width: 340px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(255,255,255,0.09); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0 6px; }
+  .stat { background: rgba(255,255,255,0.045); border: 1px solid var(--line); border-radius: 12px; padding: 8px 6px; }
+  .stat .k { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(17px, 5vw, 23px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .best { font-size: 11.5px; color: var(--dim); margin-top: 8px; }
+  .best b { color: var(--accent); }
+  .btn {
+    margin-top: 13px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; min-width: 120px; padding: 0 26px;
+    border-radius: 14px; border: 1px solid rgba(255,204,77,0.55);
+    background: rgba(255,204,77,0.13); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.16em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,204,77,0.3); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(255,255,255,0.05); }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(24px, 8vw, 42px); font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+  @media (max-height: 620px) {
+    .card { padding: 13px 15px; border-radius: 16px; }
+    .keys { display: none; }
+    h1 { font-size: clamp(26px, 7vw, 40px); }
+    .tagline { margin-bottom: 6px; }
+    .btn { margin-top: 9px; min-height: 46px; }
+    .sizes { margin: 7px 0 2px; }
+    .chip { min-height: 42px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="satop"></div>
+  <div id="hud">
+    <div class="pill"><span class="pk">MINES</span><span class="pv" id="mineVal">010</span></div>
+    <button id="faceBtn" type="button" aria-label="New game"></button>
+    <div class="pill"><span class="pk">TIME</span><span class="pv" id="timeVal">000</span></div>
+  </div>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="touchui">
+    <button class="tbtn" id="tZoom" type="button" aria-label="Zoom"><span class="g">&#8862;</span>ZOOM</button>
+    <button class="tbtn" id="tFlag" type="button" aria-label="Flag mode"><span class="g">&#9873;</span>FLAG</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   SWEEP — minesweeper for the Overclock arcade.
+
+   The mines are laid AFTER your first click (that cell and its ring are
+   always clear), and then the board is run through a logic-only solver.
+   If it can't be finished by deduction alone, a mine is walked out of the
+   deadlock and it's solved again — so every board you play is a clean
+   sweep with no coin-flips in it. Chording, flag mode, three sizes.
+   One file, no assets, oscillator audio.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'sweep_v1';
+var K_MUTE = 'sweep_muted_v1';
+var K_SIZE = 'sweep_size_v1';
+
+var SIZES = {
+  beginner:     { rows: 9,  cols: 9,  mines: 10, label: 'BEGINNER' },
+  intermediate: { rows: 16, cols: 16, mines: 40, label: 'INTERMEDIATE' },
+  expert:       { rows: 16, cols: 30, mines: 99, label: 'EXPERT' }
+};
+var SIZE_KEYS = ['beginner', 'intermediate', 'expert'];
+
+var GEN_MAX_REPAIRS = 400;    /* hard cap — past this we ship a plain board */
+var MIN_ZOOM_CS = 34;         /* zoomed-in cell size floor, px */
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function loadJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return (v === null || typeof v !== 'object') ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+
+/* ------------------------------------------------------------ best times -- */
+/* Defensive: a corrupt / hand-edited save must read as "no best", never crash. */
+function bestTimes() {
+  var raw = loadJSON(K_SAVE, null);
+  var out = { beginner: 0, intermediate: 0, expert: 0 };
+  if (!raw || typeof raw !== 'object') return out;
+  for (var i = 0; i < SIZE_KEYS.length; i++) {
+    var k = SIZE_KEYS[i], v = raw[k];
+    if (typeof v === 'number' && isFinite(v) && v > 0 && v < 100000) out[k] = Math.round(v);
+  }
+  return out;
+}
+function bestFor(k) { return bestTimes()[k] || 0; }
+function recordBest(k, secs) {
+  if (!isFinite(secs) || secs <= 0) return false;
+  var b = bestTimes();
+  if (b[k] && b[k] <= secs) return false;
+  b[k] = Math.round(secs);
+  saveJSON(K_SAVE, b);
+  return true;
+}
+function fmtTime(s) {
+  s = Math.max(0, Math.floor(s));
+  if (s >= 999) return '999';
+  return (s < 10 ? '00' : s < 100 ? '0' : '') + s;
+}
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.4;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.4;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(24, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseBurst(dur, vol, freq, delay, type) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var n = Math.floor(actx.sampleRate * dur);
+  var buf = actx.createBuffer(1, n, actx.sampleRate);
+  var ch = buf.getChannelData(0);
+  for (var i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  var src = actx.createBufferSource(); src.buffer = buf;
+  var f = actx.createBiquadFilter(); f.type = type || 'lowpass'; f.frequency.value = freq;
+  var g = actx.createGain(); g.gain.value = vol;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+}
+var sfx = {
+  tick:    function () { tone('square', 620, 520, 0.045, 0.055); },
+  cascade: function (n) {
+    var c = Math.min(6, 1 + (n / 8) | 0);
+    for (var i = 0; i < c; i++) tone('sine', 460 + i * 90, 520 + i * 90, 0.06, 0.05, i * 0.035);
+  },
+  flag:    function () { tone('triangle', 880, 1180, 0.07, 0.09); },
+  unflag:  function () { tone('triangle', 700, 480, 0.07, 0.06); },
+  chord:   function () { tone('square', 340, 300, 0.06, 0.07); noiseBurst(0.05, 0.05, 2400); },
+  deny:    function () { tone('sine', 190, 150, 0.09, 0.05); },
+  boom:    function () {
+    noiseBurst(0.5, 0.5, 900);
+    tone('sawtooth', 150, 32, 0.6, 0.28);
+    noiseBurst(0.35, 0.12, 320, 0.1);
+  },
+  win:     function () {
+    var f = [523, 659, 784, 1047];
+    for (var i = 0; i < f.length; i++) tone('sine', f[i], f[i], 0.34, 0.11, i * 0.11);
+  }
+};
+
+/* ================================================================ board == */
+/* BD holds the live board. Typed arrays so the solver can run hot. */
+var BD = null;
+var G = {
+  state: 'title',        /* title | play | pause | won | lost */
+  size: 'beginner',
+  time: 0,
+  shake: 0,
+  flash: 0,
+  newBest: false
+};
+
+function makeBoard(sizeKey) {
+  var S = SIZES[sizeKey] || SIZES.beginner;
+  var N = S.rows * S.cols;
+  return {
+    key: sizeKey,
+    rows: S.rows, cols: S.cols, mines: S.mines,
+    mine: new Uint8Array(N),
+    adj: new Int8Array(N),
+    rev: new Uint8Array(N),
+    flag: new Uint8Array(N),
+    an: new Float32Array(N),      /* per-cell reveal animation clock */
+    nb: neighbourTable(S.rows, S.cols),
+    revCount: 0, flagCount: 0,
+    started: false,
+    exposed: false,               /* board laid bare after a loss */
+    hit: -1,                      /* index of the mine that got you */
+    repairs: 0,                   /* how many mines were walked to make it fair */
+    noGuess: false                /* proved solvable by logic alone */
+  };
+}
+function neighbourTable(rows, cols) {
+  var nb = new Array(rows * cols);
+  for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
+    var a = [];
+    for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      var rr = r + dr, cc = c + dc;
+      if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue;
+      a.push(rr * cols + cc);
+    }
+    nb[r * cols + c] = a;
+  }
+  return nb;
+}
+function computeAdj(rows, cols, mine, nb) {
+  var N = rows * cols, adj = new Int8Array(N);
+  for (var i = 0; i < N; i++) {
+    if (mine[i]) { adj[i] = -1; continue; }
+    var a = nb[i], n = 0;
+    for (var k = 0; k < a.length; k++) if (mine[a[k]]) n++;
+    adj[i] = n;
+  }
+  return adj;
+}
+
+/* ------------------------------------------------------------- generator -- */
+/* Mines are placed only after the first click, with that cell and its whole
+   ring excluded — so the opening move is always safe AND always opens up. */
+function layMines(rows, cols, mines, sr, sc, forbidOut) {
+  var N = rows * cols, forbid = forbidOut || new Uint8Array(N);
+  for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) {
+    var rr = sr + dr, cc = sc + dc;
+    if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue;
+    forbid[rr * cols + cc] = 1;
+  }
+  var pool = [];
+  for (var i = 0; i < N; i++) if (!forbid[i]) pool.push(i);
+  for (var k = pool.length - 1; k > 0; k--) {
+    var j = (Math.random() * (k + 1)) | 0;
+    var t = pool[k]; pool[k] = pool[j]; pool[j] = t;
+  }
+  var mine = new Uint8Array(N);
+  var m = Math.min(mines, pool.length);
+  for (var q = 0; q < m; q++) mine[pool[q]] = 1;
+  return mine;
+}
+
+/* ---------------------------------------------------------------- solver -- */
+/* Pure deduction only. Three tools, in order of cost:
+     1. single-cell counting  (n-flags == 0 -> all safe; == hidden -> all mines)
+     2. the global mine count (the counter on the HUD is information too)
+     3. subset rule           (covers 1-2-1, 1-2-2-1 and friends)
+   No probability, no guessing. Returns whether the board can be finished. */
+function solveLogic(rows, cols, mine, adj, nb, si) {
+  var N = rows * cols, i, k, j;
+  var total = 0;
+  for (i = 0; i < N; i++) if (mine[i]) total++;
+  var rev = new Uint8Array(N), flg = new Uint8Array(N);
+  var revCount = 0, flgCount = 0;
+  var stack = [];
+  function openCell(i0) {
+    stack.length = 0; stack.push(i0);
+    while (stack.length) {
+      var q = stack.pop();
+      if (rev[q] || flg[q] || mine[q]) continue;
+      rev[q] = 1; revCount++;
+      if (adj[q] === 0) {
+        var a = nb[q];
+        for (var m = 0; m < a.length; m++) if (!rev[a[m]] && !flg[a[m]]) stack.push(a[m]);
+      }
+    }
+  }
+  function flagCell(i0) { if (!flg[i0] && !rev[i0]) { flg[i0] = 1; flgCount++; } }
+
+  openCell(si);
+  var safeTarget = N - total;
+  var guard = 0;
+  while (revCount < safeTarget) {
+    if (++guard > 5000) break;
+    var progress = false, hid, f, need, a2;
+
+    /* 1 — single-cell counting */
+    for (i = 0; i < N; i++) {
+      if (!rev[i] || adj[i] <= 0) continue;
+      a2 = nb[i]; hid = []; f = 0;
+      for (k = 0; k < a2.length; k++) {
+        var x = a2[k];
+        if (flg[x]) f++; else if (!rev[x]) hid.push(x);
+      }
+      if (!hid.length) continue;
+      need = adj[i] - f;
+      if (need === 0) { for (k = 0; k < hid.length; k++) openCell(hid[k]); progress = true; }
+      else if (need === hid.length) { for (k = 0; k < hid.length; k++) flagCell(hid[k]); progress = true; }
+    }
+    if (progress) continue;
+
+    /* 2 — global mine count */
+    var hiddenCount = N - revCount - flgCount;
+    if (hiddenCount > 0 && flgCount === total) {
+      for (i = 0; i < N; i++) if (!rev[i] && !flg[i]) openCell(i);
+      continue;
+    }
+    if (hiddenCount > 0 && hiddenCount === total - flgCount) {
+      for (i = 0; i < N; i++) if (!rev[i] && !flg[i]) flagCell(i);
+      continue;
+    }
+
+    /* 3 — subset rule */
+    var cons = [];
+    for (i = 0; i < N; i++) {
+      if (!rev[i] || adj[i] <= 0) continue;
+      a2 = nb[i]; hid = []; f = 0;
+      for (k = 0; k < a2.length; k++) { var y = a2[k]; if (flg[y]) f++; else if (!rev[y]) hid.push(y); }
+      if (hid.length) cons.push({ cells: hid, need: adj[i] - f });
+    }
+    for (i = 0; i < cons.length && !progress; i++) {
+      for (j = 0; j < cons.length; j++) {
+        if (i === j) continue;
+        var A = cons[i], Bg = cons[j];
+        if (A.cells.length >= Bg.cells.length) continue;
+        var sub = true;
+        for (k = 0; k < A.cells.length; k++) if (Bg.cells.indexOf(A.cells[k]) < 0) { sub = false; break; }
+        if (!sub) continue;
+        var diff = [];
+        for (k = 0; k < Bg.cells.length; k++) if (A.cells.indexOf(Bg.cells[k]) < 0) diff.push(Bg.cells[k]);
+        if (!diff.length) continue;
+        if (Bg.need - A.need === diff.length) {
+          for (k = 0; k < diff.length; k++) flagCell(diff[k]);
+          progress = true; break;
+        } else if (Bg.need === A.need) {
+          for (k = 0; k < diff.length; k++) openCell(diff[k]);
+          progress = true; break;
+        }
+      }
+    }
+    if (!progress) break;
+  }
+  return { solved: revCount === safeTarget, rev: rev, flg: flg, revCount: revCount };
+}
+
+/* Generate, test, and repair until the board is provably no-guess.
+   The repair: when the solver stalls, one mine sitting on the stuck frontier
+   is walked out into the untouched deep field, and we solve again. That kills
+   the ambiguity that caused the stall without changing the mine count. */
+function generateFair(rows, cols, mines, sr, sc, nb, maxRepairs) {
+  var N = rows * cols, si = sr * cols + sc, i, k;
+  var forbid = new Uint8Array(N);
+  var mine = layMines(rows, cols, mines, sr, sc, forbid);
+  var repairs = 0;
+  for (;;) {
+    var adj = computeAdj(rows, cols, mine, nb);
+    var res = solveLogic(rows, cols, mine, adj, nb, si);
+    if (res.solved) return { mine: mine, adj: adj, repairs: repairs, noGuess: true };
+    if (++repairs > maxRepairs) return { mine: mine, adj: adj, repairs: repairs, noGuess: false };
+    var frontier = [], deep = [];
+    for (i = 0; i < N; i++) {
+      if (res.rev[i]) continue;
+      var touches = false, a = nb[i];
+      for (k = 0; k < a.length; k++) if (res.rev[a[k]]) { touches = true; break; }
+      if (touches) { if (mine[i]) frontier.push(i); }
+      else if (!mine[i] && !forbid[i]) deep.push(i);
+    }
+    if (!frontier.length) return { mine: mine, adj: adj, repairs: repairs, noGuess: false };
+    var from = frontier[(Math.random() * frontier.length) | 0];
+    var to = -1;
+    if (deep.length) to = deep[(Math.random() * deep.length) | 0];
+    else {
+      var free = [];
+      for (i = 0; i < N; i++) if (!mine[i] && !forbid[i] && !res.rev[i]) free.push(i);
+      if (!free.length) return { mine: mine, adj: adj, repairs: repairs, noGuess: false };
+      to = free[(Math.random() * free.length) | 0];
+    }
+    mine[from] = 0; mine[to] = 1;
+  }
+}
+
+/* Verify the live board is finishable by logic from its opening cell. */
+function verifyBoard(b, si) {
+  return solveLogic(b.rows, b.cols, b.mine, b.adj, b.nb, si).solved;
+}
+
+/* ----------------------------------------------------------- board rules -- */
+function idxOf(r, c) { return r * BD.cols + c; }
+function inBounds(r, c) { return r >= 0 && r < BD.rows && c >= 0 && c < BD.cols; }
+
+function firstOpen(r, c) {
+  var g = generateFair(BD.rows, BD.cols, BD.mines, r, c, BD.nb, GEN_MAX_REPAIRS);
+  BD.mine = g.mine; BD.adj = g.adj;
+  BD.repairs = g.repairs; BD.noGuess = g.noGuess;
+  BD.started = true;
+  G.time = 0;
+}
+
+/* Flood reveal. Returns how many cells opened. Animation delay rides the
+   BFS depth so a big cascade sweeps outward instead of popping flat. */
+function floodReveal(r, c) {
+  var start = idxOf(r, c);
+  if (BD.rev[start] || BD.flag[start]) return 0;
+  var queue = [start], depth = [0], head = 0, opened = 0;
+  BD.rev[start] = 1; BD.revCount++; BD.an[start] = 0; opened++;
+  while (head < queue.length) {
+    var i = queue[head], d = depth[head]; head++;
+    if (BD.adj[i] !== 0) continue;
+    var a = BD.nb[i];
+    for (var k = 0; k < a.length; k++) {
+      var n = a[k];
+      if (BD.rev[n] || BD.flag[n] || BD.mine[n]) continue;
+      BD.rev[n] = 1; BD.revCount++; opened++;
+      BD.an[n] = -Math.min(0.34, (d + 1) * 0.016);
+      queue.push(n); depth.push(d + 1);
+    }
+  }
+  return opened;
+}
+
+function revealAt(r, c) {
+  if (G.state !== 'play' || !inBounds(r, c)) return false;
+  var i = idxOf(r, c);
+  if (BD.flag[i] || BD.rev[i]) return false;
+  if (!BD.started) firstOpen(r, c);
+  if (BD.mine[i]) { loseGame(i); return true; }
+  var n = floodReveal(r, c);
+  if (n > 3) sfx.cascade(n); else sfx.tick();
+  checkWin();
+  return true;
+}
+
+function toggleFlag(r, c) {
+  if (G.state !== 'play' || !inBounds(r, c)) return false;
+  var i = idxOf(r, c);
+  if (BD.rev[i]) return false;
+  if (BD.flag[i]) { BD.flag[i] = 0; BD.flagCount--; sfx.unflag(); }
+  else { BD.flag[i] = 1; BD.flagCount++; sfx.flag(); }
+  updateHUD();
+  return true;
+}
+
+/* Chording: click a number whose flags already match it and the rest of its
+   ring opens. Does nothing at all if the flags don't add up. */
+function chordAt(r, c) {
+  if (G.state !== 'play' || !inBounds(r, c)) return false;
+  var i = idxOf(r, c);
+  if (!BD.rev[i] || BD.adj[i] <= 0) return false;
+  var a = BD.nb[i], f = 0, hid = [], k;
+  for (k = 0; k < a.length; k++) {
+    if (BD.flag[a[k]]) f++;
+    else if (!BD.rev[a[k]]) hid.push(a[k]);
+  }
+  if (f !== BD.adj[i] || !hid.length) { sfx.deny(); return false; }
+  var boom = -1;
+  for (k = 0; k < hid.length; k++) if (BD.mine[hid[k]]) { boom = hid[k]; break; }
+  if (boom >= 0) { loseGame(boom); return true; }
+  var opened = 0;
+  for (k = 0; k < hid.length; k++) opened += floodReveal((hid[k] / BD.cols) | 0, hid[k] % BD.cols);
+  sfx.chord();
+  if (opened > 4) sfx.cascade(opened);
+  checkWin();
+  return true;
+}
+
+function checkWin() {
+  if (G.state !== 'play') return false;
+  if (BD.revCount < BD.rows * BD.cols - BD.mines) return false;
+  G.state = 'won';
+  /* tidy up: every remaining mine gets its flag */
+  for (var i = 0; i < BD.mine.length; i++) {
+    if (BD.mine[i] && !BD.flag[i]) { BD.flag[i] = 1; BD.flagCount++; }
+  }
+  G.newBest = recordBest(BD.key, G.time);
+  updateHUD();
+  setFace('win');
+  sfx.win();
+  document.body.classList.remove('playing');
+  winScreen();
+  return true;
+}
+
+function loseGame(hitIndex) {
+  G.state = 'lost';
+  BD.hit = hitIndex;
+  BD.exposed = true;
+  G.shake = 12; G.flash = 1;
+  setFace('lost');
+  sfx.boom();
+  document.body.classList.remove('playing');
+  loseScreen();
+}
+
+/* ================================================================ view === */
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var satop = document.getElementById('satop');
+var view = { w: 900, h: 600, dpr: 1, topPad: 58 };
+var zoomOn = false;
+var pan = { x: 0, y: 0 };
+var cursor = { r: 0, c: 0, on: false };
+var flagMode = false;
+
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(240, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  view.topPad = 58 + (satop ? satop.offsetHeight : 0);
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+/* Board layout. Two tricks keep EXPERT (30x16) honest on a phone:
+     - the board is rotated a quarter turn when that makes the cells bigger
+       (a 30-wide board becomes 16-wide and 30-tall in portrait), and
+     - it is always fitted, never clipped; ZOOM + drag is there on top for
+       anyone who wants big cells.
+   Cells are only ever remapped, never drawn rotated, so digits stay upright. */
+function metrics() {
+  if (!BD) return null;
+  var padX = 8, padTop = view.topPad;
+  var touchUI = document.body.classList.contains('touch') && document.body.classList.contains('playing');
+  var padBot = touchUI ? 80 : 10;
+  var availW = Math.max(40, view.w - padX * 2);
+  var availH = Math.max(40, view.h - padTop - padBot);
+  var R = BD.rows, C = BD.cols;
+  var fitA = Math.min(availW / C, availH / R);
+  var fitB = Math.min(availW / R, availH / C);
+  var rot = fitB > fitA * 1.02;
+  var dc = rot ? R : C, dr = rot ? C : R;
+  var fitCS = Math.max(6, Math.floor(Math.min(availW / dc, availH / dr)));
+  var cs = zoomOn ? Math.max(fitCS, MIN_ZOOM_CS, Math.round(fitCS * 2)) : fitCS;
+  var bw = cs * dc, bh = cs * dr, ox, oy;
+  if (bw <= availW) { ox = padX + (availW - bw) / 2; pan.x = 0; }
+  else { pan.x = clamp(pan.x, availW - bw, 0); ox = padX + pan.x; }
+  if (bh <= availH) { oy = padTop + (availH - bh) / 2; pan.y = 0; }
+  else { pan.y = clamp(pan.y, availH - bh, 0); oy = padTop + pan.y; }
+  return { cs: cs, ox: Math.round(ox), oy: Math.round(oy), rot: rot, dc: dc, dr: dr,
+           bw: bw, bh: bh, fitCS: fitCS, availW: availW, availH: availH, padX: padX, padTop: padTop };
+}
+/* board cell -> display column/row */
+function dispOf(m, r, c) { return m.rot ? { x: BD.rows - 1 - r, y: c } : { x: c, y: r }; }
+function cellRect(m, r, c) {
+  var d = dispOf(m, r, c);
+  return { x: m.ox + d.x * m.cs, y: m.oy + d.y * m.cs, s: m.cs };
+}
+function cellFromXY(x, y) {
+  var m = metrics(); if (!m) return null;
+  var dx = Math.floor((x - m.ox) / m.cs), dy = Math.floor((y - m.oy) / m.cs);
+  if (dx < 0 || dx >= m.dc || dy < 0 || dy >= m.dr) return null;
+  var r = m.rot ? BD.rows - 1 - dx : dy;
+  var c = m.rot ? dy : dx;
+  if (!inBounds(r, c)) return null;
+  return { r: r, c: c };
+}
+function centerOn(r, c) {
+  var m = metrics(); if (!m) return;
+  var d = dispOf(m, r, c);
+  pan.x = clamp(m.availW / 2 - (d.x + 0.5) * m.cs, Math.min(0, m.availW - m.bw), 0);
+  pan.y = clamp(m.availH / 2 - (d.y + 0.5) * m.cs, Math.min(0, m.availH - m.bh), 0);
+}
+function setZoom(on) {
+  if (!BD) return;
+  zoomOn = !!on;
+  document.getElementById('tZoom').classList.toggle('on', zoomOn);
+  if (zoomOn) centerOn(cursor.r, cursor.c);
+  else { pan.x = 0; pan.y = 0; }
+}
+
+/* =============================================================== render == */
+var NUMCOL = ['', '#6ea8ff', '#59d98b', '#ff7a6b', '#c39bff', '#ffc24d', '#4fe0d8', '#f2f6ff', '#a8b6d8'];
+
+function drawHidden(x, y, s, hot) {
+  var pad = s > 14 ? 1 : 0.5, w = s - pad * 2;
+  var rr = Math.max(2, s * 0.16);
+  ctx.beginPath(); ctx.roundRect(x + pad, y + pad, w, w, rr);
+  var g = ctx.createLinearGradient(x, y, x, y + s);
+  if (hot) { g.addColorStop(0, '#2f3f6e'); g.addColorStop(1, '#1d2748'); }
+  else { g.addColorStop(0, '#233060'); g.addColorStop(1, '#161f3d'); }
+  ctx.fillStyle = g; ctx.fill();
+  if (s >= 12) {
+    /* bevel: light top-left, dark bottom-right */
+    ctx.lineWidth = Math.max(1, s * 0.055);
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.beginPath();
+    ctx.moveTo(x + pad + rr * 0.6, y + pad + ctx.lineWidth * 0.5);
+    ctx.lineTo(x + s - pad - rr * 0.6, y + pad + ctx.lineWidth * 0.5);
+    ctx.moveTo(x + pad + ctx.lineWidth * 0.5, y + pad + rr * 0.6);
+    ctx.lineTo(x + pad + ctx.lineWidth * 0.5, y + s - pad - rr * 0.6);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath();
+    ctx.moveTo(x + s - pad - ctx.lineWidth * 0.5, y + pad + rr * 0.6);
+    ctx.lineTo(x + s - pad - ctx.lineWidth * 0.5, y + s - pad - rr * 0.6);
+    ctx.moveTo(x + pad + rr * 0.6, y + s - pad - ctx.lineWidth * 0.5);
+    ctx.lineTo(x + s - pad - rr * 0.6, y + s - pad - ctx.lineWidth * 0.5);
+    ctx.stroke();
+  }
+}
+function drawOpen(x, y, s, zero) {
+  var pad = s > 14 ? 1 : 0.5, w = s - pad * 2;
+  ctx.fillStyle = zero ? '#0a1024' : '#0e1730';
+  ctx.beginPath(); ctx.roundRect(x + pad, y + pad, w, w, Math.max(1.5, s * 0.1));
+  ctx.fill();
+  if (s >= 12) {
+    ctx.strokeStyle = 'rgba(125,226,255,0.09)'; ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+function drawFlag(x, y, s) {
+  var cx = x + s * 0.5, cy = y + s * 0.5, h = s * 0.56, px = cx - s * 0.13;
+  ctx.strokeStyle = '#cfd8ef'; ctx.lineWidth = Math.max(1, s * 0.07);
+  ctx.beginPath();
+  ctx.moveTo(px, cy - h * 0.5);
+  ctx.lineTo(px, cy + h * 0.44);
+  ctx.stroke();
+  /* base */
+  ctx.fillStyle = 'rgba(207,216,239,0.8)';
+  ctx.fillRect(px - s * 0.13, cy + h * 0.38, s * 0.32, Math.max(1.5, s * 0.09));
+  /* pennant, flying right */
+  ctx.beginPath();
+  ctx.moveTo(px, cy - h * 0.5);
+  ctx.lineTo(cx + s * 0.3, cy - h * 0.16);
+  ctx.lineTo(px, cy + h * 0.1);
+  ctx.closePath();
+  ctx.fillStyle = '#ffcc4d';
+  ctx.shadowColor = 'rgba(255,204,77,0.7)'; ctx.shadowBlur = s * 0.22;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+function drawMine(x, y, s, hot) {
+  var cx = x + s * 0.5, cy = y + s * 0.5, r = s * 0.24;
+  ctx.strokeStyle = hot ? '#ffd9d9' : 'rgba(255,122,107,0.85)';
+  ctx.lineWidth = Math.max(1, s * 0.06);
+  /* circuit legs with pads */
+  for (var i = 0; i < 4; i++) {
+    var a = i * Math.PI / 2 + Math.PI / 4;
+    var dx = Math.cos(a), dy = Math.sin(a);
+    ctx.beginPath();
+    ctx.moveTo(cx + dx * r * 0.9, cy + dy * r * 0.9);
+    ctx.lineTo(cx + dx * r * 1.85, cy + dy * r * 1.85);
+    ctx.stroke();
+    if (s >= 16) {
+      ctx.fillStyle = hot ? '#ffd9d9' : 'rgba(255,122,107,0.8)';
+      ctx.fillRect(cx + dx * r * 1.85 - s * 0.05, cy + dy * r * 1.85 - s * 0.05, s * 0.1, s * 0.1);
+    }
+  }
+  /* body */
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU);
+  var g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.35, r * 0.1, cx, cy, r);
+  g.addColorStop(0, hot ? '#ffffff' : '#ff9b8f');
+  g.addColorStop(0.45, hot ? '#ff6b6b' : '#e2483f');
+  g.addColorStop(1, hot ? '#8f1420' : '#5d1620');
+  ctx.fillStyle = g;
+  if (hot) { ctx.shadowColor = '#ff5a5a'; ctx.shadowBlur = s * 0.5; }
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  if (s >= 14) {
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.beginPath(); ctx.arc(cx - r * 0.3, cy - r * 0.32, Math.max(0.8, r * 0.18), 0, TAU); ctx.fill();
+  }
+}
+
+function render(t) {
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  var bg = ctx.createLinearGradient(0, 0, 0, view.h);
+  bg.addColorStop(0, '#0e1430'); bg.addColorStop(1, '#080b18');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, view.w, view.h);
+  if (!BD || G.state === 'title') { drawTitleField(t); return; }
+
+  var m = metrics();
+  ctx.save();
+  if (G.shake > 0.3) ctx.translate(rnd(-G.shake, G.shake) * 0.35, rnd(-G.shake, G.shake) * 0.35);
+
+  /* plate */
+  var pr = Math.max(4, m.cs * 0.3);
+  ctx.fillStyle = 'rgba(255,255,255,0.028)';
+  ctx.beginPath(); ctx.roundRect(m.ox - 5, m.oy - 5, m.bw + 10, m.bh + 10, pr); ctx.fill();
+  ctx.strokeStyle = 'rgba(125,226,255,0.18)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(m.ox - 5, m.oy - 5, m.bw + 10, m.bh + 10, pr); ctx.stroke();
+
+  var cs = m.cs;
+  var fs = Math.max(7, Math.round(cs * 0.62));
+  ctx.font = '800 ' + fs + 'px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  /* only draw what's on screen (expert + zoom can push cells off) */
+  for (var r = 0; r < BD.rows; r++) {
+    for (var c = 0; c < BD.cols; c++) {
+      var i = r * BD.cols + c;
+      var rect = cellRect(m, r, c);
+      if (rect.x > view.w || rect.y > view.h || rect.x + cs < 0 || rect.y + cs < view.topPad - cs) continue;
+      var x = rect.x, y = rect.y;
+      var shown = BD.rev[i] && BD.an[i] >= 0;
+      var isMine = BD.mine[i];
+
+      if (BD.exposed && isMine && !BD.flag[i]) {
+        if (i === BD.hit) { ctx.fillStyle = 'rgba(180,26,48,0.9)'; ctx.beginPath(); ctx.roundRect(x + 1, y + 1, cs - 2, cs - 2, Math.max(1.5, cs * 0.12)); ctx.fill(); }
+        else drawOpen(x, y, cs, false);
+        drawMine(x, y, cs, i === BD.hit);
+        continue;
+      }
+      if (!shown) {
+        drawHidden(x, y, cs, cursor.on && cursor.r === r && cursor.c === c);
+        if (BD.flag[i]) {
+          drawFlag(x, y, cs);
+          if (BD.exposed && !isMine) {   /* a flag that was wrong */
+            ctx.strokeStyle = '#ff5a5a'; ctx.lineWidth = Math.max(1.4, cs * 0.09);
+            ctx.beginPath();
+            ctx.moveTo(x + cs * 0.22, y + cs * 0.22); ctx.lineTo(x + cs * 0.78, y + cs * 0.78);
+            ctx.moveTo(x + cs * 0.78, y + cs * 0.22); ctx.lineTo(x + cs * 0.22, y + cs * 0.78);
+            ctx.stroke();
+          }
+        }
+        continue;
+      }
+      var pop = clamp(BD.an[i] / 0.11, 0, 1);
+      ctx.globalAlpha = 0.25 + pop * 0.75;
+      drawOpen(x, y, cs, BD.adj[i] === 0);
+      if (BD.adj[i] > 0) {
+        ctx.fillStyle = NUMCOL[BD.adj[i]] || '#eaf2ff';
+        ctx.fillText(String(BD.adj[i]), x + cs * 0.5, y + cs * 0.54);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /* keyboard / gamepad cursor */
+  if (cursor.on && G.state === 'play') {
+    var cr = cellRect(m, cursor.r, cursor.c);
+    ctx.strokeStyle = '#ffcc4d'; ctx.lineWidth = Math.max(2, cs * 0.1);
+    ctx.shadowColor = '#ffcc4d'; ctx.shadowBlur = 10;
+    ctx.beginPath(); ctx.roundRect(cr.x + 1, cr.y + 1, cs - 2, cs - 2, Math.max(2, cs * 0.16));
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+
+  if (G.flash > 0.01) {
+    ctx.fillStyle = 'rgba(255,90,90,' + (G.flash * 0.35) + ')';
+    ctx.fillRect(0, 0, view.w, view.h);
+  }
+
+  /* pan hint when the board is bigger than the window */
+  if (zoomOn && (m.bw > m.availW || m.bh > m.availH)) {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = '700 10px "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(234,242,255,0.45)';
+    ctx.fillText('DRAG TO PAN', view.w / 2, view.h - 8);
+  }
+}
+
+/* a quiet field of bevelled cells behind the title card */
+function drawTitleField(t) {
+  var cs = Math.max(26, Math.min(46, view.w / 16));
+  var cols = Math.ceil(view.w / cs) + 1, rows = Math.ceil(view.h / cs) + 1;
+  for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
+    var x = c * cs, y = r * cs;
+    var k = ((r * 7 + c * 13) % 17) / 17;
+    ctx.globalAlpha = 0.10 + k * 0.10;
+    drawHidden(x, y, cs, false);
+  }
+  ctx.globalAlpha = 1;
+  var vg = ctx.createRadialGradient(view.w / 2, view.h / 2, 0, view.w / 2, view.h / 2, Math.max(view.w, view.h) * 0.7);
+  vg.addColorStop(0, 'rgba(11,15,30,0)'); vg.addColorStop(1, 'rgba(6,8,18,0.85)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, view.w, view.h);
+}
+
+/* ================================================================= HUD === */
+var mineVal = document.getElementById('mineVal');
+var timeVal = document.getElementById('timeVal');
+var faceBtn = document.getElementById('faceBtn');
+var FACES = {
+  idle:  '<circle cx="14" cy="14" r="12" fill="none" stroke="#ffcc4d" stroke-width="2"/><circle cx="10" cy="11" r="1.8" fill="#ffcc4d"/><circle cx="18" cy="11" r="1.8" fill="#ffcc4d"/><path d="M8.5 17 Q14 21.5 19.5 17" fill="none" stroke="#ffcc4d" stroke-width="2" stroke-linecap="round"/>',
+  tense: '<circle cx="14" cy="14" r="12" fill="none" stroke="#ffcc4d" stroke-width="2"/><circle cx="10" cy="11" r="1.8" fill="#ffcc4d"/><circle cx="18" cy="11" r="1.8" fill="#ffcc4d"/><circle cx="14" cy="18.5" r="2.6" fill="none" stroke="#ffcc4d" stroke-width="2"/>',
+  win:   '<circle cx="14" cy="14" r="12" fill="none" stroke="#8effc1" stroke-width="2"/><rect x="6" y="9" width="7" height="4.6" rx="1.4" fill="#8effc1"/><rect x="15" y="9" width="7" height="4.6" rx="1.4" fill="#8effc1"/><path d="M13 11.3h2" stroke="#8effc1" stroke-width="1.6"/><path d="M8.5 17.5 Q14 22 19.5 17.5" fill="none" stroke="#8effc1" stroke-width="2" stroke-linecap="round"/>',
+  lost:  '<circle cx="14" cy="14" r="12" fill="none" stroke="#ff7a6b" stroke-width="2"/><path d="M8 9 l4 4 M12 9 l-4 4 M16 9 l4 4 M20 9 l-4 4" stroke="#ff7a6b" stroke-width="2" stroke-linecap="round"/><path d="M9 20 Q14 16 19 20" fill="none" stroke="#ff7a6b" stroke-width="2" stroke-linecap="round"/>'
+};
+function setFace(k) { faceBtn.innerHTML = '<svg viewBox="0 0 28 28" aria-hidden="true">' + (FACES[k] || FACES.idle) + '</svg>'; }
+function updateHUD() {
+  if (!BD) return;
+  var left = BD.mines - BD.flagCount;
+  mineVal.textContent = (left < 0 ? '-' : '') + fmtTime(Math.abs(left));
+  timeVal.textContent = fmtTime(G.time);
+}
+
+/* =============================================================== input === */
+var press = null;        /* {id, x, y, r, c, moved, longed, consumed} */
+var longTimer = null;
+var pointers = {};
+var pinchBase = 0;
+
+function clearLong() { if (longTimer) { clearTimeout(longTimer); longTimer = null; } }
+
+function boardActive() { return BD && G.state === 'play'; }
+
+cv.addEventListener('pointerdown', function (e) {
+  initAudio();
+  pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+  var np = 0; for (var q in pointers) if (pointers.hasOwnProperty(q)) np++;
+  if (np === 2) {
+    var ks = Object.keys(pointers);
+    var a = pointers[ks[0]], b = pointers[ks[1]];
+    pinchBase = Math.hypot(a.x - b.x, a.y - b.y);
+    clearLong(); press = null;
+    e.preventDefault(); return;
+  }
+  if (!boardActive()) { e.preventDefault(); return; }
+  var cell = cellFromXY(e.clientX, e.clientY);
+  press = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY,
+            cell: cell, moved: false, longed: false, consumed: false };
+  if (cell) { cursor.r = cell.r; cursor.c = cell.c; }
+  /* mouse buttons resolve straight away */
+  if (e.pointerType === 'mouse' && cell) {
+    if (e.button === 2) { toggleFlag(cell.r, cell.c); press.consumed = true; e.preventDefault(); return; }
+    if (e.button === 1) { chordAt(cell.r, cell.c); press.consumed = true; e.preventDefault(); return; }
+  }
+  if (e.pointerType !== 'mouse' && cell && !flagMode) {
+    longTimer = setTimeout(function () {
+      if (press && !press.moved && !press.consumed) {
+        press.longed = true; press.consumed = true;
+        toggleFlag(cell.r, cell.c);
+      }
+    }, 380);
+  }
+  e.preventDefault();
+});
+cv.addEventListener('pointermove', function (e) {
+  if (pointers[e.pointerId]) { pointers[e.pointerId].x = e.clientX; pointers[e.pointerId].y = e.clientY; }
+  var ks = Object.keys(pointers);
+  if (ks.length === 2 && pinchBase > 0) {
+    var a = pointers[ks[0]], b = pointers[ks[1]];
+    var d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (d - pinchBase > 46) { setZoom(true); pinchBase = d; }
+    else if (pinchBase - d > 46) { setZoom(false); pinchBase = d; }
+    return;
+  }
+  if (!press || press.id !== e.pointerId) return;
+  var dx = e.clientX - press.sx, dy = e.clientY - press.sy;
+  if (!press.moved && Math.hypot(dx, dy) > 11) { press.moved = true; clearLong(); }
+  if (press.moved) {
+    var m = metrics();
+    if (m && (m.bw > m.availW || m.bh > m.availH)) {
+      pan.x += e.clientX - press.x; pan.y += e.clientY - press.y;
+    }
+  }
+  press.x = e.clientX; press.y = e.clientY;
+});
+function endPointer(e) {
+  delete pointers[e.pointerId];
+  if (Object.keys(pointers).length < 2) pinchBase = 0;
+  clearLong();
+  if (!press || press.id !== e.pointerId) { press = null; return; }
+  var p = press; press = null;
+  if (p.consumed || p.moved || !p.cell || !boardActive()) return;
+  var r = p.cell.r, c = p.cell.c, i = idxOf(r, c);
+  if (flagMode && e.pointerType !== 'mouse') { toggleFlag(r, c); return; }
+  if (BD.rev[i] && BD.adj[i] > 0) { chordAt(r, c); return; }
+  revealAt(r, c);
+}
+cv.addEventListener('pointerup', endPointer);
+cv.addEventListener('pointercancel', function (e) { delete pointers[e.pointerId]; clearLong(); press = null; });
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+/* ---- keyboard ---- */
+function moveCursor(dx, dy) {
+  if (!BD) return;
+  var m = metrics();
+  cursor.on = true;
+  var r = cursor.r, c = cursor.c;
+  if (m && m.rot) { r = clamp(r - dx, 0, BD.rows - 1); c = clamp(c + dy, 0, BD.cols - 1); }
+  else { c = clamp(c + dx, 0, BD.cols - 1); r = clamp(r + dy, 0, BD.rows - 1); }
+  cursor.r = r; cursor.c = c;
+  if (zoomOn) centerOn(r, c);
+}
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+  initAudio();
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'p' || k === 'escape') { togglePause(); return; }
+  if (G.state === 'title') {
+    if (k === ' ' || k === 'enter') startGame(G.size);
+    else if (k === '1') selectSize('beginner');
+    else if (k === '2') selectSize('intermediate');
+    else if (k === '3') selectSize('expert');
+    return;
+  }
+  if (G.state === 'won' || G.state === 'lost') {
+    if (k === ' ' || k === 'enter' || k === 'r') startGame(G.size);
+    else if (k === 't') titleScreen();
+    return;
+  }
+  if (G.state !== 'play') return;
+  if (k === 'arrowleft' || k === 'a') moveCursor(-1, 0);
+  else if (k === 'arrowright' || k === 'd') moveCursor(1, 0);
+  else if (k === 'arrowup' || k === 'w') moveCursor(0, -1);
+  else if (k === 'arrowdown' || k === 's') moveCursor(0, 1);
+  else if (k === ' ' || k === 'enter') {
+    cursor.on = true;
+    var i = idxOf(cursor.r, cursor.c);
+    if (BD.rev[i] && BD.adj[i] > 0) chordAt(cursor.r, cursor.c);
+    else revealAt(cursor.r, cursor.c);
+  } else if (k === 'f') { cursor.on = true; toggleFlag(cursor.r, cursor.c); }
+  else if (k === 'r') startGame(G.size);
+  else if (k === 'z') setZoom(!zoomOn);
+  else if (k === '+' || k === '=') setZoom(true);
+  else if (k === '-' || k === '_') setZoom(false);
+});
+
+/* ---- touch buttons ---- */
+document.getElementById('tFlag').addEventListener('click', function () {
+  initAudio();
+  flagMode = !flagMode;
+  this.classList.toggle('on', flagMode);
+  (flagMode ? sfx.flag : sfx.unflag)();
+});
+document.getElementById('tZoom').addEventListener('click', function () { initAudio(); setZoom(!zoomOn); });
+faceBtn.addEventListener('click', function () { initAudio(); startGame(G.size); });
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { initAudio(); togglePause(); });
+
+/* ---- gamepad ---- */
+var padPrev = { a: false, b: false, start: false, lb: false, dirT: 0 };
+function pollPad(dt) {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null, i;
+  for (i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  var ax = p.axes && p.axes.length ? p.axes[0] : 0;
+  var ay = p.axes && p.axes.length > 1 ? p.axes[1] : 0;
+  var dl = !!(p.buttons[14] && p.buttons[14].pressed), dr2 = !!(p.buttons[15] && p.buttons[15].pressed);
+  var du = !!(p.buttons[12] && p.buttons[12].pressed), dd = !!(p.buttons[13] && p.buttons[13].pressed);
+  var hx = (dr2 ? 1 : 0) - (dl ? 1 : 0) || (Math.abs(ax) > 0.45 ? (ax > 0 ? 1 : -1) : 0);
+  var hy = (dd ? 1 : 0) - (du ? 1 : 0) || (Math.abs(ay) > 0.45 ? (ay > 0 ? 1 : -1) : 0);
+  padPrev.dirT -= dt;
+  if ((hx || hy) && padPrev.dirT <= 0 && G.state === 'play') { moveCursor(hx, hy); padPrev.dirT = 0.14; }
+  if (!hx && !hy) padPrev.dirT = 0;
+  var a = !!(p.buttons[0] && p.buttons[0].pressed);
+  var b = !!(p.buttons[1] && p.buttons[1].pressed) || !!(p.buttons[2] && p.buttons[2].pressed);
+  var st = !!(p.buttons[9] && p.buttons[9].pressed);
+  var lb = !!(p.buttons[4] && p.buttons[4].pressed);
+  if (a && !padPrev.a) {
+    initAudio();
+    if (G.state === 'title' || G.state === 'won' || G.state === 'lost') startGame(G.size);
+    else if (G.state === 'play') {
+      cursor.on = true;
+      var ci = idxOf(cursor.r, cursor.c);
+      if (BD.rev[ci] && BD.adj[ci] > 0) chordAt(cursor.r, cursor.c); else revealAt(cursor.r, cursor.c);
+    }
+  }
+  if (b && !padPrev.b && G.state === 'play') { cursor.on = true; toggleFlag(cursor.r, cursor.c); }
+  if (st && !padPrev.start) togglePause();
+  if (lb && !padPrev.lb) setZoom(!zoomOn);
+  padPrev.a = a; padPrev.b = b; padPrev.start = st; padPrev.lb = lb;
+}
+
+window.addEventListener('blur', function () { if (G.state === 'play' && BD && BD.started) togglePause(); });
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && G.state === 'play' && BD && BD.started) togglePause();
+});
+
+/* ============================================================= overlay === */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.classList.remove('result'); overlay.innerHTML = ''; }
+function showOverlay(h, result) {
+  overlay.innerHTML = h;
+  overlay.classList.add('on');
+  overlay.classList.toggle('result', !!result);
+}
+function bestLine() {
+  var b = bestTimes(), parts = [];
+  for (var i = 0; i < SIZE_KEYS.length; i++) {
+    var k = SIZE_KEYS[i];
+    if (b[k]) parts.push(SIZES[k].label.slice(0, 3) + ' <b>' + b[k] + 's</b>');
+  }
+  return parts.length ? '<div class="best">Best times &middot; ' + parts.join(' &nbsp;·&nbsp; ') + '</div>' : '';
+}
+function sizeChips() {
+  var h = '<div class="sizes">';
+  for (var i = 0; i < SIZE_KEYS.length; i++) {
+    var k = SIZE_KEYS[i], S = SIZES[k];
+    h += '<button class="chip' + (G.size === k ? ' on' : '') + '" type="button" data-size="' + k + '">' +
+         S.label + '<small>' + S.cols + '&times;' + S.rows + ' &middot; ' + S.mines + '</small></button>';
+  }
+  return h + '</div>';
+}
+function titleScreen() {
+  G.state = 'title';
+  BD = null;
+  document.body.classList.remove('playing');
+  setZoom(false);
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>SWEEP</h1>' +
+      '<div class="tagline">Mines are laid <b>after</b> your first click, then the board is proved solvable by pure logic. No guessing — ever. Clear every safe sector before you trip one.</div>' +
+      sizeChips() +
+      '<div class="keys">' +
+        '<div>Reveal<span>Left click / tap / Space</span></div>' +
+        '<div>Flag<span>Right click, long-press, F</span></div>' +
+        '<div>Chord<span>Click a satisfied number</span></div>' +
+        '<div>Move cursor<span>Arrow keys or D-pad</span></div>' +
+        '<div>Zoom / pan<span>Z or pinch, then drag</span></div>' +
+      '</div>' +
+      bestLine() +
+      '<button class="btn" data-act="start">START SWEEP</button>' +
+    '</div>');
+}
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Field</div><div class="v accent">' + SIZES[BD.key].label.slice(0, 5) + '</div></div>' +
+        '<div class="stat"><div class="k">Time</div><div class="v">' + Math.floor(G.time) + 's</div></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="title">QUIT</button>' +
+      '</div>' +
+    '</div>');
+}
+function winScreen() {
+  var b = bestFor(BD.key);
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Sector clear</div>' +
+      '<h2>CLEAN SWEEP</h2>' +
+      (G.newBest ? '<div class="tagline" style="color:var(--accent)">NEW BEST TIME</div>' : '') +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Time</div><div class="v accent">' + Math.floor(G.time) + 's</div></div>' +
+        '<div class="stat"><div class="k">Best ' + SIZES[BD.key].label.slice(0, 3) + '</div><div class="v">' + (b ? b + 's' : '—') + '</div></div>' +
+      '</div>' +
+      sizeChips() +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="start">SWEEP AGAIN</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>', true);
+}
+function loseScreen() {
+  var left = BD.rows * BD.cols - BD.mines - BD.revCount;
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Detonation</div>' +
+      '<h2>SECTOR LOST</h2>' +
+      '<div class="tagline">That one was deducible. It always is.</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Cleared</div><div class="v accent">' + BD.revCount + '</div></div>' +
+        '<div class="stat"><div class="k">Left</div><div class="v">' + left + '</div></div>' +
+      '</div>' +
+      sizeChips() +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="start">SWEEP AGAIN</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>', true);
+}
+function selectSize(k) {
+  if (!SIZES[k]) return;
+  G.size = k;
+  saveStr(K_SIZE, k);
+  var chips = overlay.querySelectorAll('.chip');
+  for (var i = 0; i < chips.length; i++) chips[i].classList.toggle('on', chips[i].getAttribute('data-size') === k);
+}
+overlay.addEventListener('click', function (e) {
+  var el = e.target && e.target.closest ? e.target.closest('[data-act],[data-size]') : null;
+  if (!el) return;
+  initAudio();
+  var sz = el.getAttribute('data-size');
+  if (sz) { selectSize(sz); return; }
+  var act = el.getAttribute('data-act');
+  if (act === 'start') startGame(G.size);
+  else if (act === 'resume') togglePause();
+  else if (act === 'title') titleScreen();
+});
+function togglePause() {
+  if (G.state === 'play') { G.state = 'pause'; pauseScreen(); }
+  else if (G.state === 'pause') { G.state = 'play'; hideOverlay(); }
+}
+
+function startGame(sizeKey) {
+  initAudio();
+  if (!SIZES[sizeKey]) sizeKey = 'beginner';
+  G.size = sizeKey;
+  saveStr(K_SIZE, sizeKey);
+  BD = makeBoard(sizeKey);
+  G.time = 0; G.shake = 0; G.flash = 0; G.newBest = false;
+  G.state = 'play';
+  cursor.r = (BD.rows / 2) | 0; cursor.c = (BD.cols / 2) | 0;
+  zoomOn = false; pan.x = 0; pan.y = 0;
+  document.getElementById('tZoom').classList.remove('on');
+  flagMode = false;
+  document.getElementById('tFlag').classList.remove('on');
+  setFace('idle');
+  updateHUD();
+  hideOverlay();
+  document.body.classList.add('playing');
+}
+
+/* ================================================================ loop === */
+var lastT = 0, nowT = 0, faceState = 'idle';
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  nowT += dt;
+  pollPad(dt);
+
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 26);
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 2.2);
+
+  if (BD) {
+    var an = BD.an, rev = BD.rev;
+    for (var i = 0; i < an.length; i++) if (rev[i] && an[i] < 1) an[i] = Math.min(1, an[i] + dt);
+    if (G.state === 'play' && BD.started) {
+      var before = Math.floor(G.time);
+      G.time += dt;
+      if (Math.floor(G.time) !== before) updateHUD();
+    }
+  }
+  /* the face frowns while a press is down, like it should */
+  var want = G.state === 'won' ? 'win' : G.state === 'lost' ? 'lost' : (press && !press.consumed && G.state === 'play') ? 'tense' : 'idle';
+  if (want !== faceState) { faceState = want; setFace(want); }
+
+  render(nowT);
+}
+
+/* ================================================================ boot === */
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+setFace('idle');
+(function () {
+  var s = loadStr(K_SIZE, 'beginner');
+  if (SIZES[s]) G.size = s;
+})();
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

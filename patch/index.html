@@ -1,0 +1,1899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Patch — the garden that waits for you</title>
+<meta name="theme-color" content="#7fae5e">
+<meta name="description" content="A cozy cottage garden with no way to lose. Till the soil, plant a seed, water it, watch it grow, harvest it, sell the basket, buy better seeds. Come back tomorrow.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Patch">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #8fb4d8;
+    --accent: #e8a33d;
+    --leaf: #6f9c4a;
+    --fg: #37281c;
+    --cream: #fdf6e6;
+    --dim: rgba(55,40,28,0.62);
+    --panel: #e6d3ac;
+    --wood: #a9784a;
+    --line: rgba(90,62,38,0.28);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: manipulation;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* -------------------------------------------------- top icon buttons -- */
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 8;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: rgba(253,246,230,0.86); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 0 rgba(90,62,38,0.25);
+  }
+  .iconbtn:active { background: #f6e2b8; }
+  body:not(.playing) #topbtns { display: none; }
+
+  /* ------------------------------------------------- the potting bench -- */
+  #panel {
+    position: absolute; z-index: 6;
+    left: 0; right: 0; bottom: 0;
+    display: none; flex-direction: column; gap: 6px;
+    background:
+      repeating-linear-gradient(90deg, rgba(140,96,58,0.16) 0 2px, rgba(0,0,0,0) 2px 46px),
+      linear-gradient(180deg, #efdcb6, #dcc396);
+    border-top: 3px solid #a9784a;
+    box-shadow: 0 -6px 18px rgba(60,40,22,0.28);
+    padding: 8px 10px calc(max(9px, env(safe-area-inset-bottom)) + 6px);
+  }
+  body.playing #panel { display: flex; }
+
+  #hud { display: flex; gap: 6px; }
+  .hstat {
+    flex: 1 1 0; min-width: 0;
+    background: rgba(253,246,230,0.8);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 4px 6px; text-align: center;
+    line-height: 1.15;
+  }
+  .hstat .k { display: block; font-size: 8.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
+  .hstat .v { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .hstat.coins .v { color: #a9711b; }
+
+  #tray { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seed {
+    flex: 1 1 96px; min-width: 92px; min-height: 44px;
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 8px;
+    border-radius: 10px; border: 2px solid var(--line);
+    background: rgba(253,246,230,0.72); color: var(--fg);
+    font-family: inherit; text-align: left; cursor: pointer;
+  }
+  .seed .dot { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(90,62,38,0.4); }
+  .seed .txt { flex: 1 1 auto; min-width: 0; line-height: 1.1; }
+  .seed .nm { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; }
+  .seed .sub { display: block; font-size: 9.5px; color: var(--dim); font-weight: 700; }
+  .seed.on { border-color: #7fa93f; background: #f6ecd0; box-shadow: inset 0 0 0 2px rgba(127,169,63,0.35); }
+  .seed.locked { opacity: 0.55; }
+
+  #acts { display: flex; gap: 6px; }
+  .act {
+    flex: 1 1 0; min-height: 46px; padding: 0 8px;
+    border-radius: 12px; border: 1px solid var(--line);
+    background: rgba(253,246,230,0.85); color: var(--fg);
+    font-family: inherit; font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+  .act.gold { background: linear-gradient(180deg, #f7cd72, #e8a33d); border-color: #b9791f; }
+  .act:active { filter: brightness(1.08); }
+  .act:disabled { opacity: 0.5; cursor: default; }
+  #hint {
+    font-size: 10.5px; color: var(--dim); text-align: center;
+    line-height: 1.25; min-height: 13px;
+  }
+  body.touch #kbline { display: none; }
+
+  @media (orientation: landscape) and (max-height: 620px) {
+    #panel {
+      left: auto; top: 0; bottom: 0; right: 0;
+      width: 44%; min-width: 236px; max-width: 400px;
+      border-top: none; border-left: 3px solid #a9784a;
+      box-shadow: -6px 0 18px rgba(60,40,22,0.28);
+      /* the mute/pause buttons own the top-right — start everything below */
+      padding: 58px 10px calc(max(8px, env(safe-area-inset-bottom)) + 4px);
+      gap: 5px;
+    }
+    .hstat .v { font-size: 15px; }
+    .seed { min-height: 44px; flex: 1 1 100px; }
+    #hint { display: none; }
+  }
+  @media (max-width: 380px) {
+    .seed { min-width: 84px; flex: 1 1 84px; }
+    .act { font-size: 10.5px; letter-spacing: 0.04em; }
+  }
+
+  /* ------------------------------------------------------------ overlay -- */
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 10%, rgba(120,150,110,0.55), rgba(46,58,40,0.86));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(540px, 100%);
+    background: linear-gradient(180deg, #fdf6e6, #f1e2c2);
+    border: 3px solid #a9784a;
+    border-radius: 18px;
+    padding: 20px 20px 18px;
+    box-shadow: 0 20px 60px rgba(30,20,12,0.5);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(30px, 9vw, 54px);
+    letter-spacing: 0.18em; font-weight: 800; line-height: 1;
+    color: #5c8a34;
+    text-shadow: 0 2px 0 rgba(255,255,255,0.7);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(19px, 6vw, 28px); letter-spacing: 0.08em; font-weight: 800; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.03em; margin-bottom: 10px; line-height: 1.4; }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 350px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(90,62,38,0.22); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 4px; }
+  .stat { background: rgba(255,255,255,0.55); border: 1px solid var(--line); border-radius: 10px; padding: 7px 4px; }
+  .stat .k { font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(16px, 5vw, 22px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: #a9711b; }
+  .btn {
+    margin-top: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; padding: 0 26px;
+    border-radius: 13px; border: 1px solid #6f9c4a;
+    background: linear-gradient(180deg, #9ccb69, #6f9c4a); color: #1e2c12;
+    font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.14em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { filter: brightness(1.1); }
+  .btn.ghost { background: rgba(255,255,255,0.6); border-color: var(--line); color: var(--fg); }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(24px, 8vw, 42px); font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: #5c8a34; }
+  @media (max-height: 620px) {
+    .card { padding: 13px 16px; border-radius: 14px; }
+    .keys { display: none; }
+    .stats { margin: 8px 0 2px; }
+    .btn { margin-top: 10px; min-height: 46px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="panel">
+    <div id="hud">
+      <div class="hstat coins"><span class="k">Coins</span><span class="v" id="hCoins">0</span></div>
+      <div class="hstat"><span class="k">Basket</span><span class="v" id="hBasket">0</span></div>
+      <div class="hstat"><span class="k">Harvested</span><span class="v" id="hTotal">0</span></div>
+    </div>
+    <div id="tray"></div>
+    <div id="acts">
+      <button class="act" id="btnBuy" type="button">BUY SEED</button>
+      <button class="act gold" id="btnSell" type="button">SELL BASKET</button>
+    </div>
+    <div id="hint">Tap a plot to tend it.<span id="kbline"> &middot; Arrows move, Space acts.</span></div>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   PATCH — a garden patch; a software patch. For the Overclock arcade.
+   Twelve plots of warm dirt and no way to lose. Till it, plant it, water
+   it, wait for it, pick it, sell it, buy better seeds. Rain waters the
+   whole patch for free and the bees don't care either way. The garden is
+   saved, so it's still there tomorrow.
+   One file, no assets, oscillator audio.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'patch_v1';
+var K_MUTE = 'patch_muted_v1';
+
+var COLS = 4, ROWS = 3, NPLOTS = COLS * ROWS;
+var MAX_MOIST = 26;          /* seconds of damp soil one watering buys */
+var DAY_LEN = 180;           /* seconds of sun, dawn to dusk and round again */
+var STAGE_NAMES = ['seeded', 'sprout', 'leafy', 'budding', 'ripe'];
+
+/* crop table: cost to buy a seed, coins when sold, seconds of WATERED time
+   from seed to ripe. Pricier seeds unlock as lifetime earnings grow. */
+var CROPS = [
+  { name: 'CARROT',    cost: 2,  sell: 7,  grow: 18, unlock: 0,   col: '#e2802a' },
+  { name: 'TOMATO',    cost: 5,  sell: 14, grow: 26, unlock: 20,  col: '#cf3c31' },
+  { name: 'SUNFLOWER', cost: 9,  sell: 22, grow: 34, unlock: 60,  col: '#efc23a' },
+  { name: 'CORN',      cost: 14, sell: 33, grow: 44, unlock: 140, col: '#e6bd4e' },
+  { name: 'PUMPKIN',   cost: 22, sell: 52, grow: 60, unlock: 300, col: '#dd7620' }
+];
+
+/* ----------------------------------------------------------------- util -- */
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function pick(a) { return a[(Math.random() * a.length) | 0]; }
+function loadJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function num(v, d) { var n = Number(v); return (typeof v !== 'boolean' && isFinite(n)) ? n : d; }
+function rgb(c) { return 'rgb(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ')'; }
+function mix(a, b, t) { return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)]; }
+function shade(hex, amt) {
+  var n = parseInt(hex.slice(1), 16);
+  var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  if (amt >= 0) { r += (255 - r) * amt; g += (255 - g) * amt; b += (255 - b) * amt; }
+  else { var k = 1 + amt; r *= k; g *= k; b *= k; }
+  return 'rgb(' + Math.round(clamp(r, 0, 255)) + ',' + Math.round(clamp(g, 0, 255)) + ',' + Math.round(clamp(b, 0, 255)) + ')';
+}
+/* deterministic per-plot wobble so no two plants are identical */
+function hash(a, b) { var x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return x - Math.floor(x); }
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+var rainSrc = null, rainGain = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.4;
+    master.connect(actx.destination);
+    startRainBed();
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.4;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(28, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseBurst(dur, vol, freq, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var n = Math.max(1, Math.floor(actx.sampleRate * dur));
+  var buf = actx.createBuffer(1, n, actx.sampleRate);
+  var ch = buf.getChannelData(0);
+  for (var i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  var src = actx.createBufferSource(); src.buffer = buf;
+  var f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq;
+  var g = actx.createGain(); g.gain.value = vol;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+}
+/* one persistent noise loop for rain — its gain tracks the weather */
+function startRainBed() {
+  if (!actx || rainSrc) return;
+  try {
+    var n = Math.floor(actx.sampleRate * 2);
+    var buf = actx.createBuffer(1, n, actx.sampleRate);
+    var ch = buf.getChannelData(0);
+    for (var i = 0; i < n; i++) ch[i] = Math.random() * 2 - 1;
+    rainSrc = actx.createBufferSource();
+    rainSrc.buffer = buf; rainSrc.loop = true;
+    var f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1400;
+    rainGain = actx.createGain(); rainGain.gain.value = 0;
+    rainSrc.connect(f); f.connect(rainGain); rainGain.connect(master);
+    rainSrc.start();
+  } catch (e) { rainSrc = null; }
+}
+function setRainVolume(v) {
+  if (rainGain && actx) {
+    try { rainGain.gain.setTargetAtTime(v * 0.09, actx.currentTime, 0.6); } catch (e) {}
+  }
+}
+var sfx = {
+  till:    function () { noiseBurst(0.22, 0.13, 300); tone('sine', 150, 62, 0.2, 0.09); },
+  plant:   function () { tone('triangle', 520, 760, 0.11, 0.08); },
+  water:   function () { noiseBurst(0.42, 0.07, 950); tone('sine', 720, 380, 0.35, 0.04); },
+  harvest: function () { tone('triangle', 620, 940, 0.12, 0.11); noiseBurst(0.14, 0.06, 1500); },
+  coin:    function () { tone('triangle', 880, 1180, 0.13, 0.1); tone('triangle', 1320, 1760, 0.16, 0.08, 0.09); },
+  buy:     function () { tone('sine', 420, 640, 0.13, 0.08); },
+  nope:    function () { tone('sine', 250, 190, 0.16, 0.05); },
+  unlock:  function () { tone('triangle', 660, 990, 0.16, 0.09); tone('triangle', 990, 1320, 0.22, 0.08, 0.13); },
+  thunder: function () { noiseBurst(0.9, 0.09, 180); }
+};
+/* birdsong: a few chirps on a lazy schedule, never on a wall clock */
+function chirp() {
+  if (!actx || muted) return;
+  var base = rnd(1500, 2600);
+  var n = 2 + ((Math.random() * 3) | 0);
+  for (var i = 0; i < n; i++) {
+    var f = base * (1 + (Math.random() - 0.5) * 0.25);
+    tone('triangle', f, f * rnd(1.15, 1.5), 0.07, 0.035, i * rnd(0.07, 0.14));
+  }
+}
+
+/* --------------------------------------------------------------- garden -- */
+var plots = [];               /* stable array identity — never reassigned */
+var G = {
+  state: 'title',             /* title | play | pause */
+  coins: 10,
+  earned: 0,                  /* lifetime coins taken at market — drives unlocks */
+  total: 0,                   /* lifetime crops harvested */
+  basket: [0, 0, 0, 0, 0],
+  seeds: [3, 0, 0, 0, 0],
+  seedSel: 0,
+  sel: 5,                     /* keyboard/gamepad plot selector */
+  dayT: 42,
+  rain: 0,                    /* 0..1 rain intensity */
+  rainT: 0,                   /* seconds left in the shower */
+  nextRain: 55,
+  birdT: 3,
+  saveT: 0,
+  dirty: false,
+  hintT: 0,
+  hintMsg: ''
+};
+function freshPlot(i) {
+  return { tilled: false, crop: -1, stage: 0, growT: 0, moist: 0, sd: hash(i + 1, 7.3), pop: 0 };
+}
+function resetGarden() {
+  plots.length = 0;
+  for (var i = 0; i < NPLOTS; i++) plots.push(freshPlot(i));
+}
+resetGarden();
+
+function unlocked(ci) { return G.earned >= CROPS[ci].unlock; }
+function basketCount() { var n = 0; for (var i = 0; i < 5; i++) n += G.basket[i]; return n; }
+function basketValue() { var v = 0; for (var i = 0; i < 5; i++) v += G.basket[i] * CROPS[i].sell; return v; }
+
+/* ---------------------------------------------------------------- saves -- */
+function persist() {
+  var ps = [];
+  for (var i = 0; i < plots.length; i++) {
+    var p = plots[i];
+    ps.push({ t: p.tilled ? 1 : 0, c: p.crop, s: p.stage, g: Math.round(p.growT * 100) / 100, m: Math.round(p.moist * 100) / 100 });
+  }
+  saveJSON(K_SAVE, {
+    v: 1, coins: G.coins, earned: G.earned, total: G.total,
+    basket: G.basket.slice(), seeds: G.seeds.slice(), seedSel: G.seedSel, plots: ps
+  });
+  G.dirty = false;
+}
+/* Defensive to the bone: any shape of nonsense must render a fresh garden. */
+function restore() {
+  var s = loadJSON(K_SAVE, null);
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return false;
+  G.coins = clamp(num(s.coins, 10), 0, 1e9);
+  G.earned = clamp(num(s.earned, 0), 0, 1e9);
+  G.total = clamp(num(s.total, 0), 0, 1e9);
+  var i;
+  for (i = 0; i < 5; i++) {
+    G.basket[i] = clamp(Math.floor(num(s.basket && s.basket[i], 0)), 0, 99999);
+    G.seeds[i] = clamp(Math.floor(num(s.seeds && s.seeds[i], 0)), 0, 99999);
+  }
+  G.seedSel = clamp(Math.floor(num(s.seedSel, 0)), 0, 4);
+  var ps = s.plots;
+  for (i = 0; i < NPLOTS; i++) {
+    var src = (ps && typeof ps === 'object' && ps[i] && typeof ps[i] === 'object') ? ps[i] : null;
+    var p = plots[i];
+    if (!src) { plots[i] = freshPlot(i); continue; }
+    p.tilled = !!num(src.t, 0);
+    var c = Math.floor(num(src.c, -1));
+    p.crop = (c >= 0 && c < CROPS.length) ? c : -1;
+    if (p.crop >= 0) p.tilled = true;
+    p.stage = clamp(Math.floor(num(src.s, 0)), 0, 4);
+    p.growT = clamp(num(src.g, 0), 0, 999);
+    p.moist = clamp(num(src.m, 0), 0, MAX_MOIST);
+    p.pop = 0;
+  }
+  /* a garden with nothing in it and no coins would be a dead end — never that */
+  if (G.coins < CROPS[0].cost && G.seeds[0] === 0 && basketCount() === 0) {
+    var anyCrop = false;
+    for (i = 0; i < NPLOTS; i++) if (plots[i].crop >= 0) anyCrop = true;
+    if (!anyCrop) G.seeds[0] += 3;
+  }
+  return true;
+}
+
+/* --------------------------------------------------------------- canvas -- */
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var panelEl = document.getElementById('panel');
+var view = { w: 900, h: 600, dpr: 1 };
+var free = { w: 900, h: 600 };     /* the part of the canvas the bench doesn't cover */
+
+function measureFree() {
+  free.w = view.w; free.h = view.h;
+  if (!document.body.classList.contains('playing')) return;
+  var r = panelEl.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  if (r.height >= view.h * 0.8) free.w = Math.max(160, r.left);   /* side bench */
+  else free.h = Math.max(160, r.top);                             /* bottom bench */
+}
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(240, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+  measureFree();
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+/* ------------------------------------------------------------- geometry -- */
+/* The patch: sky band on top, then a fenced bed of COLS x ROWS plots. */
+function layout() {
+  var W = free.w, H = free.h;
+  var skyH = clamp(H * 0.30, 64, 210);
+  var padX = clamp(W * 0.05, 14, 54);
+  var bedY0 = skyH;
+  var bedH = H - bedY0;
+  var gy0 = bedY0 + clamp(bedH * 0.16, 16, 56);
+  var gw = W - padX * 2;
+  var gh = bedH - (gy0 - bedY0) - clamp(bedH * 0.10, 12, 42);
+  /* keep the plots from stretching into letterboxes on a wide screen —
+     a bed of long thin slots draws spindly little plants (found in a shot) */
+  var maxW = (gh / ROWS) * 1.72 * COLS;
+  if (gw > maxW) gw = maxW;
+  var gx0 = (W - gw) / 2;
+  return {
+    W: W, H: H, skyH: skyH, padX: padX,
+    gx0: gx0, gy0: gy0, gw: Math.max(60, gw), gh: Math.max(50, gh),
+    cw: Math.max(20, gw / COLS), ch: Math.max(18, gh / ROWS)
+  };
+}
+function plotRect(i, L) {
+  var c = i % COLS, r = (i / COLS) | 0;
+  var gapx = L.cw * 0.09, gapy = L.ch * 0.13;
+  return {
+    x: L.gx0 + c * L.cw + gapx * 0.5,
+    y: L.gy0 + r * L.ch + gapy * 0.5,
+    w: L.cw - gapx,
+    h: L.ch - gapy
+  };
+}
+function hitPlot(x, y) {
+  var L = layout();
+  for (var i = 0; i < NPLOTS; i++) {
+    var r = plotRect(i, L);
+    /* generous vertical reach so a tall plant is tappable too */
+    if (x >= r.x && x <= r.x + r.w && y >= r.y - r.h * 0.55 && y <= r.y + r.h) return i;
+  }
+  return -1;
+}
+
+/* -------------------------------------------------------------- effects -- */
+var parts = [];      /* dirt clods, water drops, petals, sparkles */
+var floats = [];     /* rising text */
+var cans = [];       /* watering-can animations */
+function addPart(x, y, vx, vy, life, size, col, kind) {
+  if (parts.length > 420) return;
+  parts.push({ x: x, y: y, vx: vx, vy: vy, t: life, max: life, size: size, col: col, kind: kind || 0 });
+}
+function addFloat(x, y, text, col) {
+  if (floats.length > 30) return;
+  floats.push({ x: x, y: y, text: text, col: col || '#fdf6e6', t: 1.5, max: 1.5 });
+}
+function say(msg) { G.hintMsg = msg; G.hintT = 2.4; }
+
+/* -------------------------------------------------------------- actions -- */
+function plotCenter(i) {
+  var L = layout(), r = plotRect(i, L);
+  return { x: r.x + r.w / 2, y: r.y + r.h * 0.62, r: r };
+}
+function till(i) {
+  var p = plots[i], c = plotCenter(i);
+  p.tilled = true;
+  sfx.till();
+  for (var k = 0; k < 12; k++) {
+    addPart(c.x + rnd(-c.r.w * 0.4, c.r.w * 0.4), c.y, rnd(-40, 40), rnd(-90, -30), rnd(0.4, 0.8), rnd(2, 4.5), pick(['#6b4a2f', '#5a3d26', '#7d5836']), 0);
+  }
+  addFloat(c.x, c.y - c.r.h * 0.5, 'tilled', '#f0e0bd');
+  G.dirty = true; persist(); updateHUD();
+}
+function plant(i, ci) {
+  var p = plots[i], c = plotCenter(i);
+  if (!unlocked(ci)) { sfx.nope(); say(CROPS[ci].name + ' unlocks at ' + CROPS[ci].unlock + ' coins earned'); return false; }
+  if (G.seeds[ci] <= 0) { sfx.nope(); say('No ' + CROPS[ci].name.toLowerCase() + ' seeds — buy one first'); return false; }
+  G.seeds[ci]--;
+  p.crop = ci; p.stage = 0; p.growT = 0; p.pop = 1;
+  sfx.plant();
+  addFloat(c.x, c.y - c.r.h * 0.5, CROPS[ci].name.toLowerCase(), '#e9f3d6');
+  G.dirty = true; persist(); updateHUD();
+  return true;
+}
+function water(i, quiet) {
+  var p = plots[i], c = plotCenter(i);
+  p.moist = MAX_MOIST;
+  if (!quiet) {
+    sfx.water();
+    cans.push({ i: i, t: 0.75 });
+    for (var k = 0; k < 10; k++) {
+      addPart(c.x + rnd(-c.r.w * 0.3, c.r.w * 0.3), c.y - c.r.h * 0.9, rnd(-8, 8), rnd(40, 110), rnd(0.3, 0.55), rnd(1.6, 3), '#7fbfe6', 1);
+    }
+  }
+  G.dirty = true;
+}
+function harvest(i) {
+  var p = plots[i], c = plotCenter(i);
+  var ci = p.crop;
+  if (ci < 0 || p.stage < 4) return false;
+  G.basket[ci]++;
+  G.total++;
+  p.crop = -1; p.stage = 0; p.growT = 0; p.pop = 1;
+  sfx.harvest();
+  var col = CROPS[ci].col;
+  for (var k = 0; k < 16; k++) {
+    var a = rnd(0, TAU);
+    addPart(c.x, c.y - c.r.h * 0.6, Math.cos(a) * rnd(20, 80), Math.sin(a) * rnd(20, 80) - 40, rnd(0.5, 0.9), rnd(2, 4), k % 3 ? col : '#8fbc5a', 0);
+  }
+  addFloat(c.x, c.y - c.r.h * 0.7, '+1 ' + CROPS[ci].name.toLowerCase(), col);
+  G.dirty = true; persist(); updateHUD();
+  return true;
+}
+function sellBasket() {
+  var n = basketCount();
+  if (n <= 0) { sfx.nope(); say('The basket is empty — pick something ripe first'); return false; }
+  var v = basketValue();
+  var before = G.earned;
+  G.coins += v; G.earned += v;
+  for (var i = 0; i < 5; i++) G.basket[i] = 0;
+  sfx.coin();
+  var L = layout();
+  addFloat(L.gx0 + L.gw / 2, L.gy0 + L.gh * 0.4, '+' + v + ' coins', '#ffe6a8');
+  for (var k = 0; k < 18; k++) {
+    addPart(L.gx0 + L.gw / 2 + rnd(-40, 40), L.gy0 + L.gh * 0.4, rnd(-50, 50), rnd(-120, -40), rnd(0.6, 1.1), rnd(2.5, 4.5), '#f4c840', 2);
+  }
+  say('Sold ' + n + ' for ' + v + ' coins');
+  for (i = 0; i < 5; i++) {
+    if (before < CROPS[i].unlock && G.earned >= CROPS[i].unlock) {
+      sfx.unlock();
+      say(CROPS[i].name.charAt(0) + CROPS[i].name.slice(1).toLowerCase() + ' seeds unlocked!');
+    }
+  }
+  G.dirty = true; persist(); updateHUD();
+  return true;
+}
+function buySeed(ci) {
+  if (!unlocked(ci)) { sfx.nope(); say(CROPS[ci].name + ' unlocks at ' + CROPS[ci].unlock + ' coins earned'); return false; }
+  if (G.coins < CROPS[ci].cost) { sfx.nope(); say('Not enough coins — sell the basket'); return false; }
+  G.coins -= CROPS[ci].cost;
+  G.seeds[ci]++;
+  sfx.buy();
+  say('Bought a ' + CROPS[ci].name.toLowerCase() + ' seed');
+  G.dirty = true; persist(); updateHUD();
+  return true;
+}
+/* one tap does whatever this plot needs next */
+function actPlot(i) {
+  if (i < 0 || i >= NPLOTS) return;
+  if (G.state !== 'play') return;
+  G.sel = i;
+  var p = plots[i];
+  if (!p.tilled) { till(i); return; }
+  if (p.crop < 0) { plant(i, G.seedSel); return; }
+  if (p.stage >= 4) { harvest(i); return; }
+  water(i);
+}
+function plotAction(i) {
+  var p = plots[i];
+  if (!p.tilled) return 'TILL';
+  if (p.crop < 0) return unlocked(G.seedSel) ? ('PLANT ' + CROPS[G.seedSel].name) : 'PLANT';
+  if (p.stage >= 4) return 'HARVEST';
+  return p.moist > 0.01 ? 'WATER' : 'THIRSTY';
+}
+
+/* --------------------------------------------------------------- update -- */
+function update(dt) {
+  var i, p;
+  /* weather + sun */
+  G.dayT = (G.dayT + dt) % DAY_LEN;
+  if (G.rainT > 0) {
+    G.rainT -= dt;
+    G.rain = clamp(G.rain + dt * 1.1, 0, 1);
+    if (G.rainT <= 0) G.nextRain = rnd(45, 95);
+  } else {
+    G.rain = clamp(G.rain - dt * 0.5, 0, 1);
+    G.nextRain -= dt;
+    if (G.nextRain <= 0) startRain(rnd(11, 18));
+  }
+  setRainVolume(G.rain);
+
+  /* birdsong when it's dry, drips when it isn't */
+  G.birdT -= dt;
+  if (G.birdT <= 0) {
+    if (G.rain < 0.3) chirp();
+    G.birdT = rnd(3.5, 9.5);
+  }
+
+  for (i = 0; i < NPLOTS; i++) {
+    p = plots[i];
+    if (p.pop > 0) p.pop = Math.max(0, p.pop - dt * 2.4);
+    if (G.rain > 0.35) p.moist = MAX_MOIST;   /* rain waters the whole patch, free */
+    else if (p.moist > 0) p.moist = Math.max(0, p.moist - dt);
+    if (p.crop >= 0 && p.stage < 4 && p.moist > 0) {
+      var per = CROPS[p.crop].grow / 4;
+      p.growT += dt;
+      while (p.growT >= per && p.stage < 4) {
+        p.growT -= per;
+        p.stage++;
+        G.dirty = true;
+        if (p.stage >= 4) {
+          p.growT = 0;
+          var c = plotCenter(i);
+          addFloat(c.x, c.y - c.r.h * 0.8, 'ripe!', '#ffe6a8');
+        }
+      }
+    }
+  }
+
+  /* bugs */
+  for (i = 0; i < bugs.length; i++) {
+    var b = bugs[i];
+    b.t += dt;
+    b.x += Math.cos(b.dir) * b.sp * dt;
+    b.y += Math.sin(b.dir) * b.sp * dt * 0.5;
+    b.dir += Math.sin(b.t * b.wob) * dt * 2.2;
+    var L = layout();
+    if (b.x < L.gx0 - 40) b.dir = rnd(-0.6, 0.6);
+    if (b.x > L.gx0 + L.gw + 40) b.dir = Math.PI + rnd(-0.6, 0.6);
+    if (b.y < L.skyH * 0.75) b.dir = Math.abs(Math.sin(b.dir)) > 0 ? rnd(0.3, 1.0) : b.dir;
+    if (b.y > L.H - 12) b.dir = -rnd(0.3, 1.0);
+  }
+
+  /* particles */
+  for (i = parts.length - 1; i >= 0; i--) {
+    var pt = parts[i];
+    pt.t -= dt;
+    pt.x += pt.vx * dt; pt.y += pt.vy * dt;
+    if (pt.kind === 1) pt.vy += 260 * dt;        /* water falls hard */
+    else if (pt.kind === 2) pt.vy += 150 * dt;   /* coins arc */
+    else pt.vy += 210 * dt;
+    if (pt.t <= 0) parts.splice(i, 1);
+  }
+  for (i = floats.length - 1; i >= 0; i--) {
+    floats[i].t -= dt; floats[i].y -= dt * 26;
+    if (floats[i].t <= 0) floats.splice(i, 1);
+  }
+  for (i = cans.length - 1; i >= 0; i--) {
+    cans[i].t -= dt;
+    if (cans[i].t <= 0) cans.splice(i, 1);
+  }
+  if (G.hintT > 0) G.hintT -= dt;
+
+  /* the garden is a place you come back to — keep the save warm */
+  G.saveT -= dt;
+  if (G.saveT <= 0) { G.saveT = 3; if (G.dirty) persist(); }
+}
+function startRain(dur) {
+  G.rainT = dur;
+  G.nextRain = 60;
+  say('Rain! The whole patch gets a free drink.');
+  if (Math.random() < 0.4) sfx.thunder();
+}
+
+/* bees and butterflies drifting over the patch */
+var bugs = [];
+(function () {
+  for (var i = 0; i < 5; i++) {
+    bugs.push({
+      x: rnd(0.1, 0.9), y: rnd(0.4, 0.9), _rel: true,
+      dir: rnd(0, TAU), sp: rnd(22, 46), wob: rnd(1.4, 3.2), t: rnd(0, 9),
+      kind: i < 3 ? 0 : 1,
+      col: i < 3 ? '#e8c34a' : pick(['#f2a0c8', '#c9a6e8', '#f6dc8a'])
+    });
+  }
+})();
+function seatBugs() {
+  var L = layout();
+  for (var i = 0; i < bugs.length; i++) {
+    var b = bugs[i];
+    if (b._rel) {
+      b.x = L.gx0 + b.x * L.gw;
+      b.y = L.skyH + b.y * (L.H - L.skyH) * 0.85;
+      b._rel = false;
+    }
+  }
+}
+
+/* =========================================================================
+   DRAWING — a sunny cottage garden. Warm dirt, real leaves, wooden fence.
+   ========================================================================= */
+var SKY_RAMP = [
+  { t: 0.00, top: [104, 128, 168], bot: [244, 186, 140] },
+  { t: 0.16, top: [116, 168, 214], bot: [214, 230, 236] },
+  { t: 0.50, top: [ 96, 158, 220], bot: [198, 226, 240] },
+  { t: 0.84, top: [128, 152, 206], bot: [246, 202, 148] },
+  { t: 1.00, top: [104, 128, 168], bot: [244, 186, 140] }
+];
+function skyColors(u) {
+  for (var i = 0; i < SKY_RAMP.length - 1; i++) {
+    var a = SKY_RAMP[i], b = SKY_RAMP[i + 1];
+    if (u >= a.t && u <= b.t) {
+      var k = (u - a.t) / Math.max(0.0001, b.t - a.t);
+      return { top: mix(a.top, b.top, k), bot: mix(a.bot, b.bot, k) };
+    }
+  }
+  return { top: SKY_RAMP[0].top.slice(), bot: SKY_RAMP[0].bot.slice() };
+}
+
+var CLOUDS = [];
+(function () {
+  for (var i = 0; i < 6; i++) CLOUDS.push({ x: Math.random(), y: rnd(0.12, 0.72), s: rnd(0.55, 1.25), sp: rnd(0.004, 0.012) });
+})();
+
+function drawSky(L, t, dt) {
+  var u = G.dayT / DAY_LEN;
+  var sc = skyColors(u);
+  var top = sc.top, bot = sc.bot;
+  if (G.rain > 0) {
+    top = mix(top, [122, 132, 142], G.rain * 0.75);
+    bot = mix(bot, [176, 182, 184], G.rain * 0.75);
+  }
+  var g = ctx.createLinearGradient(0, 0, 0, L.skyH * 1.15);
+  g.addColorStop(0, rgb(top));
+  g.addColorStop(1, rgb(bot));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, view.w, L.skyH + 2);
+
+  /* the sun on its slow arc — a soft warm disc, no neon glow */
+  var sx = lerp(L.padX * 0.6, L.W - L.padX * 0.6, u);
+  var sy = L.skyH * 1.02 - Math.sin(Math.PI * clamp(u, 0, 1)) * L.skyH * 0.78;
+  var sr = clamp(Math.min(L.W, L.H) * 0.035, 12, 30);
+  var warm = 1 - Math.abs(u - 0.5) * 1.4;
+  var sunCol = mix([255, 214, 128], [255, 246, 214], clamp(warm, 0, 1));
+  var halo = ctx.createRadialGradient(sx, sy, sr * 0.5, sx, sy, sr * 4.2);
+  halo.addColorStop(0, 'rgba(' + (sunCol[0] | 0) + ',' + (sunCol[1] | 0) + ',' + (sunCol[2] | 0) + ',' + (0.32 * (1 - G.rain * 0.8)).toFixed(2) + ')');
+  halo.addColorStop(1, 'rgba(255,236,190,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(sx - sr * 4.2, sy - sr * 4.2, sr * 8.4, sr * 8.4);
+  ctx.globalAlpha = 1 - G.rain * 0.7;
+  ctx.fillStyle = rgb(sunCol);
+  ctx.beginPath(); ctx.arc(sx, sy, sr, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  /* soft clouds */
+  for (var i = 0; i < CLOUDS.length; i++) {
+    var c = CLOUDS[i];
+    c.x += c.sp * dt * (1 + G.rain);
+    if (c.x > 1.25) c.x = -0.25;
+    var cx = c.x * (L.W + 160) - 80;
+    var cy = L.skyH * c.y;
+    var cs = c.s * clamp(Math.min(L.W, L.H) * 0.055, 14, 40);
+    var alpha = 0.82 - G.rain * 0.35;
+    ctx.fillStyle = 'rgba(255,255,255,' + alpha.toFixed(2) + ')';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, cs * 1.5, cs * 0.62, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx - cs * 0.7, cy + cs * 0.16, cs * 0.85, cs * 0.45, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + cs * 0.65, cy + cs * 0.2, cs * 0.75, cs * 0.4, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(214,222,232,' + (alpha * 0.6).toFixed(2) + ')';
+    ctx.beginPath(); ctx.ellipse(cx + cs * 0.1, cy + cs * 0.42, cs * 1.15, cs * 0.26, 0, 0, TAU); ctx.fill();
+  }
+}
+
+function drawHills(L) {
+  /* a hedge and a couple of far hills so the patch sits in a place */
+  var y = L.skyH;
+  ctx.fillStyle = '#8fae7c';
+  ctx.beginPath();
+  ctx.moveTo(0, y + 6);
+  for (var x = 0; x <= L.W; x += 24) {
+    ctx.lineTo(x, y - 10 + Math.sin(x * 0.006) * 12 + Math.sin(x * 0.017) * 5);
+  }
+  ctx.lineTo(L.W, y + 22); ctx.lineTo(0, y + 22); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#6f9455';
+  ctx.beginPath();
+  ctx.moveTo(0, y + 14);
+  for (var x2 = 0; x2 <= L.W; x2 += 18) {
+    ctx.lineTo(x2, y + 2 + Math.sin(x2 * 0.011 + 2) * 8);
+  }
+  ctx.lineTo(L.W, y + 30); ctx.lineTo(0, y + 30); ctx.closePath(); ctx.fill();
+  /* the hedge behind the fence */
+  var hy = y + 16;
+  ctx.fillStyle = '#4f7a3a';
+  for (var hx = -10; hx < L.W + 20; hx += 22) {
+    ctx.beginPath();
+    ctx.arc(hx, hy + Math.sin(hx * 0.09) * 3, 16, Math.PI, 0);
+    ctx.fill();
+  }
+  ctx.fillRect(0, hy - 2, L.W, 14);
+  ctx.fillStyle = 'rgba(120,168,86,0.5)';
+  for (var hx2 = -6; hx2 < L.W + 20; hx2 += 13) {
+    ctx.beginPath();
+    ctx.arc(hx2, hy - 4 + Math.sin(hx2 * 0.2) * 3, 6, Math.PI, 0);
+    ctx.fill();
+  }
+}
+
+function drawGround(L) {
+  /* lawn under and around the beds */
+  var gy = L.skyH + 26;
+  var g = ctx.createLinearGradient(0, gy, 0, L.H);
+  g.addColorStop(0, '#7fa353');
+  g.addColorStop(1, '#628840');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, gy, view.w, view.h - gy);
+  /* grass in little clumps of blades, greener and taller toward the front.
+     (A first pass used pale strokes and the screenshot looked like scratches.) */
+  ctx.lineCap = 'round';
+  for (var i = 0; i < 54; i++) {
+    var tx = hash(i, 3.1) * view.w;
+    var d = hash(i, 7.7);
+    var ty = gy + d * (view.h - gy);
+    var depth = clamp((ty - gy) / Math.max(1, view.h - gy), 0, 1);
+    var tall = 4 + depth * 7;
+    for (var bl = 0; bl < 4; bl++) {
+      var bx = tx + (hash(i * 4 + bl, 1.9) - 0.5) * 11;
+      var lean = (hash(i * 4 + bl, 8.4) - 0.5) * 5;
+      ctx.strokeStyle = hash(i, bl) > 0.5
+        ? 'rgba(146,186,96,0.55)' : 'rgba(84,118,58,0.5)';
+      ctx.lineWidth = 1.2 + depth;
+      ctx.beginPath();
+      ctx.moveTo(bx, ty);
+      ctx.quadraticCurveTo(bx + lean * 0.4, ty - tall * 0.6, bx + lean, ty - tall * (0.7 + hash(bl, i) * 0.5));
+      ctx.stroke();
+    }
+  }
+}
+
+function drawFence(L, front) {
+  /* The fence stands BEHIND the beds, on the strip between hedge and dirt.
+     An earlier pass ran full-height posts down the sides and they read as
+     scaffolding straight through the patch. */
+  var w = clamp(L.W * 0.011, 5, 12);
+  var gap = Math.max(16, L.gy0 - L.skyH);
+  var bot = L.gy0 - gap * 0.10;
+  var top = Math.max(L.skyH + 12, bot - gap * 0.86);
+  function post(x, y0, y1) {
+    ctx.fillStyle = '#b5834f';
+    ctx.fillRect(x - w / 2, y0, w, y1 - y0);
+    ctx.fillStyle = 'rgba(255,236,206,0.35)';
+    ctx.fillRect(x - w / 2, y0, w * 0.34, y1 - y0);
+    ctx.fillStyle = '#8a6035';
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2, y0); ctx.lineTo(x, y0 - w * 0.8); ctx.lineTo(x + w / 2, y0);
+    ctx.closePath(); ctx.fill();
+  }
+  function rail(x0, x1, y) {
+    ctx.fillStyle = '#a9784a';
+    ctx.fillRect(x0, y, x1 - x0, w * 0.62);
+    ctx.fillStyle = 'rgba(255,236,206,0.28)';
+    ctx.fillRect(x0, y, x1 - x0, w * 0.2);
+  }
+  var x0 = -w, x1 = view.w + w;
+  if (!front) {
+    /* pickets first, then the rails cross in front of them */
+    var stepX = clamp(L.cw * 0.38, 16, 46);
+    var h = bot - top;
+    for (var x = x0; x <= x1 + 1; x += stepX) post(x, top + (hash(Math.round(x), 1.7) - 0.5) * h * 0.06, bot);
+    rail(x0, x1, top + h * 0.16);
+    rail(x0, x1, top + h * 0.60);
+  } else {
+    /* a low front rail so the bed reads as a raised bed, never covering plants */
+    ctx.fillStyle = '#96683b';
+    ctx.fillRect(L.gx0 - L.cw * 0.14, L.gy0 + L.gh + 2, L.gw + L.cw * 0.28, clamp(L.ch * 0.11, 4, 11));
+    ctx.fillStyle = 'rgba(255,236,206,0.22)';
+    ctx.fillRect(L.gx0 - L.cw * 0.14, L.gy0 + L.gh + 2, L.gw + L.cw * 0.28, clamp(L.ch * 0.04, 1.5, 4));
+  }
+}
+
+function drawSoil(p, r, i) {
+  var wet = clamp(p.moist / MAX_MOIST, 0, 1);
+  var rr = Math.min(6, r.h * 0.2);
+  ctx.save();
+  ctx.beginPath();
+  if (ctx.roundRect) { ctx.roundRect(r.x, r.y, r.w, r.h, rr); }
+  else { ctx.rect(r.x, r.y, r.w, r.h); }
+  ctx.clip();
+  if (!p.tilled) {
+    /* untilled: scruffy weedy ground */
+    ctx.fillStyle = '#7d8f54';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = 'rgba(96,116,62,0.9)';
+    for (var k = 0; k < 16; k++) {
+      var wx = r.x + hash(i * 9 + k, 1.7) * r.w;
+      var wy = r.y + hash(i * 9 + k, 4.3) * r.h;
+      ctx.beginPath(); ctx.ellipse(wx, wy, r.w * 0.06, r.h * 0.05, 0, 0, TAU); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(148,170,102,0.85)';
+    ctx.lineWidth = 1.3;
+    for (var k2 = 0; k2 < 12; k2++) {
+      var gx = r.x + hash(i * 5 + k2, 2.9) * r.w;
+      var gy = r.y + r.h * (0.35 + hash(i * 5 + k2, 6.1) * 0.6);
+      ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + (hash(k2, i + 1) - 0.5) * 6, gy - 6); ctx.stroke();
+    }
+  } else {
+    var dry = [146, 106, 68], damp = [84, 56, 34];
+    var base = mix(dry, damp, wet);
+    ctx.fillStyle = rgb(base);
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    /* Mottle first: broken patches of lighter and darker dirt. The earlier
+       version drew ruler-straight full-width ridges and the screenshot came
+       back looking like decking, so nothing here spans the plot. */
+    var c, cx, cy;
+    for (c = 0; c < 34; c++) {
+      cx = r.x + hash(i * 13 + c, 8.2) * r.w;
+      cy = r.y + hash(i * 13 + c, 3.4) * r.h;
+      var tint = hash(c, i * 3 + 1);
+      ctx.fillStyle = rgb(mix(base, tint > 0.5 ? [196, 158, 112] : [46, 30, 17], 0.06 + tint * 0.10));
+      ctx.beginPath();
+      ctx.ellipse(cx, cy,
+        r.w * (0.03 + hash(c, i) * 0.07),
+        r.h * (0.05 + hash(c, i + 2) * 0.11),
+        hash(c, i + 5) * 3, 0, TAU);
+      ctx.fill();
+    }
+    /* rake marks: short, tilted, never lined up with each other */
+    ctx.lineCap = 'round';
+    for (c = 0; c < 9; c++) {
+      var rx0 = r.x + hash(i * 3 + c, 2.4) * r.w * 0.72;
+      var ry0 = r.y + r.h * (0.12 + hash(i + c, 6.6) * 0.78);
+      var rlen = r.w * (0.12 + hash(c, i * 2) * 0.16);
+      var tilt = (hash(c, i + 9) - 0.5) * r.h * 0.09;
+      ctx.strokeStyle = rgb(mix(base, [34, 21, 11], 0.15));
+      ctx.lineWidth = Math.max(1, r.h * 0.022);
+      ctx.beginPath();
+      ctx.moveTo(rx0, ry0);
+      ctx.quadraticCurveTo(rx0 + rlen * 0.5, ry0 + tilt * 1.6, rx0 + rlen, ry0 + tilt);
+      ctx.stroke();
+      ctx.strokeStyle = rgb(mix(base, [255, 228, 190], 0.12));
+      ctx.lineWidth = Math.max(0.8, r.h * 0.014);
+      ctx.beginPath();
+      ctx.moveTo(rx0, ry0 - r.h * 0.028);
+      ctx.quadraticCurveTo(rx0 + rlen * 0.5, ry0 + tilt * 1.6 - r.h * 0.028, rx0 + rlen, ry0 + tilt - r.h * 0.028);
+      ctx.stroke();
+    }
+    /* crumbs and the odd pebble */
+    for (c = 0; c < 20; c++) {
+      cx = r.x + hash(i * 29 + c, 5.1) * r.w;
+      cy = r.y + hash(i * 29 + c, 9.7) * r.h;
+      var k = c % 4;
+      ctx.fillStyle = k === 0 ? 'rgba(236,218,188,0.34)'
+                   : k === 1 ? 'rgba(28,17,8,0.30)'
+                   : k === 2 ? 'rgba(104,72,44,0.45)'
+                             : 'rgba(186,150,106,0.32)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy,
+        r.w * 0.008 + hash(c, i + 4) * r.w * 0.014,
+        r.h * 0.012 + hash(c, i + 6) * r.h * 0.020,
+        hash(c, i + 5) * 3, 0, TAU);
+      ctx.fill();
+    }
+    /* a crumbly lit edge along the top of the bed */
+    var eg = ctx.createLinearGradient(0, r.y, 0, r.y + r.h * 0.3);
+    eg.addColorStop(0, 'rgba(255,228,190,0.20)');
+    eg.addColorStop(1, 'rgba(255,228,190,0)');
+    ctx.fillStyle = eg;
+    ctx.fillRect(r.x, r.y, r.w, r.h * 0.3);
+    if (wet > 0.02) {
+      ctx.fillStyle = 'rgba(30,60,86,' + (0.13 * wet).toFixed(2) + ')';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+    }
+  }
+  ctx.restore();
+  /* bed edging */
+  ctx.strokeStyle = p.tilled ? 'rgba(58,38,22,0.55)' : 'rgba(58,72,34,0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(r.x, r.y, r.w, r.h, rr); else ctx.rect(r.x, r.y, r.w, r.h);
+  ctx.stroke();
+}
+
+/* ------------------------------------------------------------- the crops -- */
+/* Drawn in a local space: origin at the soil surface, -y is up, ~100 units
+   is a full-grown corn stalk. Each crop has its own silhouette on purpose. */
+/* leaves keep some size even on a young plant, or a sprout is invisible */
+function lf(hf) { return 0.45 + 0.55 * hf; }
+function leafGreen(sd, k) {
+  var g = [104, 150, 62];
+  var v = (hash(sd * 10, k) - 0.5) * 26;
+  return 'rgb(' + Math.round(clamp(g[0] + v, 40, 200)) + ',' + Math.round(clamp(g[1] + v * 1.1, 70, 220)) + ',' + Math.round(clamp(g[2] + v * 0.6, 30, 150)) + ')';
+}
+function drawPlant(g, ci, stage, gf, t, sd, sway) {
+  var hf = Math.pow(clamp(gf, 0, 1), 0.72);
+  if (stage === 0) {
+    /* freshly seeded: a raked mound and the little row marker you'd stick in */
+    g.fillStyle = 'rgba(52,34,20,0.7)';
+    g.beginPath(); g.ellipse(0, -2, 11, 5, 0, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(200,168,124,0.45)';
+    g.beginPath(); g.ellipse(-1, -4, 7.5, 3, 0, 0, TAU); g.fill();
+    g.strokeStyle = '#a9784a'; g.lineWidth = 1.6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(8, -1); g.lineTo(8, -15); g.stroke();
+    g.fillStyle = CROPS[ci].col;
+    g.fillRect(6, -22, 9, 7);
+    g.strokeStyle = 'rgba(60,40,22,0.7)'; g.lineWidth = 1;
+    g.strokeRect(6, -22, 9, 7);
+    if (hf > 0.02) {
+      /* the very first shoot breaking ground */
+      g.strokeStyle = '#7ea84c'; g.lineWidth = 1.4;
+      g.beginPath(); g.moveTo(0, -3); g.lineTo(0, -3 - 9 * hf * 4); g.stroke();
+      g.fillStyle = '#8fbc57';
+      g.beginPath(); g.ellipse(-2.6, -4 - 9 * hf * 4, 3, 1.6, -0.5, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(2.6, -4 - 9 * hf * 4, 3, 1.6, 0.5, 0, TAU); g.fill();
+    }
+    return;
+  }
+  var w = Math.sin(t * 1.3 + sd * 9) * 1.6 + sway;
+  if (ci === 0) drawCarrot(g, stage, hf, t, sd, w);
+  else if (ci === 1) drawTomato(g, stage, hf, t, sd, w);
+  else if (ci === 2) drawSunflower(g, stage, hf, t, sd, w);
+  else if (ci === 3) drawCorn(g, stage, hf, t, sd, w);
+  else drawPumpkin(g, stage, hf, t, sd, w);
+}
+
+function drawCarrot(g, stage, hf, t, sd, w) {
+  var H = 46 * hf;
+  /* the orange shoulder pushes clear of the dirt only when it's ready */
+  if (stage >= 4) {
+    g.fillStyle = '#c25f13';
+    g.beginPath(); g.ellipse(0, -2.5, 10.5, 7.6, 0, 0, TAU); g.fill();
+    g.fillStyle = '#e07a1f';
+    g.beginPath(); g.ellipse(0, -4, 9.2, 6.4, 0, 0, TAU); g.fill();
+    g.fillStyle = '#f19338';
+    g.beginPath(); g.ellipse(-2, -5.4, 5.6, 3.8, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(150,72,14,0.55)'; g.lineWidth = 0.8;
+    for (var rg = 0; rg < 3; rg++) {
+      g.beginPath();
+      g.arc(0, -3, 7 - rg * 2, Math.PI * 1.10, Math.PI * 1.90);
+      g.stroke();
+    }
+  }
+  /* feathery fronds */
+  var n = 5;
+  for (var i = 0; i < n; i++) {
+    var sp = (i / (n - 1) - 0.5) * 2;
+    var tipx = sp * 13 * lf(hf) + w * 0.7;
+    var tipy = -H * (0.78 + 0.22 * (1 - Math.abs(sp)));
+    g.strokeStyle = leafGreen(sd, i);
+    g.lineWidth = 2.2;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(sp * 1.4, -2);
+    g.quadraticCurveTo(sp * 7 * hf, tipy * 0.55, tipx, tipy);
+    g.stroke();
+    /* leaflets along each frond */
+    g.lineWidth = 1.5;
+    for (var k = 1; k <= 4; k++) {
+      var f = k / 5;
+      var px = lerp(sp * 1.4, tipx, f) + (sp * 7 * hf - lerp(sp * 1.4, tipx, f)) * 0.12;
+      var py = lerp(-2, tipy, f);
+      g.beginPath();
+      g.moveTo(px, py);
+      g.lineTo(px - 3.2 - sp, py - 2.4);
+      g.moveTo(px, py);
+      g.lineTo(px + 3.2 - sp, py - 2.4);
+      g.stroke();
+    }
+  }
+}
+
+function drawTomato(g, stage, hf, t, sd, w) {
+  var H = 62 * hf;
+  /* a stake, because a tomato that isn't staked falls over */
+  if (hf > 0.34) {
+    g.strokeStyle = '#9c7343'; g.lineWidth = 1.8; g.lineCap = 'butt';
+    g.beginPath(); g.moveTo(9, 2); g.lineTo(9 + w * 0.3, -H - 5); g.stroke();
+  }
+  /* main stem */
+  g.strokeStyle = '#4f7d33'; g.lineWidth = 3.1; g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(0, 0);
+  g.quadraticCurveTo(w * 0.4, -H * 0.5, w, -H);
+  g.stroke();
+  var nodes = [0.26, 0.5, 0.72, 0.92];
+  for (var i = 0; i < nodes.length; i++) {
+    var f = nodes[i];
+    if (H * f < 5) continue;
+    var nx = w * f * f, ny = -H * f;
+    for (var s = -1; s <= 1; s += 2) {
+      /* compound leaf: three rounded leaflets */
+      g.fillStyle = leafGreen(sd, i * 2 + (s > 0 ? 1 : 0));
+      for (var l = 0; l < 3; l++) {
+        var lx = nx + s * (5.5 + l * 5.4) * lf(hf);
+        var ly = ny - 1.6 + (l === 1 ? -4.6 : (l === 2 ? 1.8 : 0)) * lf(hf);
+        g.beginPath();
+        g.ellipse(lx, ly, 5 * lf(hf) + 1, 3.3 * lf(hf) + 0.8, s * (0.35 + l * 0.12), 0, TAU);
+        g.fill();
+      }
+      g.strokeStyle = '#3f6b2a'; g.lineWidth = 0.7;
+      g.beginPath(); g.moveTo(nx, ny); g.lineTo(nx + s * 12 * lf(hf), ny - 2); g.stroke();
+    }
+    /* flowers, then fruit */
+    if (stage === 3) {
+      g.fillStyle = '#f2d24a';
+      for (var fl = 0; fl < 2; fl++) {
+        var fx = nx + (fl ? 6 : -6), fy = ny + 3;
+        for (var pe = 0; pe < 5; pe++) {
+          var a = pe / 5 * TAU;
+          g.beginPath(); g.ellipse(fx + Math.cos(a) * 1.6, fy + Math.sin(a) * 1.6, 1.3, 0.9, a, 0, TAU); g.fill();
+        }
+      }
+    } else if (stage >= 4) {
+      for (var fr = 0; fr < 2; fr++) {
+        var tx = nx + (fr ? 6.4 : -6.2) + Math.sin(t + i) * 0.4;
+        var ty = ny + 4.6;
+        g.fillStyle = '#b8291f';
+        g.beginPath(); g.arc(tx, ty, 4.3, 0, TAU); g.fill();
+        g.fillStyle = '#d93a2b';
+        g.beginPath(); g.arc(tx - 0.5, ty - 0.5, 3.8, 0, TAU); g.fill();
+        g.fillStyle = 'rgba(255,220,210,0.5)';
+        g.beginPath(); g.ellipse(tx - 1.5, ty - 1.8, 1.1, 0.7, -0.6, 0, TAU); g.fill();
+        g.fillStyle = '#4f7d33';
+        for (var cp = 0; cp < 5; cp++) {
+          var ca = cp / 5 * TAU;
+          g.beginPath();
+          g.ellipse(tx + Math.cos(ca) * 2.1, ty - 3.4 + Math.sin(ca) * 0.7, 1.5, 0.7, ca, 0, TAU);
+          g.fill();
+        }
+      }
+    }
+  }
+}
+
+function drawSunflower(g, stage, hf, t, sd, w) {
+  var H = 84 * hf;
+  /* thick fibrous stalk */
+  g.strokeStyle = '#4d7a2e'; g.lineWidth = 5 * clamp(hf * 1.5, 0.42, 1); g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(0, 0);
+  g.quadraticCurveTo(w * 0.5, -H * 0.55, w * 1.2, -H);
+  g.stroke();
+  g.strokeStyle = 'rgba(180,214,140,0.5)'; g.lineWidth = 0.8;
+  g.beginPath(); g.moveTo(-0.8, -2); g.quadraticCurveTo(w * 0.5 - 0.8, -H * 0.55, w * 1.2 - 0.8, -H); g.stroke();
+  /* big heart-shaped leaves */
+  var leaves = [0.2, 0.4, 0.58, 0.76];
+  for (var i = 0; i < leaves.length; i++) {
+    var f = leaves[i];
+    if (H * f < 6) continue;
+    var s = i % 2 ? 1 : -1;
+    var nx = w * f * 0.6, ny = -H * f;
+    var lw = 15 * lf(hf), lh = 10.5 * lf(hf);
+    g.fillStyle = leafGreen(sd, i);
+    g.beginPath();
+    g.moveTo(nx, ny);
+    g.bezierCurveTo(nx + s * lw * 0.4, ny - lh, nx + s * lw, ny - lh * 0.7, nx + s * lw * 1.15, ny + lh * 0.1);
+    g.bezierCurveTo(nx + s * lw * 0.9, ny + lh * 0.85, nx + s * lw * 0.3, ny + lh * 0.6, nx, ny);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(52,86,32,0.6)'; g.lineWidth = 0.7;
+    g.beginPath(); g.moveTo(nx, ny); g.lineTo(nx + s * lw * 1.0, ny + lh * 0.05); g.stroke();
+  }
+  var hx = w * 1.2, hy = -H;
+  if (stage === 3) {
+    /* a fat green bud, sepals still closed over it */
+    g.fillStyle = '#5d8a37';
+    g.beginPath(); g.arc(hx, hy - 5, 9.5, 0, TAU); g.fill();
+    g.fillStyle = '#79a84a';
+    for (var sp = 0; sp < 9; sp++) {
+      var sa = sp / 9 * TAU;
+      g.beginPath();
+      g.ellipse(hx + Math.cos(sa) * 8, hy - 5 + Math.sin(sa) * 8, 5, 2.7, sa, 0, TAU);
+      g.fill();
+    }
+    g.fillStyle = '#e8c94a';
+    for (var pk = 0; pk < 5; pk++) {
+      var pa = -1.9 + pk * 0.42;
+      g.beginPath();
+      g.ellipse(hx + Math.cos(pa) * 8.4, hy - 5 + Math.sin(pa) * 8.4, 3.4, 1.7, pa, 0, TAU);
+      g.fill();
+    }
+  } else if (stage >= 4) {
+    /* the big face, turned toward you */
+    var R = 18;
+    g.fillStyle = '#5d8a37';
+    g.beginPath(); g.arc(hx, hy - 6, R * 0.86, 0, TAU); g.fill();
+    var petals = 16;
+    for (var p2 = 0; p2 < petals; p2++) {
+      var a2 = p2 / petals * TAU + Math.sin(t * 0.6) * 0.03;
+      g.fillStyle = p2 % 2 ? '#f5c93a' : '#eeb92c';
+      g.save();
+      g.translate(hx + Math.cos(a2) * R * 0.62, hy - 6 + Math.sin(a2) * R * 0.62);
+      g.rotate(a2);
+      g.beginPath();
+      g.moveTo(-R * 0.1, 0);
+      g.quadraticCurveTo(R * 0.35, -R * 0.28, R * 0.62, 0);
+      g.quadraticCurveTo(R * 0.35, R * 0.28, -R * 0.1, 0);
+      g.closePath(); g.fill();
+      g.restore();
+    }
+    g.fillStyle = '#6b4a26';
+    g.beginPath(); g.arc(hx, hy - 6, R * 0.44, 0, TAU); g.fill();
+    g.fillStyle = '#4e3418';
+    for (var sdd = 0; sdd < 26; sdd++) {
+      var ra = sdd * 2.399, rr = Math.sqrt(sdd / 26) * R * 0.4;
+      g.beginPath();
+      g.arc(hx + Math.cos(ra) * rr, hy - 6 + Math.sin(ra) * rr, 0.75, 0, TAU);
+      g.fill();
+    }
+  } else if (hf > 0.2) {
+    g.fillStyle = '#6f9c4a';
+    g.beginPath(); g.arc(hx, hy - 1.5, 2.4 * hf + 0.8, 0, TAU); g.fill();
+  }
+}
+
+function drawCorn(g, stage, hf, t, sd, w) {
+  var H = 88 * hf;
+  /* stalk with visible nodes */
+  g.strokeStyle = '#69913c'; g.lineWidth = 4.4 * clamp(hf * 1.5, 0.38, 1);
+  g.lineCap = 'butt';
+  g.beginPath(); g.moveTo(0, 0); g.lineTo(w * 0.8, -H); g.stroke();
+  g.strokeStyle = 'rgba(46,74,26,0.5)'; g.lineWidth = 0.9;
+  for (var nd = 1; nd <= 4; nd++) {
+    var ny = -H * nd / 5;
+    g.beginPath(); g.moveTo(w * 0.8 * (nd / 5) - 2, ny); g.lineTo(w * 0.8 * (nd / 5) + 2, ny); g.stroke();
+  }
+  /* long strap leaves arching off alternate sides */
+  var NL = 6;
+  for (var i = 0; i < NL; i++) {
+    var f = 0.16 + i * 0.15;
+    if (f > 1) break;
+    if (H * f < 5) continue;
+    var s = i % 2 ? 1 : -1;
+    var bx = w * 0.8 * f, by = -H * f;
+    var len = (28 + (i % 3) * 5) * lf(hf);
+    var tipY = by + len * 0.42;
+    g.fillStyle = leafGreen(sd, i);
+    g.beginPath();
+    g.moveTo(bx, by);
+    g.quadraticCurveTo(bx + s * len * 0.7, by - len * 0.36, bx + s * len, tipY);
+    g.quadraticCurveTo(bx + s * len * 0.55, by - len * 0.12, bx, by + 3.2);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(42,70,24,0.45)'; g.lineWidth = 0.6;
+    g.beginPath();
+    g.moveTo(bx, by + 1);
+    g.quadraticCurveTo(bx + s * len * 0.62, by - len * 0.22, bx + s * len, tipY);
+    g.stroke();
+  }
+  /* tassel */
+  if (stage >= 3) {
+    var tx = w * 0.8, ty = -H;
+    g.strokeStyle = '#c9b264'; g.lineWidth = 0.9; g.lineCap = 'round';
+    for (var ts = 0; ts < 6; ts++) {
+      var ta = (ts / 5 - 0.5) * 1.5;
+      g.beginPath();
+      g.moveTo(tx, ty + 2);
+      g.quadraticCurveTo(tx + Math.sin(ta) * 6, ty - 8, tx + Math.sin(ta) * 11, ty - 13 + Math.abs(ta) * 3);
+      g.stroke();
+    }
+  }
+  /* the ear: husk, kernels, silk */
+  if (stage >= 4) {
+    var ex = w * 0.55 + 5, ey = -H * 0.5;
+    g.fillStyle = '#8fae4e';
+    g.beginPath();
+    g.moveTo(ex - 4, ey - 12);
+    g.quadraticCurveTo(ex + 7, ey - 8, ex + 5, ey + 10);
+    g.quadraticCurveTo(ex - 2, ey + 14, ex - 5, ey + 4);
+    g.closePath(); g.fill();
+    /* kernels peeking out of the top of the husk */
+    g.fillStyle = '#eec84e';
+    g.beginPath();
+    g.moveTo(ex - 2.6, ey - 11);
+    g.quadraticCurveTo(ex + 3.4, ey - 10, ex + 2.4, ey - 1);
+    g.quadraticCurveTo(ex - 1.6, ey - 2, ex - 2.6, ey - 11);
+    g.closePath(); g.fill();
+    g.fillStyle = 'rgba(150,110,22,0.55)';
+    for (var kr = 0; kr < 5; kr++) {
+      g.beginPath();
+      g.ellipse(ex - 0.2, ey - 9.5 + kr * 2, 2.2, 0.5, 0, 0, TAU);
+      g.fill();
+    }
+    g.strokeStyle = '#cf9a5a'; g.lineWidth = 0.7;
+    for (var sk = 0; sk < 5; sk++) {
+      g.beginPath();
+      g.moveTo(ex - 1 + sk * 0.9, ey - 11.5);
+      g.quadraticCurveTo(ex + 2 + sk, ey - 17, ex + 4 + sk * 1.4, ey - 20 - (sk % 2) * 2);
+      g.stroke();
+    }
+    g.fillStyle = 'rgba(70,100,36,0.5)';
+    g.beginPath();
+    g.moveTo(ex - 5, ey + 4); g.quadraticCurveTo(ex - 1, ey - 6, ex - 3, ey - 11);
+    g.quadraticCurveTo(ex - 7, ey - 4, ex - 5, ey + 4);
+    g.fill();
+  }
+}
+
+function drawPumpkin(g, stage, hf, t, sd, w) {
+  /* pumpkins sprawl: a low vine, big lobed leaves, one enormous fruit */
+  var spread = 32 * lf(hf);
+  g.strokeStyle = '#5f8b34'; g.lineWidth = 2; g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(-spread, -1);
+  g.quadraticCurveTo(-spread * 0.3, -7 - hf * 3, 0, -3);
+  g.quadraticCurveTo(spread * 0.4, -1, spread, -6);
+  g.stroke();
+  /* curly tendril */
+  g.lineWidth = 1;
+  g.beginPath();
+  for (var c = 0; c <= 16; c++) {
+    var ca = c / 16 * 4.2;
+    var cr = 3.2 * hf;
+    var px = spread + Math.cos(ca) * cr;
+    var py = -8 - c * 0.5 * hf + Math.sin(ca) * cr * 0.7;
+    if (c === 0) g.moveTo(px, py); else g.lineTo(px, py);
+  }
+  g.stroke();
+  /* three big lobed leaves */
+  var LV = [[-spread * 0.85, -6, 1], [-spread * 0.1, -9, 1.2], [spread * 0.62, -7, 0.95]];
+  for (var i = 0; i < LV.length; i++) {
+    var lx = LV[i][0] + w * 0.4, ly = LV[i][1], ls = LV[i][2] * (7 + 8 * hf);
+    g.fillStyle = leafGreen(sd, i);
+    g.beginPath();
+    for (var a = 0; a <= 20; a++) {
+      var ang = Math.PI + a / 20 * Math.PI;   /* upper half only — leaves stand up */
+      var lobe = 1 + Math.sin(a / 20 * Math.PI * 5) * 0.30;
+      var px2 = lx + Math.cos(ang) * ls * lobe;
+      var py2 = ly + Math.sin(ang) * ls * lobe * 0.86;
+      if (a === 0) g.moveTo(px2, py2); else g.lineTo(px2, py2);
+    }
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(48,78,28,0.5)'; g.lineWidth = 0.7;
+    for (var v = 0; v < 3; v++) {
+      var va = Math.PI + (v + 1) / 4 * Math.PI;
+      g.beginPath(); g.moveTo(lx, ly); g.lineTo(lx + Math.cos(va) * ls * 0.85, ly + Math.sin(va) * ls * 0.72); g.stroke();
+    }
+  }
+  if (stage === 3) {
+    /* a blossom and a fist-sized green pumpkin */
+    g.fillStyle = '#f0cf4e';
+    for (var pe = 0; pe < 5; pe++) {
+      var pa = pe / 5 * TAU;
+      g.beginPath(); g.ellipse(spread * 0.2 + Math.cos(pa) * 3, -6 + Math.sin(pa) * 2.4, 2.6, 1.5, pa, 0, TAU); g.fill();
+    }
+    g.fillStyle = '#7ba33f';
+    g.beginPath(); g.ellipse(-spread * 0.35, -4, 6, 5, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(60,90,32,0.6)'; g.lineWidth = 0.7;
+    g.beginPath(); g.arc(-spread * 0.35, -4, 3.4, Math.PI * 1.1, Math.PI * 1.9); g.stroke();
+  } else if (stage >= 4) {
+    var px3 = -spread * 0.2, py3 = -9;
+    g.fillStyle = 'rgba(40,50,24,0.25)';
+    g.beginPath(); g.ellipse(px3, -0.5, 20, 4, 0, 0, TAU); g.fill();
+    g.fillStyle = '#c85f16';
+    g.beginPath(); g.ellipse(px3, py3, 19, 15, 0, 0, TAU); g.fill();
+    g.fillStyle = '#e0781f';
+    g.beginPath(); g.ellipse(px3 - 2, py3 - 1.5, 15.5, 13, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(150,66,10,0.6)'; g.lineWidth = 1.3;
+    for (var rb = -2; rb <= 2; rb++) {
+      g.beginPath();
+      g.ellipse(px3 + rb * 5.6, py3, 3.4, 14.4, 0, Math.PI * 1.06, Math.PI * 1.94);
+      g.stroke();
+    }
+    g.fillStyle = 'rgba(255,210,150,0.28)';
+    g.beginPath(); g.ellipse(px3 - 7, py3 - 6, 4.6, 3, -0.5, 0, TAU); g.fill();
+    g.strokeStyle = '#6d6f2c'; g.lineWidth = 3.2; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(px3, py3 - 14); g.lineTo(px3 + 2, py3 - 21); g.stroke();
+    g.strokeStyle = '#87883a'; g.lineWidth = 1.4;
+    g.beginPath(); g.moveTo(px3 + 2, py3 - 21); g.lineTo(px3 + 6, py3 - 20); g.stroke();
+  }
+}
+
+/* ---------------------------------------------------------- plot overlay -- */
+function drawPlotLabel(r, text, hot) {
+  var fs = clamp(r.w * 0.13, 8, 12);
+  ctx.font = '800 ' + fs.toFixed(1) + 'px "Segoe UI", sans-serif';
+  var tw = ctx.measureText(text).width;
+  var pw = tw + 12, ph = fs + 8;
+  var px = r.x + r.w / 2 - pw / 2;
+  var py = r.y + r.h - ph - 2;
+  ctx.fillStyle = hot ? 'rgba(253,246,230,0.95)' : 'rgba(253,246,230,0.72)';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(px, py, pw, ph, ph / 2); else ctx.rect(px, py, pw, ph);
+  ctx.fill();
+  ctx.strokeStyle = hot ? 'rgba(111,156,74,0.9)' : 'rgba(90,62,38,0.3)';
+  ctx.lineWidth = hot ? 2 : 1;
+  ctx.stroke();
+  ctx.fillStyle = '#3c2a1c';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, r.x + r.w / 2, py + ph / 2 + 0.5);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+
+function drawCan(c, L) {
+  var r = plotRect(c.i, L);
+  var k = 1 - c.t / 0.75;
+  var s = clamp(Math.min(L.cw, L.ch) * 0.02, 0.5, 1.5);
+  var cx = r.x + r.w * 0.5 - r.w * 0.42;
+  var cy = r.y - r.h * 0.35;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(s, s);
+  ctx.rotate(clamp(k * 3, 0, 1) * 0.55);
+  ctx.fillStyle = '#9fb6c4';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-11, -9, 20, 17, 3); else ctx.rect(-11, -9, 20, 17);
+  ctx.fill();
+  ctx.fillStyle = '#7d95a5';
+  ctx.beginPath();
+  ctx.moveTo(8, -4); ctx.lineTo(22, -9); ctx.lineTo(24, -4); ctx.lineTo(9, 2);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#7d95a5'; ctx.lineWidth = 2.4;
+  ctx.beginPath(); ctx.arc(-4, -9, 6.5, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fillRect(-9, -7, 4, 13);
+  ctx.restore();
+}
+
+/* ---------------------------------------------------------------- render -- */
+function render(t, dt) {
+  var L = layout();
+  seatBugs();
+  ctx.fillStyle = '#8fb4d8';
+  ctx.fillRect(0, 0, view.w, view.h);
+  drawSky(L, t, dt);
+  drawGround(L);
+  drawHills(L);
+  drawFence(L, false);
+
+  var i, p, r;
+  /* back-to-front so tall plants overlap the row behind them */
+  for (i = 0; i < NPLOTS; i++) {
+    p = plots[i]; r = plotRect(i, L);
+    drawSoil(p, r, i);
+  }
+  for (i = 0; i < NPLOTS; i++) {
+    p = plots[i];
+    if (p.crop < 0) continue;
+    r = plotRect(i, L);
+    var per = CROPS[p.crop].grow / 4;
+    var gf = clamp((p.stage + (p.stage < 4 ? p.growT / per : 0)) / 4, 0, 1);
+    /* a ripe tall crop stands about 1.35 beds high — driven by bed HEIGHT,
+       capped by width so nothing spills into its neighbours */
+    var s = clamp(Math.min(r.h / 62, r.w / 88), 0.3, 3.2);
+    ctx.save();
+    ctx.translate(r.x + r.w / 2, r.y + r.h * 0.82);
+    var pop = 1 + Math.sin(clamp(p.pop, 0, 1) * Math.PI) * 0.18;
+    ctx.scale(s * pop, s * pop);
+    var sway = Math.sin(t * 0.9 + i) * (0.8 + G.rain * 1.6);
+    drawPlant(ctx, p.crop, p.stage, gf, t, p.sd, sway);
+    ctx.restore();
+    /* a ready crop gets a couple of warm sparkles and a gentle bob */
+    if (p.stage >= 4) {
+      for (var sp = 0; sp < 3; sp++) {
+        var sa = t * 1.6 + sp * 2.1 + i;
+        var al = Math.max(0, Math.sin(sa));
+        if (al < 0.2) continue;
+        ctx.fillStyle = 'rgba(255,236,168,' + (al * 0.85).toFixed(2) + ')';
+        var sx2 = r.x + r.w * (0.3 + 0.4 * ((sp + i) % 3) / 2) + Math.sin(sa * 0.7) * 4;
+        var sy2 = r.y - r.h * (0.25 + 0.25 * al);
+        ctx.fillRect(sx2 - 1.2, sy2 - 1.2, 2.4, 2.4);
+      }
+    }
+  }
+  /* labels last so they sit over the leaves */
+  for (i = 0; i < NPLOTS; i++) {
+    p = plots[i]; r = plotRect(i, L);
+    var hot = (i === G.sel);
+    if (hot || !p.tilled || (p.crop >= 0 && p.stage >= 4) || (p.crop >= 0 && p.moist <= 0.01)) {
+      drawPlotLabel(r, plotAction(i), hot);
+    }
+    if (hot) {
+      ctx.strokeStyle = 'rgba(111,156,74,0.95)';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 5]);
+      ctx.lineDashOffset = -t * 12;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4, 8); else ctx.rect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  drawFence(L, true);
+
+  /* watering cans mid-pour */
+  for (i = 0; i < cans.length; i++) drawCan(cans[i], L);
+
+  /* bees and butterflies */
+  for (i = 0; i < bugs.length; i++) {
+    var b = bugs[i];
+    if (G.rain > 0.5) continue;            /* they shelter when it rains */
+    var flap = Math.sin(b.t * (b.kind ? 9 : 26));
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    var sc = clamp(Math.min(L.W, L.H) * 0.013, 0.85, 2.8);
+    ctx.scale(sc * (Math.cos(b.dir) < 0 ? -1 : 1), sc);
+    if (b.kind === 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath(); ctx.ellipse(-1, -3 - flap, 3.6, 1.6 + flap * 0.6, -0.5, 0, TAU); ctx.fill();
+      ctx.fillStyle = b.col;
+      ctx.beginPath(); ctx.ellipse(0, 0, 4, 2.8, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#3a2a12';
+      ctx.fillRect(-1.6, -2.6, 1.3, 5.2);
+      ctx.fillRect(1.0, -2.4, 1.3, 4.8);
+      ctx.beginPath(); ctx.arc(3.8, -0.4, 1.5, 0, TAU); ctx.fill();
+    } else {
+      ctx.fillStyle = b.col;
+      var fw = 2.2 * Math.abs(flap) + 2.1;
+      ctx.beginPath(); ctx.ellipse(-2.8, -1.4, 3.8, fw, -0.4, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(2.8, -1.4, 3.8, fw, 0.4, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-2.4, 2.2, 2.4, fw * 0.6, -0.3, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(2.4, 2.2, 2.4, fw * 0.6, 0.3, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.beginPath(); ctx.ellipse(-3.1, -2.6, 1.6, 1.1, -0.4, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(3.1, -2.6, 1.6, 1.1, 0.4, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#4a3a20';
+      ctx.fillRect(-0.6, -2.6, 1.2, 5);
+    }
+    ctx.restore();
+  }
+
+  /* particles */
+  for (i = 0; i < parts.length; i++) {
+    var pt = parts[i];
+    ctx.globalAlpha = clamp(pt.t / pt.max, 0, 1);
+    ctx.fillStyle = pt.col;
+    if (pt.kind === 1) {
+      ctx.beginPath(); ctx.ellipse(pt.x, pt.y, pt.size * 0.45, pt.size, 0, 0, TAU); ctx.fill();
+    } else if (pt.kind === 2) {
+      ctx.beginPath(); ctx.ellipse(pt.x, pt.y, pt.size, pt.size * 0.8, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,246,200,0.7)';
+      ctx.beginPath(); ctx.ellipse(pt.x - pt.size * 0.3, pt.y - pt.size * 0.25, pt.size * 0.35, pt.size * 0.3, 0, 0, TAU); ctx.fill();
+    } else {
+      ctx.fillRect(pt.x - pt.size / 2, pt.y - pt.size / 2, pt.size, pt.size);
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  /* rain, over everything but the text */
+  if (G.rain > 0.02) {
+    ctx.strokeStyle = 'rgba(214,232,244,' + (0.5 * G.rain).toFixed(2) + ')';
+    ctx.lineWidth = 1.2;
+    var n = Math.round(120 * G.rain);
+    for (i = 0; i < n; i++) {
+      var rx = (hash(i, 1.3) * view.w + t * 60) % (view.w + 40) - 20;
+      var ry = (hash(i, 5.9) * view.h + t * (520 + hash(i, 2.2) * 240)) % (view.h + 30) - 15;
+      ctx.beginPath();
+      ctx.moveTo(rx, ry); ctx.lineTo(rx - 3, ry + 11);
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(120,150,170,' + (0.10 * G.rain).toFixed(2) + ')';
+    ctx.fillRect(0, 0, view.w, view.h);
+  }
+
+  /* the light of the hour lies over the whole patch, not just the sky */
+  var du = G.dayT / DAY_LEN;
+  var golden = clamp(1 - Math.max(0, 1 - Math.abs(du - 0.5) * 2.6), 0, 1) * (1 - G.rain * 0.8);
+  if (golden > 0.04) {
+    ctx.fillStyle = 'rgba(255,166,88,' + (golden * 0.17).toFixed(3) + ')';
+    ctx.fillRect(0, 0, view.w, view.h);
+  }
+
+  /* floaters */
+  ctx.textAlign = 'center';
+  for (i = 0; i < floats.length; i++) {
+    var fo = floats[i];
+    ctx.globalAlpha = clamp(fo.t / fo.max * 1.5, 0, 1);
+    ctx.font = '800 ' + clamp(L.cw * 0.16, 11, 17).toFixed(0) + 'px "Segoe UI", sans-serif';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(40,28,16,0.55)';
+    ctx.strokeText(fo.text, fo.x, fo.y);
+    ctx.fillStyle = fo.col;
+    ctx.fillText(fo.text, fo.x, fo.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+
+  /* a weather word, bottom-left of the free area — never the top-right */
+  if (G.rain > 0.25) {
+    ctx.font = '800 12px "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(253,246,230,0.9)';
+    ctx.fillText('RAIN — free watering', 12, L.H - 10);
+  }
+}
+
+/* ------------------------------------------------------------------- UI -- */
+var trayEl = document.getElementById('tray');
+var elCoins = document.getElementById('hCoins');
+var elBasket = document.getElementById('hBasket');
+var elTotal = document.getElementById('hTotal');
+var btnBuy = document.getElementById('btnBuy');
+var btnSell = document.getElementById('btnSell');
+var hintEl = document.getElementById('hint');
+var seedBtns = [];
+
+function buildTray() {
+  trayEl.innerHTML = '';
+  seedBtns.length = 0;
+  for (var i = 0; i < CROPS.length; i++) {
+    (function (ci) {
+      var b = document.createElement('button');
+      b.className = 'seed';
+      b.type = 'button';
+      b.setAttribute('data-seed', String(ci));
+      b.innerHTML = '<span class="dot" style="background:' + CROPS[ci].col + '"></span>' +
+                    '<span class="txt"><span class="nm"></span><span class="sub"></span></span>';
+      b.addEventListener('click', function () {
+        initAudio();
+        if (!unlocked(ci)) { sfx.nope(); say(CROPS[ci].name + ' unlocks at ' + CROPS[ci].unlock + ' coins earned'); updateHUD(); return; }
+        G.seedSel = ci; sfx.plant(); G.dirty = true; persist(); updateHUD();
+      });
+      trayEl.appendChild(b);
+      seedBtns.push(b);
+    })(i);
+  }
+}
+function updateHUD() {
+  elCoins.textContent = String(G.coins);
+  elBasket.textContent = String(basketCount());
+  elTotal.textContent = String(G.total);
+  for (var i = 0; i < seedBtns.length; i++) {
+    var b = seedBtns[i], c = CROPS[i], ok = unlocked(i);
+    b.className = 'seed' + (G.seedSel === i && ok ? ' on' : '') + (ok ? '' : ' locked');
+    b.querySelector('.nm').textContent = c.name;
+    b.querySelector('.sub').textContent = ok
+      ? ('x' + G.seeds[i] + '  ' + c.cost + 'c  >' + c.sell + 'c')
+      : ('locked ' + c.unlock + 'c');
+    b.setAttribute('aria-label', c.name + (ok ? ' seeds: ' + G.seeds[i] : ' locked'));
+  }
+  var sc = CROPS[G.seedSel];
+  btnBuy.textContent = 'BUY ' + sc.name + ' ' + sc.cost + 'c';
+  btnBuy.disabled = !unlocked(G.seedSel) || G.coins < sc.cost;
+  var bv = basketValue();
+  btnSell.textContent = bv > 0 ? ('SELL BASKET ' + bv + 'c') : 'SELL BASKET';
+  btnSell.disabled = bv <= 0;
+  measureFree();
+}
+function updateHint() {
+  if (!hintEl) return;
+  if (G.hintT > 0 && G.hintMsg) {
+    if (hintEl.getAttribute('data-msg') !== G.hintMsg) {
+      hintEl.textContent = G.hintMsg;
+      hintEl.setAttribute('data-msg', G.hintMsg);
+    }
+  } else if (hintEl.getAttribute('data-msg') !== '') {
+    hintEl.innerHTML = 'Tap a plot to tend it.<span id="kbline"> &middot; Arrows move, Space acts.</span>';
+    hintEl.setAttribute('data-msg', '');
+  }
+}
+
+/* --------------------------------------------------------------- screens -- */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+
+function titleScreen() {
+  G.state = 'title';
+  document.body.classList.remove('playing');
+  setRainVolume(0);
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>PATCH</h1>' +
+      '<div class="tagline">A garden patch, and a patch that never breaks anything. Twelve plots of warm dirt, five crops, one watering can &mdash; and no way at all to lose. Nothing dies here; thirsty plants just wait for you.</div>' +
+      '<div class="keys">' +
+        '<div>Tend a plot<span>Tap it &mdash; till, plant, water, pick</span></div>' +
+        '<div>Move / act<span>Arrows &middot; Space or Enter</span></div>' +
+        '<div>Pick a seed<span>Tap the tray, or 1&ndash;5</span></div>' +
+        '<div>Market<span>B buys a seed &middot; X sells the basket</span></div>' +
+        '<div>Pause / mute<span>P &middot; M</span></div>' +
+      '</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Coins</div><div class="v accent">' + G.coins + '</div></div>' +
+        '<div class="stat"><div class="k">Basket</div><div class="v">' + basketCount() + '</div></div>' +
+        '<div class="stat"><div class="k">Harvested</div><div class="v">' + G.total + '</div></div>' +
+      '</div>' +
+      '<button class="btn" data-act="play">OPEN THE GATE</button>' +
+    '</div>');
+}
+function startPlay() {
+  hideOverlay();
+  G.state = 'play';
+  document.body.classList.add('playing');
+  resize();
+  buildTray();
+  updateHUD();
+  initAudio();
+}
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Resting</div>' +
+      '<div class="tagline">The garden waits. It always does.</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Coins</div><div class="v accent">' + G.coins + '</div></div>' +
+        '<div class="stat"><div class="k">Basket</div><div class="v">' + basketCount() + '</div></div>' +
+        '<div class="stat"><div class="k">Harvested</div><div class="v">' + G.total + '</div></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">BACK TO THE PATCH</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>');
+}
+function togglePause() {
+  if (G.state === 'play') { G.state = 'pause'; persist(); setRainVolume(0); pauseScreen(); }
+  else if (G.state === 'pause') { G.state = 'play'; hideOverlay(); }
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 'play') startPlay();
+  else if (act === 'resume') togglePause();
+  else if (act === 'title') { persist(); titleScreen(); }
+});
+
+/* ---------------------------------------------------------------- input -- */
+cv.addEventListener('pointerdown', function (e) {
+  initAudio();
+  if (G.state !== 'play') return;
+  var r = cv.getBoundingClientRect();
+  var x = e.clientX - r.left, y = e.clientY - r.top;
+  var i = hitPlot(x, y);
+  if (i >= 0) actPlot(i);
+  e.preventDefault();
+});
+cv.addEventListener('pointermove', function (e) {
+  if (G.state !== 'play' || e.pointerType === 'touch') return;
+  var r = cv.getBoundingClientRect();
+  var i = hitPlot(e.clientX - r.left, e.clientY - r.top);
+  if (i >= 0) G.sel = i;
+});
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+  initAudio();
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'p' || k === 'escape') { if (G.state === 'play' || G.state === 'pause') togglePause(); return; }
+  if (G.state === 'title') {
+    if (k === ' ' || k === 'enter') startPlay();
+    return;
+  }
+  if (G.state !== 'play') return;
+  var c = G.sel % COLS, r = (G.sel / COLS) | 0;
+  if (k === 'arrowleft' || k === 'a') { c = (c + COLS - 1) % COLS; G.sel = r * COLS + c; }
+  else if (k === 'arrowright' || k === 'd') { c = (c + 1) % COLS; G.sel = r * COLS + c; }
+  else if (k === 'arrowup' || k === 'w') { r = (r + ROWS - 1) % ROWS; G.sel = r * COLS + c; }
+  else if (k === 'arrowdown' || k === 's') { r = (r + 1) % ROWS; G.sel = r * COLS + c; }
+  else if (k === ' ' || k === 'enter') actPlot(G.sel);
+  else if (k === 'b') buySeed(G.seedSel);
+  else if (k === 'x') sellBasket();
+  else if (k >= '1' && k <= '5') {
+    var ci = parseInt(k, 10) - 1;
+    if (unlocked(ci)) { G.seedSel = ci; sfx.plant(); updateHUD(); }
+    else { sfx.nope(); say(CROPS[ci].name + ' unlocks at ' + CROPS[ci].unlock + ' coins earned'); }
+  }
+});
+/* 's' is the down-arrow twin, so selling gets its own key AND its own button */
+btnBuy.addEventListener('click', function () { initAudio(); buySeed(G.seedSel); });
+btnSell.addEventListener('click', function () { initAudio(); sellBasket(); });
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { initAudio(); togglePause(); });
+
+var padA = false, padB = false, padStart = false, padMove = 0;
+function pollPad(dt) {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null;
+  for (var i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  var ax = (p.axes && p.axes.length > 0) ? p.axes[0] : 0;
+  var ay = (p.axes && p.axes.length > 1) ? p.axes[1] : 0;
+  var dl = !!(p.buttons[14] && p.buttons[14].pressed) || ax < -0.5;
+  var dr = !!(p.buttons[15] && p.buttons[15].pressed) || ax > 0.5;
+  var du = !!(p.buttons[12] && p.buttons[12].pressed) || ay < -0.5;
+  var dd = !!(p.buttons[13] && p.buttons[13].pressed) || ay > 0.5;
+  padMove -= dt;
+  if ((dl || dr || du || dd) && padMove <= 0 && G.state === 'play') {
+    var c = G.sel % COLS, r = (G.sel / COLS) | 0;
+    if (dl) c = (c + COLS - 1) % COLS;
+    else if (dr) c = (c + 1) % COLS;
+    else if (du) r = (r + ROWS - 1) % ROWS;
+    else if (dd) r = (r + 1) % ROWS;
+    G.sel = r * COLS + c;
+    padMove = 0.18;
+  }
+  if (!(dl || dr || du || dd)) padMove = 0;
+  var a = !!(p.buttons[0] && p.buttons[0].pressed);
+  if (a && !padA) {
+    initAudio();
+    if (G.state === 'title') startPlay();
+    else if (G.state === 'pause') togglePause();
+    else actPlot(G.sel);
+  }
+  padA = a;
+  var b2 = !!(p.buttons[1] && p.buttons[1].pressed);
+  if (b2 && !padB && G.state === 'play') sellBasket();
+  padB = b2;
+  var st = !!(p.buttons[9] && p.buttons[9].pressed);
+  if (st && !padStart && (G.state === 'play' || G.state === 'pause')) togglePause();
+  padStart = st;
+}
+
+window.addEventListener('blur', function () { if (G.state === 'play') togglePause(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden && G.state === 'play') togglePause(); });
+window.addEventListener('pagehide', function () { persist(); });
+
+/* ------------------------------------------------------------------ loop -- */
+var lastT = 0, timeAcc = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  timeAcc += dt;
+
+  if (G.state === 'play') { pollPad(dt); update(dt); updateHint(); }
+  else if (G.state === 'title') { pollPad(dt); }
+
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  render(timeAcc, G.state === 'play' ? dt : 0);
+}
+
+/* ------------------------------------------------------------------ boot -- */
+restore();
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+  try { new window.ResizeObserver(measureFree).observe(panelEl); } catch (e) {}
+}
+buildTray();
+updateHUD();
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+
+/* a small door for the scripted playtests — real state, no shadow copies */
+window.__T = {
+  G: G, plots: plots, CROPS: CROPS, MAX_MOIST: MAX_MOIST,
+  act: actPlot, till: till, plant: plant, water: water, harvest: harvest,
+  sell: sellBasket, buy: buySeed, startRain: startRain, persist: persist,
+  restore: restore, reset: resetGarden, layout: layout, plotRect: plotRect,
+  hud: updateHUD, unlocked: unlocked, basketCount: basketCount, basketValue: basketValue,
+  start: startPlay
+};
+</script>
+</body>
+</html>

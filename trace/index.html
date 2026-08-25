@@ -1,0 +1,2046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Trace — Write Your Letters</title>
+<meta name="theme-color" content="#fbf1de">
+<meta name="description" content="A letter-formation game that finds a young writer's level and grows with her. Big ghost letters on handwriting lines, a start dot and arrows, every prompt spoken aloud. Trace a letter, trace your name, build a word. No timer, no score, nothing to fail.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Trace">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #fbf1de;
+    --accent: #e2762b;
+    --fg: #4a3628;
+    --dim: rgba(74,54,40,0.62);
+    --panel: rgba(255,250,240,0.92);
+    --line: rgba(74,54,40,0.18);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 2px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .iconbtn:active { background: #ffe6c4; }
+  body:not(.playing) #topbtns { display: none; }
+
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(255,244,224,0.95), rgba(246,225,193,0.98));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(560px, 100%);
+    background: #fffaf0;
+    border: 3px solid #e8cfa8;
+    border-radius: 22px;
+    padding: 20px 18px 18px;
+    box-shadow: 0 18px 40px rgba(150,110,60,0.22);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(34px, 11vw, 60px);
+    letter-spacing: 0.16em; font-weight: 800; line-height: 1;
+    color: var(--accent);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(19px, 6vw, 27px); letter-spacing: 0.06em; font-weight: 800; }
+  .tagline { font-size: 13px; color: var(--dim); letter-spacing: 0.02em; margin-bottom: 8px; line-height: 1.45; }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 380px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(74,54,40,0.16); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .btn {
+    margin-top: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 62px; padding: 0 32px;
+    border-radius: 16px; border: 3px solid #c9611f;
+    background: #f0a04b; color: #3b2a16;
+    font-family: inherit; font-size: 18px; font-weight: 800; letter-spacing: 0.12em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: #e2762b; }
+  .btn.ghost { border-color: #d8bd96; color: var(--fg); background: #fdf0da; }
+  .btn.small { min-height: 46px; font-size: 13px; padding: 0 16px; margin-top: 8px; letter-spacing: 0.06em; }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(26px, 8vw, 44px); font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); }
+
+  /* grown-up panel */
+  .slots { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 10px 0 6px; }
+  .slot {
+    width: 46px; height: 56px; border-radius: 10px;
+    border: 3px dashed #d8bd96; background: #fffdf7;
+    font-family: inherit; font-size: 26px; font-weight: 800; color: var(--fg);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .slot.sel { border-style: solid; border-color: var(--accent); background: #ffe9cd; }
+  .abc { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; max-width: 380px; margin: 8px auto 0; }
+  .abc button {
+    height: 44px; border-radius: 9px; border: 2px solid #e0c8a2; background: #fffdf7;
+    font-family: inherit; font-size: 17px; font-weight: 800; color: var(--fg); cursor: pointer;
+  }
+  .abc button:active { background: #ffe6c4; }
+  .row2 { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+  .hint { font-size: 11.5px; color: var(--dim); margin-top: 8px; line-height: 1.5; }
+  .growth { text-align: left; max-width: 400px; margin: 10px auto 0; }
+  .growth .g { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px;
+    color: var(--dim); border-bottom: 1px dashed rgba(74,54,40,0.16); padding: 4px 0; }
+  .growth .g b { color: var(--fg); }
+  .grid26 { display: grid; grid-template-columns: repeat(13, 1fr); gap: 3px; max-width: 400px; margin: 8px auto 0; }
+  .grid26 span {
+    height: 24px; border-radius: 5px; font-size: 12px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    background: #f3e7d2; color: rgba(74,54,40,0.42);
+  }
+  .grid26 span.on { background: #cdeac4; color: #35682a; }
+  .bar { height: 10px; border-radius: 6px; background: #f0e2c9; overflow: hidden; margin-top: 4px; }
+  .bar i { display: block; height: 100%; background: #8fc47f; }
+  @media (max-height: 620px) {
+    .card { padding: 12px 14px; border-radius: 16px; }
+    .keys { display: none; }
+    .btn { min-height: 54px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   TRACE — the Overclock arcade's game for someone who cannot read yet.
+   A stack trace, and tracing letters with your finger.
+
+   Built for a four-year-old whose fine motor control may be affected, so:
+   every prompt is spoken aloud, the tolerance is enormous and ADAPTIVE, the
+   game finds her level by playing with her and then moves it, there is no
+   failure feedback of any kind anywhere, and she can never get stuck on a
+   stroke — after a few seconds it demonstrates and then counts it done.
+   Low floor, high ceiling: the ladder runs from one straight line all the
+   way to lowercase and four-letter words, and the tolerance tightens only
+   while she is comfortably clearing it.
+   One file, no assets, oscillator audio, browser speech synthesis.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var P = Math.PI;
+var K_SAVE = 'trace_v1';
+var K_MUTE = 'trace_muted_v1';
+var TOL_START = 0.35;     /* stroke tolerance as a fraction of letter height */
+var TOL_MIN = 0.14;       /* the tightest the ladder will ever ask for */
+var TOL_MAX = 0.40;
+var RATE = 0.85;          /* speech rate — slow and clear */
+var ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function pick(a) { return a[(Math.random() * a.length) | 0]; }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function dist2(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
+function rrect(g, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+  g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y);
+  g.closePath();
+}
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { try { if (actx.state === 'suspended') actx.resume(); } catch (e) {} return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.4;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = !!m; saveStr(K_MUTE, muted ? '1' : '0');
+  if (master) master.gain.value = muted ? 0 : 0.4;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = muted ? '&#215;' : '&#9835;';
+  if (muted) shutUp();
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  try {
+    var t = actx.currentTime + (delay || 0);
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(24, f1), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) {}
+}
+/* every cue here is warm or neutral — there is no "wrong" sound in this game */
+var sfx = {
+  blip:   function () { tone('sine', 660, 880, 0.09, 0.14); },
+  step:   function () { tone('sine', 523, 784, 0.12, 0.12); },
+  stroke: function () { tone('sine', 660, 990, 0.16, 0.16); tone('sine', 990, 1320, 0.18, 0.1, 0.09); },
+  cheer:  function () {
+    var n = [523, 659, 784, 1047];
+    for (var i = 0; i < n.length; i++) tone('sine', n[i], n[i], 0.4, 0.13, i * 0.11);
+  },
+  fanfare: function () {
+    var n = [523, 659, 784, 1047, 1319, 1047, 1319];
+    for (var i = 0; i < n.length; i++) tone('sine', n[i], n[i], 0.5, 0.13, i * 0.14);
+  },
+  soft:   function () { tone('sine', 440, 440, 0.14, 0.07); },
+  tap:    function () { tone('sine', 520, 520, 0.05, 0.06); }
+};
+
+/* --------------------------------------------------------------- speech -- */
+/* Every prompt is read aloud, slowly. If the browser has no speech at all
+   the game must still be completely playable — so nothing here may ever
+   throw, and no game logic may wait on a speech callback. */
+var SP = { ok: false };
+try {
+  SP.ok = !!(window.speechSynthesis && typeof window.SpeechSynthesisUtterance === 'function' &&
+             typeof window.speechSynthesis.speak === 'function');
+} catch (e) { SP.ok = false; }
+var lastSaid = '';
+function shutUp() { if (!SP.ok) return; try { window.speechSynthesis.cancel(); } catch (e) {} }
+function speak(text, rate, pitch) {
+  lastSaid = String(text || '');
+  if (!SP.ok || muted || !text) return false;
+  try {
+    var u = new window.SpeechSynthesisUtterance(String(text));
+    /* the character she picked decides pitch and speed; an explicit rate
+       argument still wins, because Trace slows right down while it spells a
+       letter out stroke by stroke */
+    ocApply(u, null, rate === undefined ? undefined : rate);
+    u.volume = 1;
+    u.onerror = function () {};
+    window.speechSynthesis.speak(u);
+    return true;
+  } catch (e) { return false; }
+}
+function sayFresh(text, rate, pitch) { shutUp(); return speak(text, rate, pitch); }
+
+var SOUND = {
+  A: 'ah', B: 'buh', C: 'kuh', D: 'duh', E: 'eh', F: 'fff', G: 'guh', H: 'huh',
+  I: 'ih', J: 'juh', K: 'kuh', L: 'lll', M: 'mmm', N: 'nnn', O: 'aw', P: 'puh',
+  Q: 'kwuh', R: 'rrr', S: 'sss', T: 'tuh', U: 'uh', V: 'vvv', W: 'wuh',
+  X: 'ks', Y: 'yuh', Z: 'zzz'
+};
+function letterName(ch) {
+  var c = String(ch).toUpperCase();
+  return c === 'A' ? 'ay' : c === 'I' ? 'eye' : c === 'W' ? 'double you' : c === 'Y' ? 'why' : c;
+}
+/* warm, not babyish */
+var PRAISE = ['Nice work.', 'You did it.', 'That looks great.', 'Well done.', 'Excellent.', 'Beautiful writing.'];
+
+/* ----------------------------------------------------------------- save -- */
+function freshSave() {
+  return {
+    letters: {},      /* letters she has formed */
+    words: {},        /* words she has built */
+    /* A neutral default: this ships to other people's children, and the
+       name to trace should be theirs, not one real child's. Changed in the
+       grown-ups panel. */
+    name: 'SAM',
+    rung: 0,          /* where the ladder found her */
+    tol: TOL_START,   /* the working tolerance, a fraction of letter height */
+    clean: 0,         /* clean completions at this rung */
+    struggle: 0,      /* assisted completions at this rung */
+    history: [],      /* [{c:letter, a:neatness 0-100, x:1 if assisted}] */
+    done: 0           /* total letters formed, ever */
+  };
+}
+function loadSave() {
+  var out = freshSave();
+  var raw = null;
+  try { raw = localStorage.getItem(K_SAVE); } catch (e) { return out; }
+  if (!raw) return out;
+  var v = null;
+  try { v = JSON.parse(raw); } catch (e) { return out; }
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  try {
+    if (v.letters && typeof v.letters === 'object' && !Array.isArray(v.letters)) {
+      for (var k in v.letters) {
+        if (Object.prototype.hasOwnProperty.call(v.letters, k) && /^[A-Za-z]$/.test(k) && v.letters[k]) out.letters[k] = true;
+      }
+    }
+    if (v.words && typeof v.words === 'object' && !Array.isArray(v.words)) {
+      for (var w in v.words) {
+        if (Object.prototype.hasOwnProperty.call(v.words, w) && /^[A-Z]{2,8}$/.test(w) && v.words[w]) out.words[w] = true;
+      }
+    }
+    if (typeof v.name === 'string') {
+      var n = v.name.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8);
+      if (n.length > 0) out.name = n;
+    }
+    if (typeof v.rung === 'number' && isFinite(v.rung)) out.rung = clamp(Math.round(v.rung), 0, RUNGS.length - 1);
+    if (typeof v.tol === 'number' && isFinite(v.tol)) out.tol = clamp(v.tol, TOL_MIN, TOL_MAX);
+    if (typeof v.clean === 'number' && isFinite(v.clean)) out.clean = clamp(Math.round(v.clean), 0, 99);
+    if (typeof v.struggle === 'number' && isFinite(v.struggle)) out.struggle = clamp(Math.round(v.struggle), 0, 99);
+    if (typeof v.done === 'number' && isFinite(v.done)) out.done = clamp(Math.round(v.done), 0, 999999);
+    if (Object.prototype.toString.call(v.history) === '[object Array]') {
+      for (var i = 0; i < v.history.length && out.history.length < 40; i++) {
+        var h = v.history[i];
+        if (h && typeof h === 'object' && typeof h.c === 'string' && /^[A-Za-z]$/.test(h.c) &&
+            typeof h.a === 'number' && isFinite(h.a)) {
+          out.history.push({ c: h.c, a: clamp(Math.round(h.a), 0, 100), x: h.x ? 1 : 0 });
+        }
+      }
+    }
+  } catch (e) { return freshSave(); }
+  return out;
+}
+function persist() { try { localStorage.setItem(K_SAVE, JSON.stringify(SV)); } catch (e) {} }
+
+/* ------------------------------------------------------ letter geometry -- */
+/* Each letter is an ordered list of STROKES in real handwriting order and
+   direction. A stroke is a list of pen commands in a unit box:
+     x 0..1 left..right, y 0 = top line, y 1 = baseline, y > 1 = descender.
+   ['M',x,y]  pen down here
+   ['L',x,y]  straight to
+   ['A',cx,cy,rx,ry,a0,a1]  elliptical arc (angle 0 = right, -PI/2 = top,
+                            +PI/2 = bottom; decreasing angle = anticlockwise)
+   Sampled to polylines and resampled to even spacing — that even-spaced
+   polyline is what the matcher walks. Capital I is deliberately a single
+   sans-serif downstroke: it is the first rung of the whole ladder. */
+var UPPER = {
+  A: [[['M', .5, 0], ['L', .08, 1]], [['M', .5, 0], ['L', .92, 1]], [['M', .2, .68], ['L', .8, .68]]],
+  B: [[['M', .14, 0], ['L', .14, 1]], [['M', .14, 0], ['A', .14, .25, .48, .25, -P / 2, P / 2], ['A', .14, .75, .54, .25, -P / 2, P / 2]]],
+  C: [[['A', .5, .5, .42, .5, -P / 3, -5 * P / 3]]],
+  D: [[['M', .14, 0], ['L', .14, 1]], [['M', .14, 0], ['A', .14, .5, .68, .5, -P / 2, P / 2]]],
+  E: [[['M', .14, 0], ['L', .14, 1]], [['M', .14, 0], ['L', .84, 0]], [['M', .14, .5], ['L', .74, .5]], [['M', .14, 1], ['L', .84, 1]]],
+  F: [[['M', .14, 0], ['L', .14, 1]], [['M', .14, 0], ['L', .84, 0]], [['M', .14, .5], ['L', .72, .5]]],
+  G: [[['A', .5, .5, .42, .5, -P / 3, -2 * P]], [['M', .92, .5], ['L', .52, .5]]],
+  H: [[['M', .14, 0], ['L', .14, 1]], [['M', .86, 0], ['L', .86, 1]], [['M', .14, .5], ['L', .86, .5]]],
+  I: [[['M', .5, 0], ['L', .5, 1]]],
+  J: [[['M', .62, 0], ['L', .62, .74], ['A', .36, .74, .26, .26, 0, P]]],
+  K: [[['M', .14, 0], ['L', .14, 1]], [['M', .84, 0], ['L', .16, .56]], [['M', .16, .56], ['L', .86, 1]]],
+  L: [[['M', .18, 0], ['L', .18, 1]], [['M', .18, 1], ['L', .84, 1]]],
+  M: [[['M', .1, 0], ['L', .1, 1]], [['M', .1, 0], ['L', .5, .6], ['L', .9, 0], ['L', .9, 1]]],
+  N: [[['M', .12, 0], ['L', .12, 1]], [['M', .12, 0], ['L', .88, 1]], [['M', .88, 0], ['L', .88, 1]]],
+  O: [[['A', .5, .5, .42, .5, -P / 2, -P / 2 - 2 * P]]],
+  P: [[['M', .14, 0], ['L', .14, 1]], [['M', .14, 0], ['A', .14, .28, .52, .28, -P / 2, P / 2]]],
+  Q: [[['A', .5, .5, .42, .5, -P / 2, -P / 2 - 2 * P]], [['M', .62, .68], ['L', .95, 1.02]]],
+  R: [[['M', .14, 0], ['L', .14, 1]], [['M', .14, 0], ['A', .14, .26, .5, .26, -P / 2, P / 2]], [['M', .14, .52], ['L', .88, 1]]],
+  S: [[['A', .5, .28, .36, .28, -P / 4, -3 * P / 2], ['A', .5, .78, .36, .22, -P / 2, P * .85]]],
+  T: [[['M', .5, 0], ['L', .5, 1]], [['M', .1, 0], ['L', .9, 0]]],
+  U: [[['M', .12, 0], ['L', .12, .62], ['A', .5, .62, .38, .38, P, 0], ['L', .88, 0]]],
+  V: [[['M', .08, 0], ['L', .5, 1], ['L', .92, 0]]],
+  W: [[['M', .05, 0], ['L', .27, 1], ['L', .5, .18], ['L', .73, 1], ['L', .95, 0]]],
+  X: [[['M', .12, 0], ['L', .88, 1]], [['M', .88, 0], ['L', .12, 1]]],
+  Y: [[['M', .12, 0], ['L', .5, .52]], [['M', .88, 0], ['L', .5, .52]], [['M', .5, .52], ['L', .5, 1]]],
+  Z: [[['M', .12, 0], ['L', .88, 0], ['L', .12, 1], ['L', .88, 1]]]
+};
+var LOWER = {
+  a: [[['A', .46, .67, .3, .33, -P / 3, -P / 3 - 2 * P]], [['M', .76, .34], ['L', .76, 1]]],
+  b: [[['M', .16, 0], ['L', .16, 1]], [['A', .16, .68, .46, .32, -P / 2, P / 2]]],
+  c: [[['A', .5, .67, .32, .33, -P / 3, -5 * P / 3]]],
+  d: [[['A', .42, .67, .3, .33, -P / 3, -P / 3 - 2 * P]], [['M', .72, 0], ['L', .72, 1]]],
+  e: [[['M', .2, .72], ['L', .78, .72], ['A', .49, .67, .29, .33, .171, -5 * P / 3]]],
+  f: [[['A', .42, .18, .22, .18, 0, -P], ['L', .2, 1]], [['M', .06, .42], ['L', .62, .42]]],
+  g: [[['A', .45, .67, .3, .33, -P / 3, -P / 3 - 2 * P]], [['M', .75, .34], ['L', .75, 1.06], ['A', .5, 1.06, .25, .2, 0, P]]],
+  h: [[['M', .16, 0], ['L', .16, 1]], [['A', .46, .66, .3, .3, -P, 0], ['L', .76, 1]]],
+  i: [[['M', .5, .35], ['L', .5, 1]], [['M', .5, .08], ['L', .5, .2]]],
+  j: [[['M', .55, .35], ['L', .55, 1.02], ['A', .35, 1.02, .2, .2, 0, P]], [['M', .55, .08], ['L', .55, .2]]],
+  k: [[['M', .16, 0], ['L', .16, 1]], [['M', .72, .38], ['L', .18, .72]], [['M', .3, .62], ['L', .76, 1]]],
+  l: [[['M', .5, 0], ['L', .5, 1]]],
+  m: [[['M', .12, .36], ['L', .12, 1]], [['A', .32, .58, .2, .22, -P, 0], ['L', .52, 1]], [['A', .72, .58, .2, .22, -P, 0], ['L', .92, 1]]],
+  n: [[['M', .16, .36], ['L', .16, 1]], [['A', .46, .6, .3, .24, -P, 0], ['L', .76, 1]]],
+  o: [[['A', .5, .67, .32, .33, -P / 2, -P / 2 - 2 * P]]],
+  p: [[['M', .16, .35], ['L', .16, 1.28]], [['A', .16, .67, .46, .32, -P / 2, P / 2]]],
+  q: [[['A', .45, .67, .3, .33, -P / 3, -P / 3 - 2 * P]], [['M', .75, .34], ['L', .75, 1.28]]],
+  r: [[['M', .2, .36], ['L', .2, 1]], [['A', .44, .58, .24, .22, -P, -P / 4]]],
+  s: [[['A', .5, .55, .24, .19, -P / 4, -3 * P / 2], ['A', .5, .87, .24, .13, -P / 2, P * .85]]],
+  t: [[['M', .46, .06], ['L', .46, .84], ['A', .62, .84, .16, .16, P, P / 4]], [['M', .12, .38], ['L', .8, .38]]],
+  u: [[['M', .16, .36], ['L', .16, .78], ['A', .46, .78, .3, .22, P, 0], ['L', .76, .36]], [['M', .76, .36], ['L', .76, 1]]],
+  v: [[['M', .12, .36], ['L', .5, 1], ['L', .88, .36]]],
+  w: [[['M', .08, .36], ['L', .28, 1], ['L', .5, .45], ['L', .72, 1], ['L', .92, .36]]],
+  x: [[['M', .14, .36], ['L', .86, 1]], [['M', .86, .36], ['L', .14, 1]]],
+  y: [[['M', .14, .36], ['L', .5, 1]], [['M', .86, .36], ['L', .4, 1.28]]],
+  z: [[['M', .14, .38], ['L', .86, .38], ['L', .14, 1], ['L', .86, 1]]]
+};
+
+function sampleCmds(cmds) {
+  var pts = [], cur = null, i, j, n;
+  for (i = 0; i < cmds.length; i++) {
+    var c = cmds[i], k = c[0];
+    if (k === 'M') { cur = { x: c[1], y: c[2] }; pts.push({ x: cur.x, y: cur.y }); }
+    else if (k === 'L') {
+      var tx = c[1], ty = c[2];
+      if (!cur) { cur = { x: tx, y: ty }; pts.push({ x: tx, y: ty }); continue; }
+      var d = Math.sqrt(dist2(cur.x, cur.y, tx, ty));
+      n = Math.max(2, Math.ceil(d / 0.03));
+      for (j = 1; j <= n; j++) pts.push({ x: lerp(cur.x, tx, j / n), y: lerp(cur.y, ty, j / n) });
+      cur = { x: tx, y: ty };
+    } else if (k === 'A') {
+      var cx = c[1], cy = c[2], rx = c[3], ry = c[4], a0 = c[5], a1 = c[6];
+      var span = a1 - a0;
+      n = Math.max(6, Math.ceil(Math.abs(span) / 0.09));
+      var from = 0;
+      if (!cur) { pts.push({ x: cx + rx * Math.cos(a0), y: cy + ry * Math.sin(a0) }); from = 1; }
+      for (j = from; j <= n; j++) {
+        var a = a0 + span * (j / n);
+        pts.push({ x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) });
+      }
+      cur = { x: cx + rx * Math.cos(a1), y: cy + ry * Math.sin(a1) };
+    }
+  }
+  return pts;
+}
+function resample(pts, step) {
+  if (pts.length < 2) return pts.slice();
+  var out = [{ x: pts[0].x, y: pts[0].y }];
+  var acc = 0, i;
+  for (i = 1; i < pts.length; i++) {
+    var ax = out[out.length - 1].x, ay = out[out.length - 1].y;
+    var bx = pts[i].x, by = pts[i].y;
+    var d = Math.sqrt(dist2(ax, ay, bx, by));
+    if (d < 1e-9) continue;
+    acc += d;
+    while (acc >= step) {
+      var t = 1 - (acc - step) / d;
+      var nx = lerp(ax, bx, t), ny = lerp(ay, by, t);
+      out.push({ x: nx, y: ny });
+      ax = nx; ay = ny;
+      d = Math.sqrt(dist2(ax, ay, bx, by));
+      acc = d;
+      if (d < 1e-9) break;
+    }
+  }
+  var last = pts[pts.length - 1];
+  var lp = out[out.length - 1];
+  if (dist2(lp.x, lp.y, last.x, last.y) > 1e-6) out.push({ x: last.x, y: last.y });
+  if (out.length < 2) out.push({ x: last.x, y: last.y });
+  return out;
+}
+var UNIT_CACHE = {};
+/* buildUnit('A') -> [[{x,y},...], ...] one polyline per stroke, unit space */
+function buildUnit(ch) {
+  if (UNIT_CACHE[ch]) return UNIT_CACHE[ch];
+  var def = UPPER[ch] || LOWER[ch] || null;
+  if (!def) return null;
+  var out = [];
+  for (var i = 0; i < def.length; i++) out.push(resample(sampleCmds(def[i]), 0.03));
+  UNIT_CACHE[ch] = out;
+  return out;
+}
+function isLower(ch) { return !!LOWER[ch]; }
+
+/* ---------------------------------------------------------- the ladder --- */
+/* Explicit rungs. She never picks one; the game finds where she is by
+   playing with her, then moves her up. Tolerance is a rung too. */
+var RUNGS = [
+  { name: 'One straight line', letters: ['I'] },
+  { name: 'Two straight lines', letters: ['L', 'T', 'H', 'E', 'F'] },
+  { name: 'Slanty lines', letters: ['A', 'V', 'X', 'Y', 'K', 'M', 'N', 'W', 'Z'] },
+  { name: 'Round letters', letters: ['C', 'O', 'U', 'D', 'P', 'J'] },
+  { name: 'Tricky letters', letters: ['S', 'G', 'R', 'B', 'Q'] },
+  { name: 'Little letters', letters: ['l', 'i', 't', 'c', 'o', 'v', 'x', 'u', 'a', 'd', 'n', 'm', 'h', 'e', 'r', 's', 'w', 'y', 'z', 'b', 'p', 'g', 'j', 'k', 'f', 'q'] },
+  { name: 'Every letter', letters: ALPHA.concat('abcdefghijklmnopqrstuvwxyz'.split('')) }
+];
+var SV = loadSave();
+
+function rungLetters(r) { return RUNGS[clamp(r, 0, RUNGS.length - 1)].letters; }
+function pickLetter() {
+  /* mostly this rung; now and then one from the rung above so she is never
+     trapped low. Prefer something she has not formed yet, and never the
+     same letter twice running if there is a choice. */
+  var stretch = SV.rung < RUNGS.length - 1 && Math.random() < 0.2;
+  var pool = rungLetters(SV.rung + (stretch ? 1 : 0)).slice();
+  if (pool.length > 1) {
+    var f = pool.filter(function (c) { return c !== TR.letter; });
+    if (f.length) pool = f;
+  }
+  var fresh = pool.filter(function (c) { return !SV.letters[c]; });
+  var ch = pick(fresh.length ? fresh : pool);
+  return { ch: ch, stretch: stretch };
+}
+/* she finished a letter — move the ladder */
+function gradeLetter(assisted, neatness) {
+  SV.done++;
+  SV.history.push({ c: TR.letter, a: clamp(Math.round(neatness), 0, 100), x: assisted ? 1 : 0 });
+  while (SV.history.length > 40) SV.history.shift();
+  if (assisted) {
+    /* protect her confidence first: loosen straight back off */
+    SV.clean = 0;
+    SV.struggle++;
+    SV.tol = clamp(SV.tol * 1.15, TOL_MIN, TOL_MAX);
+    if (SV.struggle >= 2) { SV.rung = clamp(SV.rung - 1, 0, RUNGS.length - 1); SV.struggle = 0; }
+  } else {
+    SV.struggle = 0;
+    if (TR.stretch) {
+      /* she managed one from above — take it */
+      SV.rung = clamp(SV.rung + 1, 0, RUNGS.length - 1);
+      SV.clean = 0;
+    } else {
+      SV.clean++;
+      if (SV.clean >= 3) {
+        SV.clean = 0;
+        SV.rung = clamp(SV.rung + 1, 0, RUNGS.length - 1);
+        SV.tol = clamp(SV.tol * 0.93, TOL_MIN, TOL_MAX);
+      }
+    }
+  }
+  persist();
+}
+
+/* -------------------------------------------------------------- pictures -- */
+var WORDS3 = [
+  { w: 'CAT', pic: 'cat' }, { w: 'DOG', pic: 'dog' }, { w: 'SUN', pic: 'sun' },
+  { w: 'PIG', pic: 'pig' }, { w: 'BED', pic: 'bed' }, { w: 'BUS', pic: 'bus' },
+  { w: 'CUP', pic: 'cup' }, { w: 'HAT', pic: 'hat' }
+];
+var WORDS4 = [
+  { w: 'STAR', pic: 'star' }, { w: 'MOON', pic: 'moon' }, { w: 'FISH', pic: 'fish' }
+];
+function circ(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }
+function eyes(g, x, y, s, gap, r, col) {
+  g.fillStyle = col || '#2f2116';
+  circ(g, x - gap * s, y, r * s); circ(g, x + gap * s, y, r * s);
+  g.fillStyle = '#ffffff';
+  circ(g, x - gap * s + r * s * 0.3, y - r * s * 0.3, r * s * 0.34);
+  circ(g, x + gap * s + r * s * 0.3, y - r * s * 0.3, r * s * 0.34);
+}
+/* every picture draws inside a box of size s centred on (x,y) */
+function drawPic(g, name, x, y, s) {
+  g.save();
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  var i;
+  if (name === 'cat') {
+    g.fillStyle = '#f0a04b';
+    g.beginPath(); g.ellipse(x, y + s * 0.24, s * 0.26, s * 0.22, 0, 0, TAU); g.fill();
+    g.strokeStyle = '#f0a04b'; g.lineWidth = s * 0.07;
+    g.beginPath(); g.moveTo(x + s * 0.24, y + s * 0.26);
+    g.quadraticCurveTo(x + s * 0.46, y + s * 0.22, x + s * 0.4, y - s * 0.02); g.stroke();
+    g.fillStyle = '#f5b569';
+    g.beginPath();
+    g.moveTo(x - s * 0.28, y - s * 0.24); g.lineTo(x - s * 0.24, y - s * 0.02); g.lineTo(x - s * 0.06, y - s * 0.16); g.closePath(); g.fill();
+    g.beginPath();
+    g.moveTo(x + s * 0.28, y - s * 0.24); g.lineTo(x + s * 0.24, y - s * 0.02); g.lineTo(x + s * 0.06, y - s * 0.16); g.closePath(); g.fill();
+    circ(g, x, y - s * 0.06, s * 0.26);
+    eyes(g, x, y - s * 0.1, s, 0.11, 0.045);
+    g.fillStyle = '#e2762b';
+    g.beginPath(); g.moveTo(x - s * 0.045, y - s * 0.005); g.lineTo(x + s * 0.045, y - s * 0.005); g.lineTo(x, y + s * 0.05); g.closePath(); g.fill();
+    g.strokeStyle = '#7a5334'; g.lineWidth = Math.max(1.5, s * 0.012);
+    for (i = -1; i <= 1; i++) {
+      g.beginPath(); g.moveTo(x - s * 0.06, y + s * 0.02); g.lineTo(x - s * 0.3, y + s * 0.02 + i * s * 0.05); g.stroke();
+      g.beginPath(); g.moveTo(x + s * 0.06, y + s * 0.02); g.lineTo(x + s * 0.3, y + s * 0.02 + i * s * 0.05); g.stroke();
+    }
+  } else if (name === 'dog') {
+    g.fillStyle = '#a97449';
+    g.beginPath(); g.ellipse(x, y + s * 0.26, s * 0.24, s * 0.2, 0, 0, TAU); g.fill();
+    g.fillStyle = '#c08a56';
+    circ(g, x, y - s * 0.04, s * 0.26);
+    g.fillStyle = '#7f5330';
+    g.beginPath(); g.ellipse(x - s * 0.26, y - s * 0.02, s * 0.09, s * 0.19, 0.25, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(x + s * 0.26, y - s * 0.02, s * 0.09, s * 0.19, -0.25, 0, TAU); g.fill();
+    g.fillStyle = '#e6cba8';
+    g.beginPath(); g.ellipse(x, y + s * 0.1, s * 0.15, s * 0.11, 0, 0, TAU); g.fill();
+    eyes(g, x, y - s * 0.08, s, 0.1, 0.042);
+    g.fillStyle = '#33241a';
+    g.beginPath(); g.ellipse(x, y + s * 0.05, s * 0.055, s * 0.042, 0, 0, TAU); g.fill();
+    g.strokeStyle = '#33241a'; g.lineWidth = Math.max(1.5, s * 0.014);
+    g.beginPath(); g.moveTo(x, y + s * 0.09); g.lineTo(x, y + s * 0.13); g.stroke();
+    g.fillStyle = '#e2766b';
+    g.beginPath(); g.ellipse(x, y + s * 0.17, s * 0.04, s * 0.06, 0, 0, TAU); g.fill();
+  } else if (name === 'sun') {
+    g.strokeStyle = '#f2b12e'; g.lineWidth = Math.max(3, s * 0.035);
+    for (i = 0; i < 12; i++) {
+      var a2 = i / 12 * TAU;
+      g.beginPath();
+      g.moveTo(x + Math.cos(a2) * s * 0.3, y + Math.sin(a2) * s * 0.3);
+      g.lineTo(x + Math.cos(a2) * s * 0.42, y + Math.sin(a2) * s * 0.42);
+      g.stroke();
+    }
+    g.fillStyle = '#fcd34a'; circ(g, x, y, s * 0.26);
+    g.fillStyle = '#f2b12e'; circ(g, x, y, s * 0.22);
+    g.fillStyle = '#fcd34a'; circ(g, x, y, s * 0.2);
+    eyes(g, x, y - s * 0.05, s, 0.08, 0.035);
+    g.strokeStyle = '#2f2116'; g.lineWidth = Math.max(2, s * 0.02);
+    g.beginPath(); g.arc(x, y + s * 0.02, s * 0.1, 0.3, P - 0.3); g.stroke();
+  } else if (name === 'pig') {
+    g.fillStyle = '#f2a3b4';
+    g.beginPath(); g.ellipse(x, y + s * 0.26, s * 0.24, s * 0.18, 0, 0, TAU); g.fill();
+    g.beginPath();
+    g.moveTo(x - s * 0.26, y - s * 0.2); g.lineTo(x - s * 0.28, y - s * 0.02); g.lineTo(x - s * 0.1, y - s * 0.14); g.closePath(); g.fill();
+    g.beginPath();
+    g.moveTo(x + s * 0.26, y - s * 0.2); g.lineTo(x + s * 0.28, y - s * 0.02); g.lineTo(x + s * 0.1, y - s * 0.14); g.closePath(); g.fill();
+    circ(g, x, y - s * 0.02, s * 0.27);
+    eyes(g, x, y - s * 0.08, s, 0.1, 0.04);
+    g.fillStyle = '#e07f95';
+    g.beginPath(); g.ellipse(x, y + s * 0.08, s * 0.13, s * 0.1, 0, 0, TAU); g.fill();
+    g.fillStyle = '#a8536a';
+    circ(g, x - s * 0.05, y + s * 0.08, s * 0.025);
+    circ(g, x + s * 0.05, y + s * 0.08, s * 0.025);
+  } else if (name === 'bed') {
+    g.fillStyle = '#8d6242';
+    g.fillRect(x - s * 0.4, y - s * 0.22, s * 0.09, s * 0.5);
+    g.fillRect(x + s * 0.31, y - s * 0.02, s * 0.09, s * 0.3);
+    g.fillStyle = '#b98a5f';
+    rrect(g, x - s * 0.4, y - s * 0.3, s * 0.09, s * 0.14, s * 0.04); g.fill();
+    g.fillStyle = '#fffaf0';
+    rrect(g, x - s * 0.3, y + s * 0.0, s * 0.62, s * 0.12, s * 0.04); g.fill();
+    g.fillStyle = '#7fb3d5';
+    rrect(g, x - s * 0.08, y + s * 0.06, s * 0.4, s * 0.16, s * 0.04); g.fill();
+    g.fillStyle = '#fdf0da';
+    rrect(g, x - s * 0.29, y - s * 0.14, s * 0.22, s * 0.16, s * 0.05); g.fill();
+    g.strokeStyle = '#8d6242'; g.lineWidth = Math.max(2, s * 0.02);
+    rrect(g, x - s * 0.31, y - s * 0.15, s * 0.24, s * 0.18, s * 0.05); g.stroke();
+  } else if (name === 'bus') {
+    g.fillStyle = '#f2b12e';
+    rrect(g, x - s * 0.4, y - s * 0.24, s * 0.8, s * 0.44, s * 0.08); g.fill();
+    g.fillStyle = '#bfe2f5';
+    rrect(g, x - s * 0.34, y - s * 0.18, s * 0.18, s * 0.16, s * 0.03); g.fill();
+    rrect(g, x - s * 0.1, y - s * 0.18, s * 0.18, s * 0.16, s * 0.03); g.fill();
+    rrect(g, x + s * 0.14, y - s * 0.18, s * 0.2, s * 0.16, s * 0.03); g.fill();
+    g.fillStyle = '#d99420';
+    g.fillRect(x - s * 0.4, y + s * 0.06, s * 0.8, s * 0.05);
+    g.fillStyle = '#3b3129';
+    circ(g, x - s * 0.22, y + s * 0.22, s * 0.09);
+    circ(g, x + s * 0.22, y + s * 0.22, s * 0.09);
+    g.fillStyle = '#9a9a9a';
+    circ(g, x - s * 0.22, y + s * 0.22, s * 0.04);
+    circ(g, x + s * 0.22, y + s * 0.22, s * 0.04);
+  } else if (name === 'cup') {
+    g.strokeStyle = '#c9d6e0'; g.lineWidth = Math.max(3, s * 0.035);
+    g.beginPath();
+    g.moveTo(x - s * 0.08, y - s * 0.24);
+    g.quadraticCurveTo(x - s * 0.16, y - s * 0.34, x - s * 0.06, y - s * 0.42); g.stroke();
+    g.beginPath();
+    g.moveTo(x + s * 0.06, y - s * 0.24);
+    g.quadraticCurveTo(x - s * 0.02, y - s * 0.34, x + s * 0.08, y - s * 0.42); g.stroke();
+    g.strokeStyle = '#e0dbd2'; g.lineWidth = Math.max(4, s * 0.05);
+    g.beginPath(); g.arc(x + s * 0.28, y + s * 0.02, s * 0.11, -P / 2, P / 2); g.stroke();
+    g.fillStyle = '#f4f1ea';
+    rrect(g, x - s * 0.28, y - s * 0.18, s * 0.54, s * 0.42, s * 0.07); g.fill();
+    g.fillStyle = '#8d6242';
+    rrect(g, x - s * 0.24, y - s * 0.14, s * 0.46, s * 0.08, s * 0.03); g.fill();
+    g.fillStyle = '#e2762b';
+    circ(g, x - s * 0.01, y + s * 0.1, s * 0.06);
+  } else if (name === 'hat') {
+    g.fillStyle = '#3b3129';
+    rrect(g, x - s * 0.2, y - s * 0.34, s * 0.4, s * 0.44, s * 0.04); g.fill();
+    g.fillStyle = '#e2762b';
+    g.fillRect(x - s * 0.2, y - s * 0.02, s * 0.4, s * 0.1);
+    g.fillStyle = '#3b3129';
+    g.beginPath(); g.ellipse(x, y + s * 0.12, s * 0.4, s * 0.09, 0, 0, TAU); g.fill();
+  } else if (name === 'star') {
+    g.fillStyle = '#fcd34a';
+    g.beginPath();
+    for (i = 0; i < 10; i++) {
+      var ar = -P / 2 + i * P / 5;
+      var rr = (i % 2 === 0) ? s * 0.44 : s * 0.18;
+      if (i === 0) g.moveTo(x + Math.cos(ar) * rr, y + Math.sin(ar) * rr);
+      else g.lineTo(x + Math.cos(ar) * rr, y + Math.sin(ar) * rr);
+    }
+    g.closePath(); g.fill();
+    g.strokeStyle = '#f2b12e'; g.lineWidth = Math.max(2.5, s * 0.025); g.stroke();
+    eyes(g, x, y - s * 0.02, s, 0.09, 0.035);
+    g.strokeStyle = '#2f2116'; g.lineWidth = Math.max(2, s * 0.02);
+    g.beginPath(); g.arc(x, y + s * 0.06, s * 0.09, 0.3, P - 0.3); g.stroke();
+  } else if (name === 'moon') {
+    /* the crescent is built from its two real arcs. destination-out would
+       punch a black hole through the card (the canvas has no alpha), and
+       even-odd fills the bite that hangs outside the disc. */
+    var mR = s * 0.4, mr = s * 0.35, md = s * 0.26;
+    var mcx = x - s * 0.06, mcy = y;
+    var mxi = (md * md + mR * mR - mr * mr) / (2 * md);
+    var myi = Math.sqrt(Math.max(0, mR * mR - mxi * mxi));
+    var ma = Math.atan2(myi, mxi), mb = Math.atan2(myi, mxi - md);
+    g.fillStyle = '#f7e7a8';
+    g.beginPath();
+    g.moveTo(mcx + mxi, mcy + myi);
+    g.arc(mcx, mcy, mR, ma, -ma, false);
+    g.arc(mcx + md, mcy, mr, -mb, mb, true);
+    g.closePath(); g.fill();
+    g.fillStyle = '#e8d489';
+    circ(g, mcx - mR * 0.42, mcy + s * 0.12, s * 0.055);
+    circ(g, mcx - mR * 0.3, mcy - s * 0.16, s * 0.04);
+    circ(g, mcx - mR * 0.6, mcy - s * 0.02, s * 0.03);
+    g.fillStyle = '#fcd34a';
+    circ(g, x + s * 0.34, y + s * 0.26, s * 0.05);
+    circ(g, x + s * 0.24, y - s * 0.3, s * 0.035);
+  } else if (name === 'fish') {
+    g.fillStyle = '#7fb3d5';
+    g.beginPath(); g.ellipse(x - s * 0.03, y, s * 0.32, s * 0.21, 0, 0, TAU); g.fill();
+    g.beginPath();
+    g.moveTo(x + s * 0.24, y); g.lineTo(x + s * 0.46, y - s * 0.2); g.lineTo(x + s * 0.46, y + s * 0.2);
+    g.closePath(); g.fill();
+    g.fillStyle = '#5d94b8';
+    g.beginPath();
+    g.moveTo(x - s * 0.06, y - s * 0.19); g.lineTo(x + s * 0.04, y - s * 0.34); g.lineTo(x + s * 0.12, y - s * 0.16);
+    g.closePath(); g.fill();
+    g.fillStyle = '#ffffff';
+    circ(g, x - s * 0.2, y - s * 0.04, s * 0.06);
+    g.fillStyle = '#2f2116';
+    circ(g, x - s * 0.21, y - s * 0.04, s * 0.03);
+    g.strokeStyle = '#5d94b8'; g.lineWidth = Math.max(2, s * 0.02);
+    for (i = 0; i < 3; i++) {
+      g.beginPath();
+      g.arc(x + s * (0.02 + i * 0.09), y, s * 0.13, -P * 0.4, P * 0.4);
+      g.stroke();
+    }
+  }
+  g.restore();
+}
+
+/* ---------------------------------------------------------------- state -- */
+var G = {
+  state: 'title',        /* title | menu | trace | word */
+  t: 0,
+  paused: false,
+  parts: [],
+  toast: '', toastT: 0
+};
+/* TR — the tracing activity. Exposed on purpose: the scripted tests drive it. */
+var TR = {
+  mode: 'letter',        /* letter | name */
+  seq: [], seqIdx: 0,
+  letter: 'I',
+  stretch: false,
+  strokes: [],           /* [{pts:[{x,y}px], prog, done, granted}] */
+  idx: 0,
+  ink: [],               /* [[{x,y} unit], ...] */
+  drawing: false,
+  touched: false,
+  idleT: 0,
+  demo: null,
+  celT: 0,
+  done: false,
+  nameDone: false,
+  assisted: false,
+  errSum: 0, errN: 0,
+  neat: 100,
+  tol: 40
+};
+var WD = { word: 'CAT', pic: 'cat', need: [], tiles: [], slot: 0, celT: 0, hintT: 0 };
+
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var view = { w: 900, h: 600, dpr: 1 };
+var L = {
+  box: { x: 0, y: 0, w: 10, h: 10 }, card: { x: 0, y: 0, w: 10, h: 10 },
+  side: false, bs: 110, top: 0, mid: 0, base: 0
+};
+var zones = [];
+
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(240, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+  layout();
+  if (G.state === 'trace') mapStrokes();
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+/* Landscape puts the big buttons in a column down the LEFT so the letter
+   keeps the full height; portrait puts them along the bottom. Everything
+   she taps is 110px where the screen allows it and never under 88. */
+function layout() {
+  var W = view.w, H = view.h;
+  L.side = W > H * 1.24;
+  var area;
+  if (L.side) {
+    L.bs = clamp(Math.floor((H - 16) / 3) - 6, 88, 110);
+    var colW = L.bs + 16;
+    area = { x: colW, y: 0, w: W - colW - 6, h: H };
+  } else {
+    L.bs = clamp(Math.floor((W - 30) / 3) - 8, 88, 110);
+    var barH = L.bs + 20;
+    area = { x: 0, y: 0, w: W, h: H - barH };
+  }
+  L.area = area;
+  var topInset = 46;
+  var cx = area.x + 8, cy = area.y + topInset;
+  var cw = area.w - 16, chh = area.h - topInset - 8;
+  L.card = { x: cx, y: cy, w: cw, h: chh };
+  L.top = cy + chh * 0.13;
+  L.base = cy + chh * 0.79;   /* 21% of the card left under the baseline for descenders */
+  var lh = L.base - L.top;
+  L.mid = isLower(TR.letter) ? L.top + lh * 0.35 : L.top + lh * 0.5;
+  var lw = Math.min(lh * 0.82, cw * 0.62);
+  L.box = { x: cx + (cw - lw) / 2, y: L.top, w: lw, h: lh };
+  TR.tol = lh * SV.tol;
+}
+
+/* map the current letter's unit strokes into pixels */
+function mapStrokes() {
+  var u = buildUnit(TR.letter);
+  if (!u) { TR.strokes = []; return; }
+  var b = L.box;
+  var keep = TR.strokes.length === u.length;
+  var out = [];
+  for (var i = 0; i < u.length; i++) {
+    var pts = [];
+    for (var j = 0; j < u[i].length; j++) pts.push({ x: b.x + u[i][j].x * b.w, y: b.y + u[i][j].y * b.h });
+    out.push({
+      pts: pts,
+      prog: keep ? TR.strokes[i].prog : -1,
+      done: keep ? TR.strokes[i].done : false,
+      granted: keep ? TR.strokes[i].granted : false
+    });
+  }
+  TR.strokes = out;
+}
+
+/* --------------------------------------------------------- the matcher --- */
+/* Deliberately enormous tolerance. She has to start somewhere near the
+   beginning of the stroke, move forward along it, and get most of the way
+   to the end — but she may be a whole tolerance-radius off the line the
+   entire time, may wobble, and may lift her finger and carry on. Nothing
+   here can fail her; it only declines to advance, and even that is capped
+   by the demonstration, which grants the stroke. */
+function feedPoint(px, py) {
+  if (TR.done || TR.idx >= TR.strokes.length) return;
+  var s = TR.strokes[TR.idx];
+  if (!s || s.done) return;
+  var pts = s.pts, n = pts.length;
+  var tol2 = TR.tol * TR.tol;
+  var lo, hi;
+  if (s.prog < 0) { lo = 0; hi = Math.max(2, Math.floor(n * 0.3)); }
+  else { lo = s.prog; hi = Math.min(n - 1, s.prog + Math.max(5, Math.floor(n * 0.35))); }
+  /* `best` is the FURTHEST point she has reached (that is what advances her);
+     `near` is the CLOSEST one (that is what measures how neat it was — using
+     the furthest would score everyone at exactly the tolerance radius) */
+  var best = -1, near = Infinity;
+  for (var i = 0; i < n; i++) {
+    var d = dist2(px, py, pts[i].x, pts[i].y);
+    if (d < near) near = d;                       /* nearest anywhere on the stroke */
+    if (i >= lo && i <= hi && d <= tol2) best = i; /* furthest reached, in the window */
+  }
+  if (best > s.prog) {
+    if (isFinite(near)) { TR.errSum += Math.sqrt(near); TR.errN++; }
+    s.prog = best;
+    TR.idleT = 0;
+    if (TR.demo) TR.demo = null;
+    var slack = Math.max(1, Math.floor(n * 0.15));
+    if (s.prog >= n - 1 - slack) finishStroke(false);
+  }
+}
+function finishStroke(granted) {
+  var s = TR.strokes[TR.idx];
+  if (!s || s.done) return;
+  s.done = true; s.granted = !!granted; s.prog = s.pts.length - 1;
+  if (granted) TR.assisted = true;
+  sfx.stroke();
+  var end = s.pts[s.pts.length - 1];
+  for (var i = 0; i < 12; i++) burst(end.x, end.y);
+  TR.idx++;
+  TR.idleT = 0; TR.demo = null;
+  if (TR.idx >= TR.strokes.length) finishLetter();
+  else sayFresh(granted ? 'There it is. Now the next line.' : pick(['Good. Now the next line.', 'Yes. One more line.', 'Nice. Keep going.']));
+}
+function finishLetter() {
+  TR.done = true;
+  TR.celT = 0;
+  var lh = L.box.h || 1;
+  var meanErr = TR.errN > 0 ? TR.errSum / TR.errN : lh * 0.2;
+  TR.neat = clamp(Math.round(100 * (1 - (meanErr / lh) / TOL_START)), 0, 100);
+  SV.letters[TR.letter] = true;
+  gradeLetter(TR.assisted, TR.neat);
+  var lastOfName = TR.mode === 'name' && TR.seqIdx >= TR.seq.length - 1;
+  if (lastOfName) {
+    TR.nameDone = true;
+    sfx.fanfare();
+    for (var k = 0; k < 160; k++) burst(rnd(0, view.w), rnd(view.h * 0.2, view.h * 0.7));
+    sayFresh('You wrote your whole name. ' + SV.name.split('').join('. ') + '. ' + SV.name + '!');
+    toast('You wrote ' + SV.name + '!');
+  } else {
+    sfx.cheer();
+    for (var i = 0; i < 80; i++) burst(L.box.x + Math.random() * L.box.w, L.box.y + Math.random() * L.box.h);
+    sayFresh(pick(PRAISE) + ' That is the letter ' + letterName(TR.letter) + '. Tap the arrow when you want another.');
+    toast('Letter ' + TR.letter + ' — done');
+  }
+}
+function toast(txt) { G.toast = txt; G.toastT = 3; }
+function burst(x, y) {
+  if (G.parts.length > 320) return;
+  G.parts.push({
+    x: x, y: y, vx: rnd(-160, 160), vy: rnd(-280, -60), g: rnd(320, 520),
+    r: rnd(4, 10), life: rnd(0.8, 1.8), t: 0, rot: rnd(0, TAU), vr: rnd(-8, 8),
+    c: pick(['#f0a04b', '#5fb14e', '#e2762b', '#7fb3d5', '#f2b12e', '#c48fd0'])
+  });
+}
+
+/* ----------------------------------------------------------- activities -- */
+function startTrace(mode) {
+  G.state = 'trace';
+  document.body.classList.add('playing');
+  hideOverlay();
+  TR.mode = mode;
+  TR.nameDone = false;
+  if (mode === 'name') { TR.seq = SV.name.split(''); TR.seqIdx = 0; }
+  else { TR.seq = []; TR.seqIdx = 0; }
+  loadLetter();
+}
+function loadLetter() {
+  if (TR.mode === 'name') {
+    TR.letter = TR.seq[clamp(TR.seqIdx, 0, TR.seq.length - 1)];
+    TR.stretch = false;
+  } else {
+    var p = pickLetter();
+    TR.letter = p.ch; TR.stretch = p.stretch;
+  }
+  if (!buildUnit(TR.letter)) TR.letter = 'I';
+  TR.idx = 0; TR.ink = []; TR.done = false; TR.nameDone = false; TR.celT = 0;
+  G.toast = ""; G.toastT = 0;              /* the last letter's toast must not caption this one */
+  TR.idleT = 0; TR.demo = null; TR.touched = false; TR.assisted = false;
+  TR.errSum = 0; TR.errN = 0; TR.neat = 100;
+  TR.strokes = [];
+  layout();
+  mapStrokes();
+  promptLetter();
+}
+function promptLetter() {
+  var nm = letterName(TR.letter);
+  var pre = TR.mode === 'name'
+    ? 'Your name. This letter is ' + nm + '.'
+    : 'This is the letter ' + nm + '. ' + nm + ' says ' + SOUND[TR.letter.toUpperCase()] + '.';
+  sayFresh(pre + ' Start on the green dot, and follow the arrows.');
+}
+function nextLetter(dir) {
+  if (TR.mode === 'name') {
+    TR.seqIdx += dir;
+    if (TR.seqIdx >= TR.seq.length) TR.seqIdx = 0;
+    if (TR.seqIdx < 0) TR.seqIdx = TR.seq.length - 1;
+  }
+  loadLetter();
+}
+function shuffle(a) {
+  for (var i = a.length - 1; i > 0; i--) { var j = (Math.random() * (i + 1)) | 0; var t = a[i]; a[i] = a[j]; a[j] = t; }
+  return a;
+}
+function startWord(entry) {
+  G.state = 'word';
+  document.body.classList.add('playing');
+  hideOverlay();
+  var list = SV.rung >= 4 ? WORDS3.concat(WORDS4) : WORDS3;
+  var e = entry || pick(list);
+  WD.word = e.w; WD.pic = e.pic;
+  WD.need = e.w.split('');
+  WD.slot = 0; WD.celT = 0; WD.hintT = 0;
+  G.toast = ""; G.toastT = 0;
+  var pool = [], i;
+  for (i = 0; i < ALPHA.length; i++) if (WD.need.indexOf(ALPHA[i]) < 0) pool.push(ALPHA[i]);
+  shuffle(pool);
+  var tiles = WD.need.slice();
+  tiles.push(pool[0]);                       /* exactly one distractor: big tiles, low floor */
+  WD.tiles = shuffle(tiles).map(function (c) { return { ch: c, used: false }; });
+  layout();
+  promptWord();
+}
+function promptWord() {
+  var w = WD.word, i;
+  var sounds = '';
+  for (i = 0; i < w.length; i++) sounds += SOUND[w[i]] + (i < w.length - 1 ? ', ' : '');
+  shutUp();
+  speak('This is a ' + w.toLowerCase() + '.', RATE);
+  speak(sounds + '.', 0.5, 1.05);
+  speak('Tap the letters to spell ' + w.toLowerCase() + '.', RATE);
+}
+function tapTile(i) {
+  var tile = WD.tiles[i];
+  if (!tile || tile.used || WD.celT > 0) return;
+  if (tile.ch === WD.need[WD.slot]) {
+    tile.used = true;
+    WD.slot++;
+    sfx.step();
+    if (WD.slot >= WD.need.length) {
+      WD.celT = 3.4;
+      SV.words[WD.word] = true;
+      persist();
+      sfx.cheer();
+      for (var k = 0; k < 90; k++) burst(view.w / 2 + rnd(-140, 140), view.h * 0.45);
+      shutUp();
+      speak(pick(PRAISE) + ' You spelled ' + WD.word.toLowerCase() + '.', RATE);
+      toast('You spelled ' + WD.word);
+    } else {
+      sayFresh(letterName(tile.ch) + '. Now find ' + letterName(WD.need[WD.slot]) + '.');
+    }
+  } else {
+    /* no failure feedback: no red, no buzzer, no shake — just a warm hand
+       on the shoulder and a glow around the one she is looking for */
+    WD.hintT = 2.6;
+    sfx.soft();
+    sayFresh('Looking for ' + letterName(WD.need[WD.slot]) + '. It is glowing.');
+  }
+}
+
+/* ---------------------------------------------------------------- zones -- */
+function zone(id, x, y, w, h, kind, extra) {
+  var z = { id: id, x: x, y: y, w: w, h: h, kind: kind };
+  if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) z[k] = extra[k];
+  zones.push(z);
+  return z;
+}
+/* lay n big buttons out in the left column (landscape) or bottom bar */
+function btnSlot(i, n) {
+  var B = L.bs, W = view.w, H = view.h;
+  if (L.side) {
+    var gap = Math.max(4, (H - n * B) / (n + 1));
+    return { x: 8, y: gap + i * (B + gap), w: B, h: B };
+  }
+  var g2 = Math.max(6, (W - n * B) / (n + 1));
+  return { x: g2 + i * (B + g2), y: H - B - 10, w: B, h: B };
+}
+function buildZones() {
+  zones = [];
+  var W = view.w, H = view.h, i;
+  if (G.state === 'menu') {
+    var s0 = btnSlot(0, 2), s1 = btnSlot(1, 2);
+    zone('speak', s0.x, s0.y, s0.w, s0.h, 'speak');
+    zone('gear', s1.x, s1.y, s1.w, s1.h, 'gear');
+    var a = L.area, pad = 14;
+    if (L.side) {
+      var pw = (a.w - pad * 4) / 3;
+      var ph = Math.min(a.h - 74, pw * 1.25);
+      for (i = 0; i < 3; i++) zone('act' + i, a.x + pad + i * (pw + pad), 52, pw, ph, 'panel', { act: i });
+    } else {
+      var pw2 = Math.min(a.w - pad * 2, 460);
+      var ph2 = Math.max(120, (a.h - 52 - pad * 3) / 3);
+      for (i = 0; i < 3; i++) zone('act' + i, a.x + (a.w - pw2) / 2, 50 + i * (ph2 + pad), pw2, ph2, 'panel', { act: i });
+    }
+  } else if (G.state === 'trace') {
+    var b0 = btnSlot(0, 3), b1 = btnSlot(1, 3), b2 = btnSlot(2, 3);
+    zone('back', b0.x, b0.y, b0.w, b0.h, 'back');
+    zone('speak', b1.x, b1.y, b1.w, b1.h, 'speak');
+    zone('next', b2.x, b2.y, b2.w, b2.h, 'next');
+  } else if (G.state === 'word') {
+    var c0 = btnSlot(0, 3), c1 = btnSlot(1, 3), c2 = btnSlot(2, 3);
+    zone('back', c0.x, c0.y, c0.w, c0.h, 'back');
+    zone('speak', c1.x, c1.y, c1.w, c1.h, 'speak');
+    zone('next', c2.x, c2.y, c2.w, c2.h, 'next');
+    var t = WD.tiles.length;
+    var c = L.card;
+    var maxCols = Math.max(1, Math.floor((c.w - 12) / 122));
+    var cols = Math.min(t, Math.max(2, maxCols));
+    var rows = Math.ceil(t / cols);
+    var ts = clamp(Math.min((c.w - 24) / cols - 12, (c.h * 0.38) / rows - 12), 88, 132);
+    var gy = c.y + c.h - rows * (ts + 12) - 2;
+    L.tilesTop = gy;   /* the picture and the answer slots stack up from here */
+    for (var q = 0; q < t; q++) {
+      var r = Math.floor(q / cols), col = q % cols;
+      var inRow = Math.min(cols, t - r * cols);
+      var rowW = inRow * ts + (inRow - 1) * 12;
+      zone('tile' + q, c.x + (c.w - rowW) / 2 + col * (ts + 12), gy + r * (ts + 12), ts, ts, 'tile', { ti: q });
+    }
+  }
+}
+function hitZone(x, y) {
+  for (var i = zones.length - 1; i >= 0; i--) {
+    var z = zones[i];
+    if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) return z;
+  }
+  return null;
+}
+function activate(z) {
+  initAudio();
+  sfx.tap();
+  if (z.kind === 'panel') {
+    if (z.act === 0) startTrace('letter');
+    else if (z.act === 1) startTrace('name');
+    else startWord(null);
+    return;
+  }
+  switch (z.id) {
+    case 'speak': repeatPrompt(); break;
+    case 'back': menuScreen(); break;
+    case 'gear': settingsScreen(); break;
+    case 'next':
+      if (G.state === 'trace') { if (TR.mode === 'name' && TR.done) nextLetter(1); else if (TR.mode === 'name') nextLetter(1); else loadLetter(); }
+      else startWord(null);
+      break;
+    default:
+      if (z.kind === 'tile') tapTile(z.ti);
+  }
+}
+function repeatPrompt() {
+  if (G.state === 'trace') promptLetter();
+  else if (G.state === 'word') promptWord();
+  else if (G.state === 'menu') sayMenu();
+  else sayFresh('Tap the big button to start writing.');
+}
+function sayMenu() { sayFresh('Pick one. Trace a letter. Trace your name. Or build a word.'); }
+
+/* ---------------------------------------------------------------- input -- */
+function evPos(e) {
+  var r = cv.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+var lastInk = null;
+cv.addEventListener('pointerdown', function (e) {
+  initAudio();
+  e.preventDefault();
+  if (G.paused) { setPaused(false); return; }
+  var p = evPos(e);
+  var z = hitZone(p.x, p.y);
+  if (z) { activate(z); return; }
+  if (G.state === 'trace' && !TR.done) {
+    TR.drawing = true; TR.touched = true; TR.idleT = 0;
+    lastInk = p;
+    TR.ink.push([toUnit(p)]);
+    feedPoint(p.x, p.y);
+    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  }
+});
+cv.addEventListener('pointermove', function (e) {
+  if (!TR.drawing || G.state !== 'trace') return;
+  e.preventDefault();
+  var p = evPos(e);
+  var line = TR.ink[TR.ink.length - 1];
+  if (lastInk && line) {
+    /* interpolate: a fast or jerky finger must not skip past target points */
+    var d = Math.sqrt(dist2(lastInk.x, lastInk.y, p.x, p.y));
+    var steps = Math.min(80, Math.max(1, Math.ceil(d / Math.max(3, TR.tol * 0.35))));
+    for (var i = 1; i <= steps; i++) {
+      var q = { x: lerp(lastInk.x, p.x, i / steps), y: lerp(lastInk.y, p.y, i / steps) };
+      line.push(toUnit(q));
+      feedPoint(q.x, q.y);
+    }
+  }
+  lastInk = p;
+});
+function endDraw() { TR.drawing = false; lastInk = null; }
+window.addEventListener('pointerup', endDraw);
+window.addEventListener('pointercancel', endDraw);
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+function toUnit(p) { return { x: (p.x - L.box.x) / L.box.w, y: (p.y - L.box.y) / L.box.h }; }
+function toPx(u) { return { x: L.box.x + u.x * L.box.w, y: L.box.y + u.y * L.box.h }; }
+
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+  initAudio();
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'p') { if (G.state === 'trace' || G.state === 'word') setPaused(!G.paused); return; }
+  if (k === 'escape') { if (G.state === 'trace' || G.state === 'word') menuScreen(); return; }
+  if (G.state === 'title' && (k === ' ' || k === 'enter')) { menuScreen(); return; }
+  if (k === ' ' || k === 'enter') { repeatPrompt(); return; }
+  if (G.state === 'menu') {
+    if (k === '1') startTrace('letter');
+    else if (k === '2') startTrace('name');
+    else if (k === '3') startWord(null);
+    return;
+  }
+  if (G.state === 'trace' && (k === 'arrowright' || k === 'arrowleft')) nextLetter(k === 'arrowright' ? 1 : -1);
+  if (G.state === 'word' && k === 'arrowright') startWord(null);
+});
+
+var padPrev = {};
+function pollPad() {
+  var pads = null;
+  try { pads = navigator.getGamepads ? navigator.getGamepads() : null; } catch (e) { return; }
+  if (!pads) return;
+  var p = null;
+  for (var i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  function pressed(n) { return !!(p.buttons && p.buttons[n] && p.buttons[n].pressed); }
+  function edge(n) { var was = padPrev[n]; padPrev[n] = pressed(n); return padPrev[n] && !was; }
+  if (edge(0)) { initAudio(); if (G.state === 'title') menuScreen(); else repeatPrompt(); }
+  if (edge(1)) { if (G.state === 'trace' || G.state === 'word') menuScreen(); }
+  if (edge(15)) { if (G.state === 'trace') nextLetter(1); else if (G.state === 'word') startWord(null); }
+  if (edge(14) && G.state === 'trace') nextLetter(-1);
+}
+
+window.addEventListener('blur', function () { if (G.state === 'trace' || G.state === 'word') setPaused(true); });
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && (G.state === 'trace' || G.state === 'word')) setPaused(true);
+});
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () {
+  if (G.state === 'trace' || G.state === 'word') setPaused(!G.paused);
+});
+function setPaused(v) {
+  if (v === G.paused) return;
+  G.paused = !!v;
+  if (G.paused) { shutUp(); endDraw(); pauseScreen(); }
+  else hideOverlay();
+}
+
+/* -------------------------------------------------------------- overlays -- */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+
+function titleScreen() {
+  G.state = 'title';
+  G.paused = false;
+  document.body.classList.remove('playing');
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>TRACE</h1>' +
+      '<div class="tagline">Big letters on handwriting lines, and a voice that reads every prompt out loud. Trace a letter, trace your name, build a word. The game finds the right level by playing along, and grows with the writer. No timer, no score, nothing to fail.</div>' +
+      '<div class="keys">' +
+        '<div>Trace<span>Drag from the green dot, follow the arrows</span></div>' +
+        '<div>Hear it again<span>Tap the speaker (or Space)</span></div>' +
+        '<div>Another letter<span>Arrow button / arrow keys</span></div>' +
+        '<div>Grown-ups<span>Gear on the menu: name &amp; progress</span></div>' +
+        '<div>Mute<span>M</span></div>' +
+      '</div>' +
+      '<button class="btn" data-act="menu">LET\'S WRITE</button>' +
+    '</div>');
+}
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="tagline">Tap to keep writing.</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">KEEP WRITING</button>' +
+        '<button class="btn ghost" data-act="menu">MENU</button>' +
+      '</div>' +
+    '</div>');
+}
+var nameEdit = { name: 'LIZZY', sel: 0 };
+function settingsScreen() {
+  G.state = 'menu';
+  G.paused = false;
+  nameEdit.name = SV.name;
+  nameEdit.sel = 0;
+  renderSettings();
+}
+function avgNeat(from, count) {
+  var h = SV.history, n = 0, s = 0;
+  for (var i = from; i < Math.min(h.length, from + count); i++) { s += h[i].a; n++; }
+  return n ? Math.round(s / n) : -1;
+}
+function renderSettings() {
+  var slots = '', i;
+  for (i = 0; i < nameEdit.name.length; i++) {
+    slots += '<button class="slot' + (i === nameEdit.sel ? ' sel' : '') + '" data-act="sel" data-i="' + i + '" type="button">' + nameEdit.name[i] + '</button>';
+  }
+  var abc = '';
+  for (i = 0; i < ALPHA.length; i++) abc += '<button data-act="set" data-c="' + ALPHA[i] + '" type="button">' + ALPHA[i] + '</button>';
+  var grid = '';
+  for (i = 0; i < ALPHA.length; i++) {
+    var on = SV.letters[ALPHA[i]] ? ' on' : '';
+    grid += '<span class="' + on.replace(' ', '') + '">' + ALPHA[i] + '</span>';
+  }
+  var low = '';
+  for (i = 0; i < 26; i++) {
+    var lc = 'abcdefghijklmnopqrstuvwxyz'[i];
+    low += '<span class="' + (SV.letters[lc] ? 'on' : '') + '">' + lc + '</span>';
+  }
+  var early = avgNeat(0, 5), late = SV.history.length > 5 ? avgNeat(SV.history.length - 5, 5) : -1;
+  var guide = Math.round(SV.tol * 100);
+  var upCount = 0, lowCount = 0;
+  for (i = 0; i < 26; i++) {
+    if (SV.letters[ALPHA[i]]) upCount++;
+    if (SV.letters['abcdefghijklmnopqrstuvwxyz'[i]]) lowCount++;
+  }
+  var wordCount = 0;
+  for (var wk in SV.words) if (Object.prototype.hasOwnProperty.call(SV.words, wk)) wordCount++;
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">For a grown-up</div>' +
+      '<h2>HOW SHE IS DOING</h2>' +
+      '<div class="growth">' +
+        '<div class="g">Level found by the game<b>' + RUNGS[SV.rung].name + '</b></div>' +
+        '<div class="g">Guide width (bigger = easier)<b>' + guide + '% of letter height</b></div>' +
+        '<div class="g">Letters formed<b>' + upCount + ' capitals &middot; ' + lowCount + ' little</b></div>' +
+        '<div class="g">Words built<b>' + wordCount + '</b></div>' +
+        '<div class="g">Letters finished, all time<b>' + SV.done + '</b></div>' +
+        (late >= 0 && early >= 0
+          ? '<div class="g">Neatness, first five &rarr; last five<b>' + early + '% &rarr; ' + late + '%</b></div>'
+          : '<div class="g">Neatness<b>' + (early >= 0 ? early + '%' : 'not yet') + '</b></div>') +
+      '</div>' +
+      '<div class="bar"><i style="width:' + clamp((SV.rung / (RUNGS.length - 1)) * 100, 3, 100) + '%"></i></div>' +
+      '<div class="grid26">' + grid + '</div>' +
+      '<div class="grid26">' + low + '</div>' +
+      '<div class="row2">' +
+        '<button class="btn ghost small" data-act="easier" type="button">&#8722; EASIER</button>' +
+        '<button class="btn ghost small" data-act="harder" type="button">+ HARDER</button>' +
+        '<button class="btn ghost small" data-act="wipe" type="button">START OVER</button>' +
+      '</div>' +
+      '<div class="hint">The game moves the level on its own: three clean letters step it up and tighten the guide a little, and any letter that needed a demonstration loosens it straight back. It never tightens past a level she is clearing comfortably.</div>' +
+      '<h2 style="margin-top:14px">WHOSE NAME?</h2>' +
+      '<div class="tagline">Tap a letter box, then tap a letter to change it.</div>' +
+      '<div class="slots">' + slots + '</div>' +
+      '<div class="row2">' +
+        '<button class="btn ghost small" data-act="minus" type="button">&#8722; SHORTER</button>' +
+        '<button class="btn ghost small" data-act="plus" type="button">+ LONGER</button>' +
+      '</div>' +
+      '<div class="abc">' + abc + '</div>' +
+      '<button class="btn" data-act="savename" type="button">DONE</button>' +
+    '</div>');
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 'menu') menuScreen();
+  else if (act === 'resume') setPaused(false);
+  else if (act === 'sel') { nameEdit.sel = parseInt(btn.getAttribute('data-i'), 10) || 0; renderSettings(); }
+  else if (act === 'set') {
+    var c = btn.getAttribute('data-c');
+    var a = nameEdit.name.split('');
+    a[nameEdit.sel] = c;
+    nameEdit.name = a.join('');
+    if (nameEdit.sel < nameEdit.name.length - 1) nameEdit.sel++;
+    sfx.blip();
+    speak(letterName(c), 1, 1.15);
+    renderSettings();
+  } else if (act === 'plus') {
+    if (nameEdit.name.length < 8) { nameEdit.name += 'A'; nameEdit.sel = nameEdit.name.length - 1; }
+    renderSettings();
+  } else if (act === 'minus') {
+    if (nameEdit.name.length > 1) { nameEdit.name = nameEdit.name.slice(0, -1); nameEdit.sel = Math.min(nameEdit.sel, nameEdit.name.length - 1); }
+    renderSettings();
+  } else if (act === 'easier') {
+    SV.rung = clamp(SV.rung - 1, 0, RUNGS.length - 1);
+    SV.tol = clamp(SV.tol * 1.15, TOL_MIN, TOL_MAX);
+    SV.clean = 0; SV.struggle = 0; persist(); layout(); renderSettings();
+  } else if (act === 'harder') {
+    SV.rung = clamp(SV.rung + 1, 0, RUNGS.length - 1);
+    SV.tol = clamp(SV.tol * 0.93, TOL_MIN, TOL_MAX);
+    SV.clean = 0; SV.struggle = 0; persist(); layout(); renderSettings();
+  } else if (act === 'wipe') {
+    var keepName = SV.name;
+    SV = freshSave(); SV.name = keepName; persist(); layout(); renderSettings();
+  } else if (act === 'savename') {
+    SV.name = nameEdit.name.toUpperCase().replace(/[^A-Z]/g, '') || 'LIZZY';
+    persist();
+    menuScreen();
+  }
+});
+
+function menuScreen() {
+  G.state = 'menu';
+  G.paused = false;
+  document.body.classList.add('playing');
+  hideOverlay();
+  layout();
+  sayMenu();
+}
+
+/* --------------------------------------------------------------- update -- */
+function update(dt) {
+  G.t += dt;
+  if (G.toastT > 0) G.toastT -= dt;
+  for (var i = G.parts.length - 1; i >= 0; i--) {
+    var p = G.parts[i];
+    p.t += dt;
+    p.vy += p.g * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+    if (p.t >= p.life) G.parts.splice(i, 1);
+  }
+  if (G.paused) return;
+  if (G.state === 'trace') {
+    if (TR.done) {
+      TR.celT += dt;
+    } else {
+      TR.idleT += dt;
+      if (TR.demo) {
+        TR.demo.t += dt * 0.55;
+        if (TR.demo.t >= 1.3) {
+          /* she has watched it — count the stroke and let her move on.
+             Nobody gets stuck on a stroke in this game. */
+          TR.demo = null;
+          if (TR.touched) finishStroke(true);
+          else TR.idleT = -6;
+        }
+      } else if (TR.idleT > (TR.touched ? 5 : 8)) {
+        TR.demo = { t: 0 };
+        TR.idleT = 0;
+        sayFresh(TR.touched ? 'Watch. It goes like this.' : 'Watch. It goes like this.');
+      }
+    }
+  } else if (G.state === 'word') {
+    if (WD.hintT > 0) WD.hintT -= dt;
+    if (WD.celT > 0) {
+      WD.celT -= dt;
+      if (WD.celT <= 0) startWord(null);
+    }
+  }
+}
+
+/* --------------------------------------------------------------- render -- */
+function paperBg() {
+  var W = view.w, H = view.h;
+  var g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#fdf5e6');
+  g.addColorStop(1, '#f6e3c6');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+function drawCard() {
+  var c = L.card;
+  ctx.save();
+  ctx.shadowColor = 'rgba(150,110,60,0.22)';
+  ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
+  ctx.fillStyle = '#fffdf6';
+  rrect(ctx, c.x, c.y, c.w, c.h, 22); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = '#ecd6b2'; ctx.lineWidth = 3;
+  rrect(ctx, c.x, c.y, c.w, c.h, 22); ctx.stroke();
+}
+function drawRules() {
+  var c = L.card;
+  var x0 = c.x + 16, x1 = c.x + c.w - 16;
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#cfe0ec';
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(x0, L.top); ctx.lineTo(x1, L.top); ctx.stroke();
+  ctx.strokeStyle = '#d8c3a4';
+  ctx.setLineDash([9, 9]);
+  ctx.beginPath(); ctx.moveTo(x0, L.mid); ctx.lineTo(x1, L.mid); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = '#b07d4f'; ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.moveTo(x0, L.base); ctx.lineTo(x1, L.base); ctx.stroke();
+}
+function strokeLine(pts, from, to, w, col, dash) {
+  if (!pts || pts.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = col; ctx.lineWidth = w;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (dash) ctx.setLineDash(dash); else ctx.setLineDash([]);
+  ctx.beginPath();
+  var a = clamp(from | 0, 0, pts.length - 1), b = clamp(to === undefined ? pts.length - 1 : to, 0, pts.length - 1);
+  ctx.moveTo(pts[a].x, pts[a].y);
+  for (var i = a + 1; i <= b; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+  ctx.restore();
+}
+function arrowAt(pts, i, size, col) {
+  var a = pts[Math.max(0, i - 2)], b = pts[Math.min(pts.length - 1, i + 2)];
+  var ang = Math.atan2(b.y - a.y, b.x - a.x);
+  var p = pts[i];
+  ctx.save();
+  ctx.translate(p.x, p.y); ctx.rotate(ang);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(size * 0.9, 0); ctx.lineTo(-size * 0.6, -size * 0.72); ctx.lineTo(-size * 0.25, 0); ctx.lineTo(-size * 0.6, size * 0.72);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function drawTraceLetter() {
+  var gw = Math.max(16, L.box.h * 0.16);
+  var i, s;
+  for (i = 0; i < TR.strokes.length; i++) {
+    s = TR.strokes[i];
+    strokeLine(s.pts, 0, s.pts.length - 1, gw, s.done ? '#a8dca0' : '#eddcc4');
+    if (!s.done) strokeLine(s.pts, 0, s.pts.length - 1, 3, '#c8ab84', [7, 9]);
+  }
+  /* her ink — thick, warm, and it never goes away */
+  var inkW = Math.max(12, L.box.h * 0.12);
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#ef5f3c'; ctx.lineWidth = inkW;
+  for (i = 0; i < TR.ink.length; i++) {
+    var line = TR.ink[i];
+    if (!line || line.length < 1) continue;
+    ctx.beginPath();
+    var p0 = toPx(line[0]);
+    ctx.moveTo(p0.x, p0.y);
+    if (line.length === 1) ctx.lineTo(p0.x + 0.1, p0.y);
+    for (var j = 1; j < line.length; j++) { var q = toPx(line[j]); ctx.lineTo(q.x, q.y); }
+    ctx.stroke();
+  }
+  ctx.restore();
+  if (!TR.done && TR.idx < TR.strokes.length) {
+    s = TR.strokes[TR.idx];
+    var pts = s.pts;
+    var pulse = 1 + Math.sin(G.t * 4.5) * 0.16;
+    var r = Math.max(15, L.box.h * 0.11);
+    var from = Math.max(0, s.prog);
+    for (var a = 1; a <= 3; a++) {
+      var ai = Math.floor(from + (pts.length - 1 - from) * (a / 4));
+      if (ai > 1 && ai < pts.length - 1) arrowAt(pts, ai, Math.max(10, r * 0.62), 'rgba(226,118,43,0.8)');
+    }
+    var st = pts[Math.max(0, s.prog < 0 ? 0 : s.prog)];
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#5fb14e';
+    circ(ctx, st.x, st.y, r * pulse * 1.5);
+    ctx.restore();
+    ctx.fillStyle = '#3fae5a';
+    circ(ctx, st.x, st.y, r);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '800 ' + Math.round(r * 1.15) + 'px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(TR.idx + 1), st.x, st.y + 1);
+    if (TR.demo) {
+      var k = clamp(TR.demo.t, 0, 1);
+      var di = Math.floor(k * (pts.length - 1));
+      strokeLine(pts, 0, di, Math.max(10, inkW * 0.85), 'rgba(63,174,90,0.55)');
+      ctx.fillStyle = '#3fae5a';
+      circ(ctx, pts[di].x, pts[di].y, r * 0.72);
+    }
+  }
+}
+function drawStrip() {
+  var W = view.w;
+  var left = L.area.x + 10, right = W - 108;
+  var w = right - left;
+  if (w < 80) return;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (TR.mode === 'name') {
+    var n = TR.seq.length;
+    var cwid = Math.min(w / n, 44);
+    var x0 = (left + right) / 2 - (n * cwid) / 2;
+    for (var i = 0; i < n; i++) {
+      var cur = i === TR.seqIdx;
+      ctx.fillStyle = cur ? '#e2762b' : (SV.letters[TR.seq[i]] ? '#5fb14e' : 'rgba(74,54,40,0.32)');
+      ctx.font = '800 ' + Math.round(cwid * 0.8) + 'px "Segoe UI", sans-serif';
+      ctx.fillText(TR.seq[i], x0 + cwid * (i + 0.5), 26);
+      if (cur) { ctx.fillStyle = '#e2762b'; ctx.fillRect(x0 + cwid * i + 5, 42, cwid - 10, 4); }
+    }
+  } else {
+    ctx.fillStyle = 'rgba(74,54,40,0.5)';
+    ctx.font = '700 13px "Segoe UI", sans-serif';
+    ctx.fillText(RUNGS[SV.rung].name, (left + right) / 2, 16);
+    var step = Math.min(w / 26, 16);
+    var sx = (left + right) / 2 - (26 * step) / 2;
+    for (var j = 0; j < 26; j++) {
+      var up = ALPHA[j], lo = 'abcdefghijklmnopqrstuvwxyz'[j];
+      var on = SV.letters[up] || SV.letters[lo];
+      var here = TR.letter.toUpperCase() === up;
+      ctx.fillStyle = here ? '#e2762b' : (on ? '#5fb14e' : 'rgba(74,54,40,0.2)');
+      circ(ctx, sx + step * (j + 0.5), 34, here ? step * 0.42 : step * 0.28);
+    }
+  }
+}
+function iconSpeaker(x, y, s, col) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.45, -s * 0.2); ctx.lineTo(-s * 0.2, -s * 0.2); ctx.lineTo(0.02 * s, -s * 0.48);
+  ctx.lineTo(0.02 * s, s * 0.48); ctx.lineTo(-s * 0.2, s * 0.2); ctx.lineTo(-s * 0.45, s * 0.2);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = Math.max(3, s * 0.1); ctx.lineCap = 'round';
+  for (var i = 1; i <= 3; i++) {
+    ctx.beginPath();
+    ctx.arc(s * 0.06, 0, s * (0.12 + i * 0.14), -0.9, 0.9);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function iconChevron(x, y, s, dir, col) {
+  ctx.save();
+  ctx.translate(x, y); ctx.scale(dir, 1);
+  ctx.strokeStyle = col; ctx.lineWidth = Math.max(6, s * 0.18);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.16, -s * 0.42); ctx.lineTo(s * 0.26, 0); ctx.lineTo(-s * 0.16, s * 0.42);
+  ctx.stroke();
+  ctx.restore();
+}
+function iconHome(x, y, s, col) {
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(0, -s * 0.45); ctx.lineTo(s * 0.5, s * 0.02); ctx.lineTo(s * 0.3, s * 0.02);
+  ctx.lineTo(s * 0.3, s * 0.44); ctx.lineTo(-s * 0.3, s * 0.44); ctx.lineTo(-s * 0.3, s * 0.02);
+  ctx.lineTo(-s * 0.5, s * 0.02);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function iconGear(x, y, s, col, hole) {
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = col;
+  for (var i = 0; i < 8; i++) {
+    ctx.save(); ctx.rotate(i / 8 * TAU);
+    ctx.fillRect(-s * 0.09, -s * 0.48, s * 0.18, s * 0.2);
+    ctx.restore();
+  }
+  circ(ctx, 0, 0, s * 0.32);
+  /* paint the hub in the button colour — destination-out would burn a
+     black hole through the canvas, which has no alpha */
+  ctx.fillStyle = hole || '#fffaf0';
+  circ(ctx, 0, 0, s * 0.14);
+  ctx.restore();
+}
+function drawBtn(z) {
+  var cx = z.x + z.w / 2, cy = z.y + z.h / 2, s = Math.min(z.w, z.h);
+  var glow = (z.kind === 'next' && G.state === 'trace' && TR.done);
+  ctx.save();
+  ctx.fillStyle = (z.kind === 'speak' || glow) ? '#ffd79a' : '#fffaf0';
+  ctx.strokeStyle = (z.kind === 'speak' || glow) ? '#e2762b' : '#dcc09a';
+  ctx.lineWidth = glow ? 4 + Math.sin(G.t * 5) * 1.5 : 3;
+  rrect(ctx, z.x, z.y, z.w, z.h, 20);
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+  var col = '#7a4a1e';
+  if (z.kind === 'speak') iconSpeaker(cx, cy, s * 0.62, col);
+  else if (z.kind === 'next') iconChevron(cx, cy, s * 0.62, 1, col);
+  else if (z.kind === 'back') iconHome(cx, cy, s * 0.58, col);
+  else if (z.kind === 'gear') iconGear(cx, cy, s * 0.62, col, '#fffaf0');
+}
+function drawTile(z) {
+  var t = WD.tiles[z.ti];
+  if (!t) return;
+  var isNext = !t.used && t.ch === WD.need[WD.slot];
+  var hinting = WD.hintT > 0 && isNext;
+  ctx.save();
+  ctx.globalAlpha = t.used ? 0.3 : 1;
+  if (hinting) {
+    ctx.save();
+    ctx.globalAlpha = 0.35 + Math.sin(G.t * 6) * 0.18;
+    ctx.fillStyle = '#8fc47f';
+    rrect(ctx, z.x - 8, z.y - 8, z.w + 16, z.h + 16, 22); ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle = t.used ? '#dcefd4' : '#fffaf0';
+  ctx.strokeStyle = hinting ? '#5fb14e' : '#dcc09a';
+  ctx.lineWidth = 3;
+  rrect(ctx, z.x, z.y, z.w, z.h, 16);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = t.used ? '#3d7a2e' : '#4a3628';
+  ctx.font = '800 ' + Math.round(z.h * 0.58) + 'px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(t.ch, z.x + z.w / 2, z.y + z.h / 2 + 2);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+function drawMenu() {
+  var W = view.w;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#4a3628';
+  ctx.font = '800 ' + Math.round(clamp(W * 0.045, 15, 28)) + 'px "Segoe UI", sans-serif';
+  /* the top-right 100x52 belongs to the icon buttons — never centre under them */
+  ctx.fillText('WHAT SHALL WE WRITE?', (L.area.x + Math.max(L.area.x, W - 104)) / 2, 26);
+  for (var i = 0; i < zones.length; i++) {
+    var z = zones[i];
+    if (z.kind !== 'panel') { drawBtn(z); continue; }
+    ctx.save();
+    ctx.shadowColor = 'rgba(150,110,60,0.2)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 5;
+    ctx.fillStyle = '#fffdf6';
+    rrect(ctx, z.x, z.y, z.w, z.h, 20); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = ['#f0a04b', '#7fb3d5', '#8fc47f'][z.act];
+    ctx.lineWidth = 4;
+    rrect(ctx, z.x, z.y, z.w, z.h, 20); ctx.stroke();
+    var cx = z.x + z.w / 2, cy = z.y + z.h * 0.44, s = Math.min(z.w, z.h) * 0.6;
+    if (z.act === 0) {
+      var u = buildUnit('A'), bh = s * 0.8, bw = bh * 0.8;
+      var bx = cx - bw / 2, byy = cy - bh / 2;
+      for (var q = 0; q < u.length; q++) {
+        var pp = [];
+        for (var r = 0; r < u[q].length; r++) pp.push({ x: bx + u[q][r].x * bw, y: byy + u[q][r].y * bh });
+        strokeLine(pp, 0, pp.length - 1, Math.max(9, bh * 0.16), '#eddcc4');
+        strokeLine(pp, 0, pp.length - 1, 2.5, '#c8ab84', [6, 8]);
+      }
+      ctx.fillStyle = '#3fae5a';
+      circ(ctx, bx + bw * 0.5, byy, Math.max(8, bh * 0.1));
+      ctx.save();
+      ctx.translate(bx + bw * 0.9, byy + bh * 0.66); ctx.rotate(-0.5);
+      ctx.fillStyle = '#f2b12e'; ctx.fillRect(-4.5, -bh * 0.45, 10, bh * 0.45);
+      ctx.fillStyle = '#e8b48a';
+      ctx.beginPath(); ctx.moveTo(-4.5, 0); ctx.lineTo(5.5, 0); ctx.lineTo(0.5, bh * 0.14); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    } else if (z.act === 1) {
+      ctx.fillStyle = '#fdf0da';
+      rrect(ctx, cx - s * 0.58, cy - s * 0.32, s * 1.16, s * 0.64, 10); ctx.fill();
+      ctx.strokeStyle = '#7fb3d5'; ctx.lineWidth = 3;
+      rrect(ctx, cx - s * 0.58, cy - s * 0.32, s * 1.16, s * 0.64, 10); ctx.stroke();
+      ctx.fillStyle = '#7fb3d5';
+      rrect(ctx, cx - s * 0.58, cy - s * 0.32, s * 1.16, s * 0.17, 8); ctx.fill();
+      ctx.fillStyle = '#e2762b';
+      var fs = Math.min(s * 0.3, (s * 1.0) / Math.max(3, SV.name.length) * 1.7);
+      ctx.font = '800 ' + Math.round(fs) + 'px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(SV.name, cx, cy + s * 0.08);
+    } else {
+      drawPic(ctx, 'cat', cx, cy - s * 0.12, s * 0.92);
+      for (var ti = 0; ti < 3; ti++) {
+        var tw = s * 0.26;
+        ctx.fillStyle = '#fffaf0'; ctx.strokeStyle = '#8fc47f'; ctx.lineWidth = 2.5;
+        rrect(ctx, cx - tw * 1.7 + ti * tw * 1.2, cy + s * 0.36, tw, tw, 6);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#4a3628';
+        ctx.font = '800 ' + Math.round(tw * 0.62) + 'px "Segoe UI", sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('CAT'[ti], cx - tw * 1.7 + ti * tw * 1.2 + tw / 2, cy + s * 0.36 + tw / 2 + 1);
+      }
+    }
+    ctx.fillStyle = '#4a3628';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '800 ' + Math.round(clamp(z.w * 0.07, 13, 20)) + 'px "Segoe UI", sans-serif';
+    ctx.fillText(['TRACE A LETTER', 'TRACE YOUR NAME', 'BUILD A WORD'][z.act], z.x + z.w / 2, z.y + z.h - 20);
+  }
+}
+function drawWord() {
+  drawCard();
+  var c = L.card;
+  /* stack up from the tiles so a short landscape card cannot overlap itself */
+  var tilesTop = L.tilesTop || (c.y + c.h * 0.6);
+  var n = WD.need.length;
+  var sw = clamp(Math.min((c.w - 40) / n, (tilesTop - c.y) * 0.3), 34, 72);
+  var sy = tilesTop - sw * 0.95 - 12;
+  var sx = c.x + c.w / 2 - (n * sw) / 2;
+  var picS = clamp(Math.min(c.w * 0.5, (sy - c.y - 18)), 50, 260);
+  drawPic(ctx, WD.pic, c.x + c.w / 2, c.y + (sy - c.y) / 2, picS);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (var i = 0; i < n; i++) {
+    var filled = i < WD.slot;
+    ctx.fillStyle = filled ? '#d8f0d0' : '#fdf0da';
+    ctx.strokeStyle = (i === WD.slot && WD.celT <= 0) ? '#e2762b' : '#dcc09a';
+    ctx.lineWidth = 3;
+    rrect(ctx, sx + i * sw + 4, sy, sw - 8, sw * 0.95, 10);
+    ctx.fill(); ctx.stroke();
+    if (filled) {
+      ctx.fillStyle = '#3d7a2e';
+      ctx.font = '800 ' + Math.round(sw * 0.56) + 'px "Segoe UI", sans-serif';
+      ctx.fillText(WD.need[i], sx + i * sw + sw / 2, sy + sw * 0.5);
+    }
+  }
+  for (var z = 0; z < zones.length; z++) {
+    if (zones[z].kind === 'tile') drawTile(zones[z]);
+    else drawBtn(zones[z]);
+  }
+  if (WD.celT > 0) {
+    ctx.fillStyle = '#3d7a2e';
+    ctx.font = '800 ' + Math.round(clamp(view.w * 0.07, 22, 40)) + 'px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(WD.word + '!', c.x + c.w / 2, sy - sw * 0.55);
+  }
+}
+function drawNameCelebration() {
+  var c = L.card;
+  var cx = c.x + c.w / 2, cy = c.y + c.h * 0.44;
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  var wob = Math.sin(G.t * 2.2) * 0.02;
+  ctx.translate(cx, cy); ctx.rotate(wob); ctx.translate(-cx, -cy);
+  ctx.fillStyle = '#fdf0da';
+  rrect(ctx, c.x + c.w * 0.06, cy - c.h * 0.2, c.w * 0.88, c.h * 0.4, 18); ctx.fill();
+  ctx.strokeStyle = '#7fb3d5'; ctx.lineWidth = 5;
+  rrect(ctx, c.x + c.w * 0.06, cy - c.h * 0.2, c.w * 0.88, c.h * 0.4, 18); ctx.stroke();
+  ctx.fillStyle = '#7fb3d5';
+  rrect(ctx, c.x + c.w * 0.06, cy - c.h * 0.2, c.w * 0.88, c.h * 0.1, 16); ctx.fill();
+  var fs = Math.min(c.h * 0.2, (c.w * 0.8) / Math.max(3, SV.name.length) * 1.5);
+  ctx.fillStyle = '#ef5f3c';
+  ctx.font = '800 ' + Math.round(fs) + 'px "Segoe UI", sans-serif';
+  ctx.fillText(SV.name, cx, cy + c.h * 0.06);
+  ctx.restore();
+  ctx.fillStyle = '#3d7a2e';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '800 ' + Math.round(clamp(view.w * 0.05, 18, 30)) + 'px "Segoe UI", sans-serif';
+  ctx.fillText('THAT IS YOUR NAME!', cx, c.y + c.h * 0.86);
+}
+function drawParts() {
+  for (var i = 0; i < G.parts.length; i++) {
+    var p = G.parts[i];
+    ctx.save();
+    ctx.globalAlpha = clamp(1 - p.t / p.life, 0, 1);
+    ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+    ctx.fillStyle = p.c;
+    ctx.fillRect(-p.r / 2, -p.r / 2, p.r, p.r * 1.5);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+function render() {
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  paperBg();
+  buildZones();
+  var i;
+  if (G.state === 'menu') drawMenu();
+  else if (G.state === 'trace') {
+    drawCard();
+    if (TR.nameDone) drawNameCelebration();
+    else {
+      drawRules();
+      drawStrip();
+      drawTraceLetter();
+      if (TR.done) {
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#3d7a2e';
+        ctx.font = '800 ' + Math.round(clamp(view.w * 0.06, 20, 36)) + 'px "Segoe UI", sans-serif';
+        ctx.fillText('YES!', L.card.x + L.card.w / 2, L.card.y + L.card.h - 26);
+      }
+    }
+    for (i = 0; i < zones.length; i++) drawBtn(zones[i]);
+  } else if (G.state === 'word') drawWord();
+  drawParts();
+  if (G.toastT > 0 && G.toast) {
+    ctx.save();
+    ctx.globalAlpha = clamp(G.toastT / 0.6, 0, 1);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = 'rgba(74,54,40,0.7)';
+    ctx.font = '700 13px "Segoe UI", sans-serif';
+    /* inside the card, never under the button row */
+    ctx.fillText(G.toast, L.card.x + L.card.w / 2, L.card.y + L.card.h - 6);
+    ctx.restore();
+  }
+  if (G.paused) {
+    ctx.fillStyle = 'rgba(253,240,218,0.55)';
+    ctx.fillRect(0, 0, view.w, view.h);
+  }
+}
+
+/* ----------------------------------------------------------------- loop -- */
+var lastT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  pollPad();
+  update(dt);
+  render();
+}
+
+/* ----------------------------------------------------------------- boot -- */
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+
+/* ==================================================== WHO IS READING == */
+/* Shared across every spoken game in the arcade. She picks a character once
+   and Char, Echo, Scan, Trace and Tally all speak in it — one key, one choice,
+   because being asked the same question in five places is not a feature.
+ *
+ * What is possible has to be said plainly, because it shapes this whole
+ * design: speechSynthesis can only use voices ALREADY INSTALLED on the device.
+ * These games ship no audio files and call no APIs, so no custom voice can
+ * travel with them. The honest levers are which device voice is used and its
+ * pitch and speed — and those change the character more than the name does.
+ *
+ * She cannot read a list of voice names, so she picks by EAR: four faces, and
+ * tapping one plays it introducing itself. Nothing here is ever required — if
+ * speech is missing the button hides itself and the game plays on in silence,
+ * exactly as it did before. */
+var OC_VOICE_KEY = 'overclock_voice_v1';
+var OC_CHARACTERS = [
+  { id: 'sunny', name: 'Sunny', pitch: 1.08, rate: 0.85, hint: 'warm and steady',
+    line: 'Hello. I am Sunny. I will read everything to you.',
+    face: '<circle cx="50" cy="50" r="34" fill="#ffd54f"/>' +
+      '<circle cx="39" cy="43" r="4.5" fill="#4a3520"/><circle cx="61" cy="43" r="4.5" fill="#4a3520"/>' +
+      '<path d="M36 60 q14 12 28 0" stroke="#4a3520" stroke-width="4" fill="none" stroke-linecap="round"/>' },
+  { id: 'chip', name: 'Chip', pitch: 0.62, rate: 0.8, hint: 'a deep robot',
+    line: 'Greetings. I am Chip. I am a computer.',
+    face: '<rect x="20" y="24" width="60" height="52" rx="8" fill="#90a4ae"/>' +
+      '<rect x="32" y="40" width="12" height="8" rx="2" fill="#1b2748"/><rect x="56" y="40" width="12" height="8" rx="2" fill="#1b2748"/>' +
+      '<rect x="34" y="60" width="32" height="5" rx="2.5" fill="#1b2748"/>' +
+      '<line x1="50" y1="24" x2="50" y2="12" stroke="#90a4ae" stroke-width="4"/><circle cx="50" cy="9" r="5" fill="#ef6c00"/>' },
+  { id: 'pip', name: 'Pip', pitch: 1.5, rate: 1.0, hint: 'quick and squeaky',
+    line: 'Hi hi! I am Pip! Lets go!',
+    face: '<circle cx="50" cy="52" r="30" fill="#f06292"/>' +
+      '<circle cx="40" cy="46" r="5" fill="#fff"/><circle cx="60" cy="46" r="5" fill="#fff"/>' +
+      '<circle cx="41" cy="47" r="2.5" fill="#3e2723"/><circle cx="61" cy="47" r="2.5" fill="#3e2723"/>' +
+      '<path d="M40 63 q10 9 20 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+      '<path d="M28 30 l8 12 M72 30 l-8 12" stroke="#f06292" stroke-width="5" stroke-linecap="round"/>' },
+  { id: 'moss', name: 'Moss', pitch: 0.95, rate: 0.62, hint: 'slow and calm',
+    line: 'Hello. I am Moss. I will take my time.',
+    face: '<circle cx="50" cy="52" r="31" fill="#66bb6a"/>' +
+      '<path d="M38 46 q4 -4 8 0 M54 46 q4 -4 8 0" stroke="#1b3a1e" stroke-width="3.5" fill="none" stroke-linecap="round"/>' +
+      '<path d="M38 62 q12 8 24 0" stroke="#1b3a1e" stroke-width="4" fill="none" stroke-linecap="round"/>' }
+];
+var OC_VOICE = { charId: 'sunny', uri: '' };
+var OC_LIST = [];
+function ocChar(id) { var i; for (i = 0; i < OC_CHARACTERS.length; i++) if (OC_CHARACTERS[i].id === id) return OC_CHARACTERS[i]; return OC_CHARACTERS[0]; }
+function ocCur() { return ocChar(OC_VOICE.charId); }
+function ocLoadVoice() {
+  var raw = null, o = null;
+  try { raw = localStorage.getItem(OC_VOICE_KEY); } catch (e) {}
+  if (!raw) return;
+  try { o = JSON.parse(raw); } catch (e) { return; }
+  if (!o || typeof o !== 'object') return;
+  if (typeof o.charId === 'string' && ocChar(o.charId).id === o.charId) OC_VOICE.charId = o.charId;
+  if (typeof o.uri === 'string') OC_VOICE.uri = o.uri;
+}
+function ocSaveVoice() {
+  try { localStorage.setItem(OC_VOICE_KEY, JSON.stringify({ charId: OC_VOICE.charId, uri: OC_VOICE.uri })); } catch (e) {}
+}
+function ocVoices() {
+  var out = [], vs = [], i;
+  try { vs = window.speechSynthesis.getVoices() || []; } catch (e) { vs = []; }
+  for (i = 0; i < vs.length; i++) if (vs[i] && /^en/i.test(vs[i].lang || '')) out.push(vs[i]);
+  if (!out.length) out = vs.slice(0, 8);
+  OC_LIST = out;
+  return out;
+}
+function ocPickedVoice(fallback) {
+  var i;
+  if (!OC_LIST.length) ocVoices();
+  if (OC_VOICE.uri) for (i = 0; i < OC_LIST.length; i++) if (OC_LIST[i].voiceURI === OC_VOICE.uri) return OC_LIST[i];
+  return fallback || OC_LIST[0] || null;
+}
+/* the one call every game's say() makes */
+function ocApply(u, fallbackVoice, rateOverride) {
+  var C = ocCur();
+  u.rate = rateOverride || C.rate;
+  u.pitch = C.pitch;
+  var v = ocPickedVoice(fallbackVoice);
+  if (v) u.voice = v;
+  return u;
+}
+function ocSpeak(text) {
+  try {
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
+    window.speechSynthesis.cancel();
+    var u = new window.SpeechSynthesisUtterance(String(text));
+    ocApply(u, null);
+    u.lang = 'en-US';
+    window.speechSynthesis.speak(u);
+    return true;
+  } catch (e) { return false; }
+}
+function ocSpeechOK() {
+  try { return !!(window.speechSynthesis && window.SpeechSynthesisUtterance); } catch (e) { return false; }
+}
+/* ---- the picker: its own overlay and its own styles, so it drops into any
+        of these games without touching that game's screen system ---- */
+function ocVoiceUI() {
+  if (!ocSpeechOK()) return;
+  var st = document.createElement('style');
+  st.textContent =
+    '#ocVoiceBtn{position:fixed;left:max(10px,env(safe-area-inset-left));' +
+    'bottom:max(10px,env(safe-area-inset-bottom));z-index:40;min-height:44px;padding:0 12px 0 8px;' +
+    'display:inline-flex;align-items:center;gap:7px;border-radius:14px;cursor:pointer;' +
+    'border:2px solid rgba(128,128,128,0.38);background:rgba(255,255,255,0.9);color:#333;' +
+    'font:700 12px "Segoe UI",system-ui,sans-serif;letter-spacing:0.06em;}' +
+    '#ocVoiceBtn svg{width:28px;height:28px;display:block}' +
+    'body.playing #ocVoiceBtn{display:none}' +
+    '#ocVoiceWrap{position:fixed;inset:0;z-index:60;background:rgba(12,18,14,0.72);' +
+    'display:none;align-items:center;justify-content:center;padding:14px;overflow:auto}' +
+    '#ocVoiceWrap.on{display:flex}' +
+    '#ocVoicePanel{background:#fff;border-radius:22px;padding:16px;max-width:560px;width:100%;' +
+    'font-family:"Segoe UI",system-ui,sans-serif;color:#2f4030;box-shadow:0 12px 40px rgba(0,0,0,0.35)}' +
+    '#ocVoicePanel h3{margin:0 0 12px;font-size:13px;letter-spacing:0.2em;text-transform:uppercase;' +
+    'text-align:center;color:#5d7159}' +
+    '#ocVoiceGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}' +
+    '.ocvc{min-height:110px;border-radius:18px;border:4px solid rgba(47,64,48,0.18);background:#fff;' +
+    'cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px}' +
+    '.ocvc.on{border-color:#43a047;background:#e8f5e9}' +
+    '.ocvc svg{width:56px;height:56px;display:block}' +
+    '.ocvc b{font-size:15px}.ocvc i{font-style:normal;font-size:11px;color:#5d7159;font-weight:700}' +
+    '#ocVoiceGrown{font-size:11px;color:#5d7159;line-height:1.5;margin-top:10px;text-align:center}' +
+    '#ocVoiceGrown select{font:inherit;font-size:11px;padding:3px 5px;border-radius:8px;' +
+    'border:2px solid rgba(47,64,48,0.18);max-width:180px}' +
+    '#ocVoiceDone{margin-top:12px;width:100%;min-height:52px;border-radius:14px;border:4px solid #2e7d32;' +
+    'background:#81c784;color:#06280b;font:800 15px "Segoe UI",system-ui,sans-serif;letter-spacing:0.14em;cursor:pointer}' +
+    '@media (max-height:460px){#ocVoiceGrid{grid-template-columns:repeat(4,1fr)}' +
+    '.ocvc{min-height:88px}.ocvc i{display:none}#ocVoiceGrown{display:none}}';
+  document.head.appendChild(st);
+
+  var btn = document.createElement('button');
+  btn.id = 'ocVoiceBtn'; btn.type = 'button';
+  btn.setAttribute('aria-label', 'Choose who reads to you');
+
+  var wrap = document.createElement('div');
+  wrap.id = 'ocVoiceWrap';
+  wrap.innerHTML = '<div id="ocVoicePanel"><h3>Who should read to you?</h3>' +
+    '<div id="ocVoiceGrid"></div><div id="ocVoiceGrown"></div>' +
+    '<button id="ocVoiceDone" type="button">DONE</button></div>';
+
+  function svg(inner, cls) {
+    return '<svg viewBox="0 0 100 100" class="' + (cls || '') + '" aria-hidden="true">' + inner + '</svg>';
+  }
+  function paintBtn() { btn.innerHTML = svg(ocCur().face) + '<span>' + ocCur().name + '</span>'; }
+  function paintGrid() {
+    var g = wrap.querySelector('#ocVoiceGrid'), h = '', i, c;
+    for (i = 0; i < OC_CHARACTERS.length; i++) {
+      c = OC_CHARACTERS[i];
+      h += '<button class="ocvc' + (c.id === OC_VOICE.charId ? ' on' : '') + '" type="button" data-oc="' + c.id +
+        '" aria-label="' + c.name + ', ' + c.hint + '">' + svg(c.face) +
+        '<b>' + c.name + '</b><i>' + c.hint + '</i></button>';
+    }
+    g.innerHTML = h;
+    var gr = wrap.querySelector('#ocVoiceGrown'), list = ocVoices();
+    if (list.length > 1) {
+      var cur = ocPickedVoice(null), s = 'Grown-ups: the device voice underneath is <select id="ocVoiceSel">';
+      for (i = 0; i < list.length && i < 24; i++) {
+        s += '<option value="' + list[i].voiceURI + '"' +
+             (cur && list[i].voiceURI === cur.voiceURI ? ' selected' : '') + '>' +
+             String(list[i].name).slice(0, 26) + '</option>';
+      }
+      gr.innerHTML = s + '</select>. More can be added in the device&rsquo;s own settings.';
+      var sel = wrap.querySelector('#ocVoiceSel');
+      if (sel) sel.addEventListener('change', function () { OC_VOICE.uri = sel.value; ocSaveVoice(); ocSpeak(ocCur().line); });
+    } else { gr.innerHTML = ''; }
+  }
+  btn.addEventListener('click', function () { paintGrid(); wrap.classList.add('on'); });
+  wrap.addEventListener('click', function (e) {
+    var t = e.target && e.target.closest ? e.target.closest('[data-oc]') : null;
+    if (t) {
+      OC_VOICE.charId = ocChar(t.getAttribute('data-oc')).id;
+      ocSaveVoice(); paintGrid(); paintBtn();
+      ocSpeak(ocCur().line);
+      return;
+    }
+    if (e.target === wrap || (e.target && e.target.id === 'ocVoiceDone')) {
+      wrap.classList.remove('on');
+      try { window.speechSynthesis.cancel(); } catch (err) {}
+    }
+  });
+  document.body.appendChild(btn);
+  document.body.appendChild(wrap);
+  paintBtn();
+}
+ocLoadVoice();
+try {
+  if (ocSpeechOK() && window.speechSynthesis) window.speechSynthesis.onvoiceschanged = ocVoices;
+} catch (e) {}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ocVoiceUI);
+else ocVoiceUI();
+window.setTimeout(function () { ocVoices(); }, 400);
+
+</script>
+</body>
+</html>

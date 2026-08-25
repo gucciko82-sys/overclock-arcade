@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Parse — Five Letters</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="Parse the string. Six guesses to resolve a five-letter word — every letter comes back marked EXACT, PRESENT or ABSENT, and the marks are readable without colour.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parse">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eaf2ff;
+    --dim: rgba(234,242,255,0.58);
+    --panel: rgba(9,13,30,0.62);
+    --line: rgba(255,255,255,0.13);
+    --exact: #f0b429;
+    --exact-ink: #1a1405;
+    --exact-edge: #7d5a06;
+    --present: #2a7fb8;
+    --present-ink: #f2fbff;
+    --present-edge: #bfe6fb;
+    --absent: #232a3d;
+    --tile: 56px;
+    --gap: 6px;
+    --keyh: 48px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: manipulation;
+  }
+  #stage {
+    position: fixed; inset: 0; overflow: hidden;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(255,204,77,0.07), rgba(255,204,77,0) 60%),
+      radial-gradient(90% 70% at 50% 110%, rgba(42,127,184,0.10), rgba(42,127,184,0) 65%),
+      var(--bg);
+  }
+
+  /* ------------------------------------------------------------- top bar -- */
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.22); }
+  body:not(.playing) #topbtns { display: none; }
+
+  #brand {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    left: max(10px, env(safe-area-inset-left));
+    z-index: 4;
+    font-size: 17px; font-weight: 800; letter-spacing: 0.34em;
+    color: var(--accent); text-shadow: 0 0 18px rgba(255,204,77,0.35);
+    line-height: 44px; pointer-events: none;
+  }
+  #brand small {
+    display: block; line-height: 1; margin-top: -10px;
+    font-size: 8.5px; letter-spacing: 0.24em; font-weight: 700; color: var(--dim);
+  }
+  body:not(.playing) #brand { display: none; }
+
+  /* --------------------------------------------------------------- play --- */
+  #play {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column; align-items: center; justify-content: flex-start;
+    padding: 54px 8px max(8px, env(safe-area-inset-bottom));
+  }
+  body.playing #play { display: flex; }
+
+  #boardwrap {
+    flex: 1 1 auto;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    min-height: 0; width: 100%;
+  }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(5, var(--tile));
+    grid-auto-rows: var(--tile);
+    gap: var(--gap);
+  }
+  .tile {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    font-size: calc(var(--tile) * 0.5);
+    font-weight: 800; letter-spacing: 0.02em;
+    line-height: 1;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: calc(var(--tile) * 0.16);
+    background: rgba(255,255,255,0.02);
+    color: var(--fg);
+    will-change: transform;
+  }
+  .tile.filled {
+    border: 2px solid rgba(255,204,77,0.55);
+    background: rgba(255,204,77,0.05);
+    animation: pop 110ms ease-out;
+  }
+  @keyframes pop { 0% { transform: scale(0.86); } 100% { transform: scale(1); } }
+
+  .tile[data-state="exact"] {
+    background: var(--exact); color: var(--exact-ink);
+    border: 3px solid var(--exact-edge);
+  }
+  .tile[data-state="exact"]::after {
+    content: ''; position: absolute; top: 0; right: 0;
+    width: 0; height: 0;
+    border-top: calc(var(--tile) * 0.24) solid rgba(26,20,5,0.62);
+    border-left: calc(var(--tile) * 0.24) solid transparent;
+  }
+  .tile[data-state="present"] {
+    background: var(--present); color: var(--present-ink);
+    border: 3px dashed var(--present-edge);
+  }
+  .tile[data-state="present"]::after {
+    content: ''; position: absolute;
+    top: calc(var(--tile) * 0.09); right: calc(var(--tile) * 0.09);
+    width: calc(var(--tile) * 0.15); height: calc(var(--tile) * 0.15);
+    border-radius: 50%;
+    background: var(--present-edge);
+  }
+  .tile[data-state="absent"] {
+    background: var(--absent); color: rgba(234,242,255,0.34);
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+
+  /* a real flip: scaleY straight through zero, colour swapped at the pinch */
+  .tile.flip { animation: flipy 420ms ease-in-out both; }
+  @keyframes flipy {
+    0%   { transform: scaleY(1); }
+    50%  { transform: scaleY(0); }
+    100% { transform: scaleY(1); }
+  }
+  .tile.dance { animation: dance 520ms ease-in-out both; }
+  @keyframes dance {
+    0%, 100% { transform: translateY(0); }
+    25%      { transform: translateY(-26%) scale(1.05); }
+    55%      { transform: translateY(6%); }
+    75%      { transform: translateY(-8%); }
+  }
+  #board.shake { animation: shake 380ms ease-in-out; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    12% { transform: translateX(-8px); } 26% { transform: translateX(8px); }
+    40% { transform: translateX(-6px); } 54% { transform: translateX(6px); }
+    68% { transform: translateX(-3px); } 84% { transform: translateX(3px); }
+  }
+
+  #msg {
+    height: 26px; margin-top: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11.5px; font-weight: 800; letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    opacity: 0; transition: opacity 140ms ease;
+    text-align: center; padding: 0 6px;
+  }
+  #msg.on { opacity: 1; }
+
+  /* ----------------------------------------------------------- keyboard -- */
+  #kb {
+    flex: 0 0 auto;
+    width: 100%; max-width: 520px;
+    padding: 0 4px 2px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .kbrow { display: flex; gap: 5px; width: 100%; }
+  .kbspace { flex: 0.5 1 0; }
+  .kbkey {
+    flex: 1 1 0; min-width: 0;
+    height: var(--keyh);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.09);
+    color: var(--fg);
+    font-family: inherit; font-size: 15px; font-weight: 800;
+    letter-spacing: 0.02em;
+    padding: 0; cursor: pointer;
+    overflow: hidden;
+  }
+  .kbkey.wide { flex: 1.5 1 0; font-size: 10px; letter-spacing: 0.08em; }
+  .kbkey:active { background: rgba(255,204,77,0.3); }
+  .kbkey.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .kbkey[data-state="exact"] {
+    background: var(--exact); color: var(--exact-ink);
+    border: 2px solid var(--exact-edge);
+  }
+  .kbkey[data-state="exact"]::after {
+    content: ''; position: absolute; top: 0; right: 0;
+    width: 0; height: 0;
+    border-top: 9px solid rgba(26,20,5,0.62);
+    border-left: 9px solid transparent;
+  }
+  .kbkey[data-state="present"] {
+    background: var(--present); color: var(--present-ink);
+    border: 2px dashed var(--present-edge);
+  }
+  .kbkey[data-state="present"]::after {
+    content: ''; position: absolute; top: 3px; right: 3px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--present-edge);
+  }
+  .kbkey[data-state="absent"] {
+    background: rgba(20,25,38,0.9); color: rgba(234,242,255,0.28);
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  @media (max-width: 379px) {
+    .kbrow { gap: 4px; }
+    .kbkey { font-size: 14px; border-radius: 7px; }
+    .kbkey.wide { font-size: 9px; letter-spacing: 0.04em; }
+  }
+
+  /* landscape phones: board on the left, keyboard on the right */
+  body.land #play { flex-direction: row; align-items: stretch; padding-top: 8px; padding-left: max(8px, env(safe-area-inset-left)); }
+  body.land #brand { display: none; }
+  body.land #boardwrap { flex: 1 1 46%; }
+  body.land #kb {
+    flex: 0 0 52%; max-width: none; align-self: center;
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+  body.land #msg { height: 20px; margin-top: 6px; }
+
+  /* -------------------------------------------------------------- confetti */
+  #fx { position: absolute; inset: 0; pointer-events: none; z-index: 8; overflow: hidden; }
+  .bit {
+    position: absolute; width: 8px; height: 12px; border-radius: 2px;
+    animation: fall 1500ms ease-in forwards;
+  }
+  @keyframes fall {
+    0%   { transform: translate(0,0) rotate(0deg); opacity: 1; }
+    100% { transform: translate(var(--dx), 105vh) rotate(var(--rot)); opacity: 0; }
+  }
+
+  /* -------------------------------------------------------------- overlay */
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(11,15,30,0.82), rgba(6,8,18,0.96));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(480px, 100%);
+    background: rgba(10,14,30,0.86);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 20px 18px 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(30px, 9vw, 52px);
+    letter-spacing: 0.26em; font-weight: 800; line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 24px rgba(255,204,77,0.45);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(19px, 6vw, 28px); letter-spacing: 0.1em; font-weight: 800; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.04em; margin-bottom: 10px; line-height: 1.5; }
+  .answer {
+    font-size: clamp(22px, 7vw, 32px); font-weight: 800; letter-spacing: 0.3em;
+    color: var(--accent); margin: 2px 0 8px;
+  }
+  .legend { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 10px 0 2px; }
+  .lg { display: flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: 0.1em; color: var(--dim); text-transform: uppercase; }
+  .swatch { position: relative; width: 22px; height: 22px; border-radius: 5px; }
+  .swatch.e { background: var(--exact); border: 2px solid var(--exact-edge); }
+  .swatch.e::after { content:''; position:absolute; top:0; right:0; width:0; height:0;
+    border-top: 7px solid rgba(26,20,5,0.62); border-left: 7px solid transparent; }
+  .swatch.p { background: var(--present); border: 2px dashed var(--present-edge); }
+  .swatch.p::after { content:''; position:absolute; top:2px; right:2px; width:5px; height:5px;
+    border-radius:50%; background: var(--present-edge); }
+  .swatch.a { background: var(--absent); border: 1px solid rgba(255,255,255,0.08); }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 340px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(255,255,255,0.09); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0 4px; }
+  .stat { background: rgba(255,255,255,0.045); border: 1px solid var(--line); border-radius: 10px; padding: 7px 3px; }
+  .stat .k { font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(15px, 4.6vw, 21px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .disttitle { font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--dim); margin: 12px 0 5px; }
+  .dist { display: flex; flex-direction: column; gap: 3px; max-width: 340px; margin: 0 auto; }
+  .drow { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .drow .dn { width: 10px; color: var(--dim); font-weight: 800; text-align: right; flex: 0 0 auto; }
+  .drow .dbar {
+    height: 16px; border-radius: 4px;
+    background: rgba(255,255,255,0.12);
+    display: flex; align-items: center; justify-content: flex-end;
+    padding: 0 5px; font-size: 10px; font-weight: 800;
+    color: var(--fg); min-width: 22px;
+    transition: width 260ms ease;
+  }
+  .drow.hit .dbar { background: var(--exact); color: var(--exact-ink); }
+  .btn {
+    margin-top: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; padding: 0 26px;
+    border-radius: 14px; border: 1px solid rgba(255,204,77,0.55);
+    background: rgba(255,204,77,0.13); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.16em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,204,77,0.3); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(255,255,255,0.05); }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(24px, 8vw, 42px); font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+  @media (max-height: 620px) {
+    .card { padding: 12px 14px 12px; border-radius: 14px; }
+    .keys { display: none; }
+    .stats { margin: 8px 0 2px; }
+    .disttitle { margin: 8px 0 4px; }
+    .drow .dbar { height: 13px; }
+    .btn { margin-top: 10px; min-height: 46px; }
+    .tagline { margin-bottom: 6px; }
+  }
+  /* the real usable height of a landscape iPhone is 342px — every card,
+     summary chart and button has to sit inside that without scrolling */
+  @media (max-height: 430px) {
+    .card { padding: 10px 14px 10px; }
+    .eyebrow { font-size: 9px; letter-spacing: 0.24em; }
+    h1 { font-size: 30px; margin: 2px 0; }
+    h2 { font-size: 18px; margin: 0 0 3px; letter-spacing: 0.06em; }
+    .answer { font-size: 22px; margin: 0 0 5px; }
+    .tagline { font-size: 11.5px; margin-bottom: 4px; }
+    .legend { margin: 6px 0 0; }
+    .swatch { width: 18px; height: 18px; }
+    .stats { margin: 6px 0 2px; }
+    .stat { padding: 4px 3px; }
+    .stat .v { font-size: 16px; }
+    .disttitle { margin: 6px 0 3px; }
+    .dist { gap: 2px; }
+    .drow { font-size: 10px; }
+    .drow .dbar { height: 11px; font-size: 9px; padding: 0 4px; }
+    .btn { min-height: 44px; margin-top: 8px; padding: 0 20px; font-size: 13px; }
+    .paused { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="brand">PARSE<small>FIVE LETTERS</small></div>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="play">
+    <div id="boardwrap">
+      <div id="board"></div>
+      <div id="msg"></div>
+    </div>
+    <div id="kb"></div>
+  </div>
+  <div id="fx"></div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   PARSE — five letters, six guesses, for the Overclock arcade.
+   Feed the machine a string and it hands the token stream back marked:
+   EXACT, PRESENT, ABSENT. The marking is the whole game, so the duplicate
+   rule is done properly — exact matches consume their letter from the
+   answer's pool FIRST, and only unconsumed copies can come back PRESENT.
+   Marks carry a shape as well as a colour, so the board reads without
+   relying on gold-versus-blue.
+   One file, no assets, oscillator audio.
+   ========================================================================= */
+"use strict";
+
+var K_SAVE = 'parse_v1';
+var K_MUTE = 'parse_muted_v1';
+var ROWS = 6, COLS = 5;
+
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+
+/* ================================================================ words == */
+/* The answer pool: 402 common, family-safe five-letter words, drawn at
+   random every game so it never runs out of mornings. */
+var ANSWERS = (
+  'about acute adult agent agree alert alive along alter anger ankle apply ' +
+  'arena arise arrow avoid awake bacon baker basil basin beach begin bench ' +
+  'berry black blank blend bless bloom blunt bonus boost bound brake break ' +
+  'breed brief broad broom brown build burnt cabin cable candy carry cause ' +
+  'cedar chalk chase cheek cheer chest chill choir chord chunk claim clasp ' +
+  'class clerk climb clock close clown cocoa coral couch count crack crash ' +
+  'crate crazy crest crown crumb curly dance dealt debut delay depth ditch ' +
+  'diver doing doubt draft drain drank dress drink drive dryer dwell early ' +
+  'earth eight elect empty enemy entry erase event every fable faith fancy ' +
+  'fault fence fever field fiery fight first flash flask fling float flour ' +
+  'fluid foggy forge forum found fresh frown fudge fully gauge ghost given ' +
+  'glaze globe going grade grain grape grass greet grill groom growl guard ' +
+  'guest habit hardy hasty hatch heart hello hobby hoist honor hound human ' +
+  'humid ideal index intro irony jelly joint judge juice jumpy knife koala ' +
+  'label laser layer lease leash ledge level lilac limit llama lodge loose ' +
+  'lower lunar magic major maker march maybe medal media merge metal mimic ' +
+  'miner mixer moist moral motel mount movie music naive needy newly ninja ' +
+  'ninth noisy noted nutty nylon ocean olive opera orbit other ounce ozone ' +
+  'paint paper pasta patio pause pearl perch phone photo piece pixel plaid ' +
+  'plain plant plead plush point porch power price pride prior probe prove ' +
+  'prune pupil quack quart queen queue quill quite quota radio rally rapid ' +
+  'ratio ready refer relay renew resin rhyme right rigid rival robin rodeo ' +
+  'roost round rugby rural rusty salad salty sauna scale scene scope scrap ' +
+  'scrub seven shaft shall shape sharp sheet shift shine shock shout shrug ' +
+  'sight sixth skier slate sleek slice sling small smart smile snack sneak ' +
+  'sniff solar sonic south space spark speed spice spicy spine sport squad ' +
+  'stack stain stale stand stare steak steep stick stiff stock stool story ' +
+  'stove strip stuff sugar suite surge swarm swept swift sword tally taste ' +
+  'tasty teeth tense their theme thick third three threw tidal timer title ' +
+  'toast tonic topic touch tough trace trail trash treat tribe tulip tutor ' +
+  'twice ultra union until upper usage utter valor value vault verse villa ' +
+  'vinyl visit vivid voter vowel waist water wedge weigh wharf where whirl ' +
+  'whisk whose width wired wiser women worse would woven wrong yeast youth ' +
+  'yummy zebra abbey alloy crane brick'
+).split(' ');
+
+/* Every word above plus a wider net of ordinary words, so a real guess is
+   never rejected. Accepted-only words are never chosen as the answer. */
+var EXTRA = (
+  'about above actor acute admit adopt adult after again agent ' +
+  'agree ahead alarm album alert alike alive allow alone along ' +
+  'alter among angel anger angle angry ankle apart apple apply ' +
+  'arena argue arise armor arrow aside asset atlas audio avoid ' +
+  'awake award aware bacon badge badly baker banjo basic basil ' +
+  'basin batch beach beard beast begin being belly below bench ' +
+  'berry birch birth black blade blame blank blast blaze blend ' +
+  'bless blink block bloom blown bluff blunt board boast bonus ' +
+  'boost booth bound brain brake brand brass brave bread break ' +
+  'breed brick bride brief bring brisk broad broke brook broom ' +
+  'brown brush buddy build built bunch burnt burst buyer cabin ' +
+  'cable camel candy canoe cargo carol carry carve catch cause ' +
+  'cedar chain chair chalk charm chart chase cheap check cheek ' +
+  'cheer chess chest chief child chili chill chime chirp choir ' +
+  'chord chore chunk cider civic civil claim clamp clash clasp ' +
+  'class clean clear clerk click cliff climb cling cloak clock ' +
+  'close cloth cloud clown coach coast cocoa comet comic coral ' +
+  'couch cough could count court cover crack craft crane crash ' +
+  'crate crawl crazy cream creek crest crisp cross crowd crown ' +
+  'crumb crush crust curly curve cycle daily dairy dance dealt ' +
+  'debut decay decor delay delta dense depth diary diner ditch ' +
+  'diver dizzy dodge doing donor donut doubt dough dozen draft ' +
+  'drain drama drank drawn dream dress dried drift drill drink ' +
+  'drive drone drove dryer dusty dwarf dwell eager eagle early ' +
+  'earth easel eaten eight elbow elder elect elite ember empty ' +
+  'enemy enjoy enter entry equal equip erase error essay event ' +
+  'every exact exist extra fable faint fairy faith false fancy ' +
+  'fault favor feast fence ferry fetch fever fewer fiber field ' +
+  'fiery fifth fifty fight final finch first flair flame flash ' +
+  'flask fleet flick fling flint float flock flood floor flour ' +
+  'fluid flute focus foggy folks force forge forth forty forum ' +
+  'found frame frank fresh fried frost frown froze fruit fudge ' +
+  'fully funny fuzzy gauge gecko geese ghost giant given glass ' +
+  'glaze gleam glide globe glory glove going goose grace grade ' +
+  'grain grand grant grape graph grasp grass great green greet ' +
+  'grill grind groan groom group grove growl grown guard guess ' +
+  'guest guide guild habit handy happy hardy harsh haste hasty ' +
+  'hatch haven heard heart heavy hedge hello hence hinge hobby ' +
+  'hoist holly honey honor horse hotel hound house hover human ' +
+  'humid humor hurry ideal image imply index inner input intro ' +
+  'irony issue ivory jelly jewel jiffy joint jolly joker judge ' +
+  'juice juicy jumbo jumpy kayak kneel knife knock known koala ' +
+  'label lance large laser later laugh layer leafy learn lease ' +
+  'leash least leave ledge legal lemon level lever light lilac ' +
+  'limit linen liner llama lobby local lodge lofty logic loose ' +
+  'lower loyal lucky lunar lunch lyric magic magma maize major ' +
+  'maker mango maple march marsh match maybe mayor meant medal ' +
+  'media melon mercy merge merit merry metal meter might mimic ' +
+  'miner minor minus mixer model modem moist money month moral ' +
+  'motel motor motto mount mouse mouth movie mower mural music ' +
+  'naive nasal naval needy nerve never newly niche night ninja ' +
+  'ninth noble noise noisy north notch noted novel nurse nutty ' +
+  'nylon oasis occur ocean offer often olive omega onion opera ' +
+  'orbit order organ other otter ought ounce outer owner ozone ' +
+  'paint panda panel paper parka party pasta paste patch patio ' +
+  'pause peace peach pearl pedal penny perch petal phase phone ' +
+  'photo piano picky piece pilot pinch pixel pizza place plaid ' +
+  'plain plane plank plant plate plaza plead pluck plump plush ' +
+  'point polar polka porch pouch pound power prank press price ' +
+  'pride prime print prior prism prize probe proof proud prove ' +
+  'prune pulse punch pupil puppy purse quack quail quake quart ' +
+  'queen query quest queue quick quiet quill quilt quirk quite ' +
+  'quota quote radar radio rainy raise rally ranch range rapid ' +
+  'ratio reach react ready realm rebel refer reign relax relay ' +
+  'renew repay reply resin retro rhino rhyme ridge rider right ' +
+  'rigid rinse risky rival river roast robin robot rocky rodeo ' +
+  'roost rotor rough round route royal rugby ruler rumor rural ' +
+  'rusty sadly saint salad salon salsa salty sandy sauce sauna ' +
+  'scale scarf scary scene scent scoop scope score scout scrap ' +
+  'scrub sense serve seven shade shady shaft shake shaky shall ' +
+  'shape share shark sharp shave sheep sheet shelf shell shift ' +
+  'shine shiny shirt shock shore short shout shown shrub shrug ' +
+  'sight silly since sixth sixty skate skier skill skirt slate ' +
+  'sleek sleep sleet slice slide slime sling slope sloth small ' +
+  'smart smash smell smile smoke smoky snack snail snake sneak ' +
+  'sniff snowy soapy solar solid solve sonic sorry sound south ' +
+  'space spade spare spark speak spear speed spell spend spice ' +
+  'spicy spike spill spine spoke spoon sport spray spree squad ' +
+  'stack staff stage stain stair stake stale stalk stamp stand ' +
+  'stare start state steak steam steel steep steer stern stick ' +
+  'stiff still sting stock stone stood stool store storm story ' +
+  'stove strap straw strip stuck study stuff stump style sugar ' +
+  'suite sunny super surge sushi swamp swarm sweep sweet swept ' +
+  'swift swing swirl sword syrup table tally talon tango taste ' +
+  'tasty teach tease teeth tempo tenor tense tenth thank their ' +
+  'theme there these thick thing think third thorn those three ' +
+  'threw throw thumb tidal tiger tight timer timid tired title ' +
+  'toast today token tonic tooth topaz topic torch total touch ' +
+  'tough towel tower trace track trade trail train trait trash ' +
+  'treat trend trial tribe trick tried tulip tunic turbo tutor ' +
+  'twice twine twist ultra uncle under union unite unity until ' +
+  'upper upset urban usage usher usual utter vague valid valor ' +
+  'value valve vapor vault vegan venue verse video vigor villa ' +
+  'vinyl viola viper visit visor vital vivid vocal voice voter ' +
+  'vowel wafer wagon waist waltz watch water weary weave wedge ' +
+  'weigh weird whale wharf wheat wheel where which while whirl ' +
+  'whisk white whole whose widen wider width windy wiper wired ' +
+  'wiser witty woman women world worry worse worst worth would ' +
+  'woven wrist write wrong wrote yacht yeast yield young youth ' +
+  'yummy zebra abbey alloy ' +
+  /* common opening guesses and plurals players actually type */
+  'adieu arose irate snare tears notes tones lanes canes tiles ' +
+  'miles piles holes roles poles rides sides tides hides times ' +
+  'lines mines wines vines dimes homes domes bones cones zones ' +
+  'dunes tunes runes cubes tubes robes ropes hopes cakes lakes ' +
+  'rakes bakes makes takes wakes games names gates dates rates ' +
+  'mates hates kites bites sites votes capes tapes eerie babes ' +
+  'crimp snarl snore stray shale shone spurt swore'
+).split(' ');
+
+var ACCEPTED = {};
+(function () {
+  var i;
+  for (i = 0; i < ANSWERS.length; i++) ACCEPTED[ANSWERS[i]] = 1;
+  for (i = 0; i < EXTRA.length; i++) ACCEPTED[EXTRA[i]] = 1;
+})();
+function isWord(w) { return ACCEPTED[w] === 1; }
+function acceptedCount() { var n = 0, k; for (k in ACCEPTED) if (ACCEPTED.hasOwnProperty(k)) n++; return n; }
+
+/* ============================================================ the marker = */
+/* THE rule this game lives or dies by. Two passes:
+     1. every exact match is marked AND its letter removed from the answer's
+        pool, so it can never be spent again;
+     2. only then are misplaced letters marked, and only while the pool
+        still has an unconsumed copy.
+   CRANE / EERIE therefore marks exactly one E — the one in the right slot. */
+function mark(answer, guess) {
+  var res = [], pool = {}, i, c;
+  for (i = 0; i < COLS; i++) res.push('absent');
+  for (i = 0; i < COLS; i++) {
+    c = answer.charAt(i);
+    pool[c] = (pool[c] || 0) + 1;
+  }
+  for (i = 0; i < COLS; i++) {
+    c = guess.charAt(i);
+    if (c === answer.charAt(i)) { res[i] = 'exact'; pool[c]--; }
+  }
+  for (i = 0; i < COLS; i++) {
+    if (res[i] === 'exact') continue;
+    c = guess.charAt(i);
+    if (pool[c] > 0) { res[i] = 'present'; pool[c]--; }
+  }
+  return res;
+}
+
+/* ================================================================ stats == */
+function freshStats() { return { played: 0, wins: 0, streak: 0, best: 0, dist: [0, 0, 0, 0, 0, 0] }; }
+function num(x) { var n = Number(x); return (isFinite(n) && n >= 0) ? Math.floor(n) : 0; }
+function readStats() {
+  var s = freshStats();
+  try {
+    var raw = localStorage.getItem(K_SAVE);
+    if (!raw) return s;
+    var v = JSON.parse(raw);
+    if (!v || typeof v !== 'object' || Object.prototype.toString.call(v) === '[object Array]') return freshStats();
+    s.played = num(v.played);
+    s.wins = num(v.wins);
+    s.streak = num(v.streak);
+    s.best = num(v.best);
+    if (Object.prototype.toString.call(v.dist) === '[object Array]') {
+      for (var i = 0; i < 6; i++) s.dist[i] = num(v.dist[i]);
+    }
+    if (s.wins > s.played) s.played = s.wins;
+    if (s.best < s.streak) s.best = s.streak;
+    return s;
+  } catch (e) { return freshStats(); }
+}
+function writeStats() { try { localStorage.setItem(K_SAVE, JSON.stringify(STATS)); } catch (e) {} }
+var STATS = readStats();
+
+/* ================================================================ audio == */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.42;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.42;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(28, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseBurst(dur, vol, freq, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var n = Math.max(1, Math.floor(actx.sampleRate * dur));
+  var buf = actx.createBuffer(1, n, actx.sampleRate);
+  var ch = buf.getChannelData(0);
+  for (var i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  var src = actx.createBufferSource(); src.buffer = buf;
+  var f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq;
+  var g = actx.createGain(); g.gain.value = vol;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+}
+var sfx = {
+  key:     function () { tone('triangle', 480, 400, 0.035, 0.06); },
+  back:    function () { tone('square', 260, 200, 0.04, 0.05); },
+  bad:     function () { tone('square', 190, 130, 0.16, 0.07); },
+  flip:    function (i, st) {
+    var base = st === 'exact' ? 660 : (st === 'present' ? 520 : 300);
+    tone('triangle', base, base * 1.12, 0.07, 0.055, i * 0.12);
+  },
+  win:     function () { for (var i = 0; i < 7; i++) tone('triangle', 523 * Math.pow(1.18, i), 523 * Math.pow(1.18, i), 0.18, 0.09, i * 0.085); },
+  lose:    function () { tone('sawtooth', 300, 90, 0.7, 0.1); noiseBurst(0.35, 0.05, 500, 0.05); },
+  newgame: function () { tone('triangle', 380, 620, 0.12, 0.07); }
+};
+
+/* ================================================================ state == */
+var G = {
+  state: 'title',        /* title | play | won | lost | paused */
+  answer: '',
+  cur: '',
+  row: 0,
+  guesses: [],
+  marks: [],
+  keyState: {},
+  busy: false,
+  recorded: false,
+  lastRow: 0
+};
+
+/* ================================================================= DOM === */
+var stage = document.getElementById('stage');
+var boardEl = document.getElementById('board');
+var kbEl = document.getElementById('kb');
+var msgEl = document.getElementById('msg');
+var fxEl = document.getElementById('fx');
+var overlay = document.getElementById('overlay');
+var tiles = [];
+var keyEls = {};
+var padKeys = [];
+
+var KB_ROWS = [
+  ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+  ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
+  ['ENTER', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'BACK']
+];
+
+function buildBoard() {
+  boardEl.innerHTML = '';
+  tiles = [];
+  for (var r = 0; r < ROWS; r++) {
+    var row = [];
+    for (var c = 0; c < COLS; c++) {
+      var t = document.createElement('div');
+      t.className = 'tile';
+      t.setAttribute('data-r', r);
+      t.setAttribute('data-c', c);
+      boardEl.appendChild(t);
+      row.push(t);
+    }
+    tiles.push(row);
+  }
+}
+function buildKeyboard() {
+  kbEl.innerHTML = '';
+  keyEls = {};
+  padKeys = [];
+  for (var r = 0; r < KB_ROWS.length; r++) {
+    var rowEl = document.createElement('div');
+    rowEl.className = 'kbrow';
+    if (r === 1) rowEl.appendChild(spacer());
+    for (var i = 0; i < KB_ROWS[r].length; i++) {
+      var k = KB_ROWS[r][i];
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'kbkey' + (k.length > 1 ? ' wide' : '');
+      b.setAttribute('data-key', k);
+      b.textContent = k.length > 1 ? k : k.toUpperCase();
+      rowEl.appendChild(b);
+      keyEls[k] = b;
+      padKeys.push(b);
+    }
+    if (r === 1) rowEl.appendChild(spacer());
+    kbEl.appendChild(rowEl);
+  }
+}
+function spacer() { var s = document.createElement('div'); s.className = 'kbspace'; return s; }
+
+/* ================================================================ layout = */
+function layout() {
+  var W = window.innerWidth || 360;
+  var H = window.innerHeight || 640;
+  var land = (W > H) && (H < 560);
+  document.body.classList.toggle('land', land);
+
+  var keyH = H >= 700 ? 48 : (H >= 520 ? 44 : 42);
+  var gap = W < 380 ? 5 : 6;
+  var kbH = keyH * 3 + 12 + 6;
+  var avW, avH;
+  if (land) {
+    avW = W * 0.46 - 20;
+    avH = H - 16 - 26;
+  } else {
+    avW = Math.min(W, 520) - 20;
+    avH = H - 54 - kbH - 34 - 12;
+  }
+  var tile = Math.floor(Math.min((avW - (COLS - 1) * gap) / COLS, (avH - (ROWS - 1) * gap) / ROWS));
+  if (!isFinite(tile)) tile = 40;
+  tile = Math.max(22, Math.min(tile, 66));
+
+  var root = document.documentElement.style;
+  root.setProperty('--tile', tile + 'px');
+  root.setProperty('--gap', gap + 'px');
+  root.setProperty('--keyh', keyH + 'px');
+}
+window.addEventListener('resize', layout);
+window.addEventListener('orientationchange', function () { setTimeout(layout, 120); });
+
+/* ================================================================ render = */
+function paintRow(r) {
+  for (var c = 0; c < COLS; c++) {
+    var t = tiles[r][c];
+    var g = G.guesses[r];
+    if (g) {
+      t.textContent = g.charAt(c).toUpperCase();
+      t.classList.remove('filled');
+      t.setAttribute('data-state', G.marks[r][c]);
+    } else if (r === G.row) {
+      var ch = G.cur.charAt(c);
+      t.textContent = ch ? ch.toUpperCase() : '';
+      t.classList.toggle('filled', !!ch);
+      t.removeAttribute('data-state');
+    } else {
+      t.textContent = '';
+      t.classList.remove('filled');
+      t.removeAttribute('data-state');
+    }
+  }
+}
+function paintAll() { for (var r = 0; r < ROWS; r++) paintRow(r); paintKeys(); }
+function paintKeys() {
+  for (var k in keyEls) {
+    if (!keyEls.hasOwnProperty(k) || k.length > 1) continue;
+    var st = G.keyState[k];
+    if (st) keyEls[k].setAttribute('data-state', st);
+    else keyEls[k].removeAttribute('data-state');
+  }
+}
+var RANK = { absent: 1, present: 2, exact: 3 };
+function bumpKey(letter, st) {
+  var cur = G.keyState[letter];
+  if (!cur || RANK[st] > RANK[cur]) G.keyState[letter] = st;
+}
+
+var msgT = null;
+function flash(text, ms) {
+  msgEl.textContent = text;
+  msgEl.classList.add('on');
+  if (msgT) clearTimeout(msgT);
+  msgT = setTimeout(function () { msgEl.classList.remove('on'); }, ms || 1500);
+}
+function shakeRow() {
+  boardEl.classList.remove('shake');
+  void boardEl.offsetWidth;
+  boardEl.classList.add('shake');
+  sfx.bad();
+}
+
+/* ================================================================= play == */
+function newGame(forced) {
+  var w = forced ? String(forced).toLowerCase() : ANSWERS[(Math.random() * ANSWERS.length) | 0];
+  G.answer = w;
+  G.cur = '';
+  G.row = 0;
+  G.guesses = [];
+  G.marks = [];
+  G.keyState = {};
+  G.busy = false;
+  G.recorded = false;
+  G.lastRow = 0;
+  G.state = 'play';
+  document.body.classList.add('playing');
+  hideOverlay();
+  fxEl.innerHTML = '';
+  layout();
+  paintAll();
+  sfx.newgame();
+}
+
+function typeLetter(ch) {
+  if (G.state !== 'play' || G.busy) return;
+  if (G.cur.length >= COLS) return;
+  G.cur += ch;
+  paintRow(G.row);
+  sfx.key();
+}
+function backspace() {
+  if (G.state !== 'play' || G.busy) return;
+  if (!G.cur.length) return;
+  G.cur = G.cur.slice(0, -1);
+  paintRow(G.row);
+  sfx.back();
+}
+
+function submit() {
+  if (G.state !== 'play' || G.busy) return false;
+  var g = G.cur;
+  if (g.length < COLS) { flash('NOT ENOUGH LETTERS'); shakeRow(); return false; }
+  if (!isWord(g)) { flash('NOT IN THE DICTIONARY'); shakeRow(); return false; }
+
+  var m = mark(G.answer, g);
+  var r = G.row;
+  G.guesses.push(g);
+  G.marks.push(m);
+  G.row++;
+  G.cur = '';
+  G.lastRow = r;
+  G.busy = true;
+
+  /* flip each tile through zero, swapping colour at the pinch */
+  var stepMs = 120, halfMs = 210;
+  for (var c = 0; c < COLS; c++) {
+    (function (col) {
+      var t = tiles[r][col];
+      /* paint the letter from the guess, not from whatever the row happened
+         to be showing — a row filled any other way must still read right */
+      t.textContent = g.charAt(col).toUpperCase();
+      t.classList.remove('filled');
+      t.classList.remove('flip');
+      void t.offsetWidth;
+      t.style.animationDelay = (col * stepMs) + 'ms';
+      t.classList.add('flip');
+      setTimeout(function () {
+        t.setAttribute('data-state', m[col]);
+        sfx.flip(0, m[col]);
+      }, col * stepMs + halfMs);
+    })(c);
+  }
+  var total = (COLS - 1) * stepMs + 420 + 40;
+  setTimeout(function () { finishReveal(r, g, m); }, total);
+  return true;
+}
+
+function finishReveal(r, g, m) {
+  for (var c = 0; c < COLS; c++) {
+    bumpKey(g.charAt(c), m[c]);
+    tiles[r][c].classList.remove('flip');
+    tiles[r][c].style.animationDelay = '';
+  }
+  paintRow(r);
+  paintKeys();
+  G.busy = false;
+
+  var solved = true;
+  for (var i = 0; i < COLS; i++) if (m[i] !== 'exact') solved = false;
+
+  if (solved) {
+    G.state = 'won';
+    record(true, r + 1);
+    for (var c2 = 0; c2 < COLS; c2++) {
+      (function (col) {
+        var t = tiles[r][col];
+        setTimeout(function () {
+          t.classList.remove('dance'); void t.offsetWidth; t.classList.add('dance');
+        }, col * 90);
+      })(c2);
+    }
+    sfx.win();
+    confetti();
+    flash(['GENIUS', 'SHARP', 'CLEAN', 'SOLID', 'PHEW', 'CLUTCH'][r] || 'SOLVED', 2200);
+    setTimeout(function () { summary(true); }, 1500);
+  } else if (G.row >= ROWS) {
+    G.state = 'lost';
+    record(false, 0);
+    sfx.lose();
+    flash('THE WORD WAS ' + G.answer.toUpperCase(), 2600);
+    setTimeout(function () { summary(false); }, 1400);
+  }
+}
+
+function record(won, guessNo) {
+  if (G.recorded) return;
+  G.recorded = true;
+  STATS.played++;
+  if (won) {
+    STATS.wins++;
+    STATS.streak++;
+    if (STATS.streak > STATS.best) STATS.best = STATS.streak;
+    if (guessNo >= 1 && guessNo <= 6) STATS.dist[guessNo - 1]++;
+  } else {
+    STATS.streak = 0;
+  }
+  writeStats();
+}
+
+function confetti() {
+  var cols = ['#ffcc4d', '#f0b429', '#2a7fb8', '#bfe6fb', '#eaf2ff'];
+  for (var i = 0; i < 46; i++) {
+    var b = document.createElement('div');
+    b.className = 'bit';
+    b.style.left = (8 + Math.random() * 84) + '%';
+    b.style.top = (-8 - Math.random() * 20) + 'px';
+    b.style.background = cols[(Math.random() * cols.length) | 0];
+    b.style.setProperty('--dx', ((Math.random() - 0.5) * 220).toFixed(0) + 'px');
+    b.style.setProperty('--rot', ((Math.random() - 0.5) * 1080).toFixed(0) + 'deg');
+    b.style.animationDelay = (Math.random() * 350) + 'ms';
+    b.style.animationDuration = (1200 + Math.random() * 900) + 'ms';
+    fxEl.appendChild(b);
+  }
+  setTimeout(function () { fxEl.innerHTML = ''; }, 2600);
+}
+
+/* =============================================================== overlay = */
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+
+function legendHTML() {
+  return '<div class="legend">' +
+    '<div class="lg"><span class="swatch e"></span>Exact</div>' +
+    '<div class="lg"><span class="swatch p"></span>Present</div>' +
+    '<div class="lg"><span class="swatch a"></span>Absent</div>' +
+  '</div>';
+}
+function distHTML(hit) {
+  var max = 1, i;
+  for (i = 0; i < 6; i++) if (STATS.dist[i] > max) max = STATS.dist[i];
+  var h = '<div class="disttitle">Guess distribution</div><div class="dist">';
+  for (i = 0; i < 6; i++) {
+    var n = STATS.dist[i];
+    var pct = Math.max(9, Math.round(n / max * 100));
+    h += '<div class="drow' + (hit === i + 1 ? ' hit' : '') + '">' +
+           '<span class="dn">' + (i + 1) + '</span>' +
+           '<div class="dbar" style="width:' + pct + '%">' + n + '</div>' +
+         '</div>';
+  }
+  return h + '</div>';
+}
+function statsHTML() {
+  var pct = STATS.played ? Math.round(STATS.wins / STATS.played * 100) : 0;
+  return '<div class="stats">' +
+    '<div class="stat"><div class="k">Played</div><div class="v">' + STATS.played + '</div></div>' +
+    '<div class="stat"><div class="k">Win %</div><div class="v">' + pct + '</div></div>' +
+    '<div class="stat"><div class="k">Streak</div><div class="v accent">' + STATS.streak + '</div></div>' +
+    '<div class="stat"><div class="k">Best</div><div class="v">' + STATS.best + '</div></div>' +
+  '</div>';
+}
+
+function titleScreen() {
+  G.state = 'title';
+  document.body.classList.remove('playing');
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>PARSE</h1>' +
+      '<div class="tagline">Six guesses to resolve a five-letter word. Every letter comes back marked &mdash; and the marks carry a shape as well as a colour, so the board reads either way.</div>' +
+      legendHTML() +
+      '<div class="keys">' +
+        '<div>Type<span>Keyboard or the keys below</span></div>' +
+        '<div>Submit<span>Enter</span></div>' +
+        '<div>Rub out<span>Backspace</span></div>' +
+        '<div>Pause<span>Esc, or the &#10073;&#10073; button</span></div>' +
+        '<div>Mute<span>The &#9835; button (M on menus)</span></div>' +
+      '</div>' +
+      (STATS.played ? '<div class="tagline" style="margin:10px 0 0">Played <b style="color:var(--accent)">' + STATS.played + '</b> &middot; streak <b style="color:var(--accent)">' + STATS.streak + '</b> &middot; best <b style="color:var(--accent)">' + STATS.best + '</b></div>' : '') +
+      '<button class="btn" data-act="start">START PARSING</button>' +
+    '</div>');
+}
+
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="tagline" style="margin-top:10px">Row ' + Math.min(G.row + 1, ROWS) + ' of ' + ROWS + '</div>' +
+      legendHTML() +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="title">QUIT</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function summary(won) {
+  var hit = won ? G.lastRow + 1 : 0;
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">' + (won ? 'String resolved' : 'Parse failed') + '</div>' +
+      '<h2>' + (won ? 'SOLVED IN ' + hit + (hit === 1 ? ' GUESS' : ' GUESSES') : 'OUT OF GUESSES') + '</h2>' +
+      '<div class="answer">' + G.answer.toUpperCase() + '</div>' +
+      statsHTML() +
+      distHTML(hit) +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="next">NEXT WORD</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>');
+}
+
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 'start' || act === 'next') newGame();
+  else if (act === 'resume') togglePause();
+  else if (act === 'title') titleScreen();
+});
+
+function togglePause() {
+  if (G.state === 'play') { G.state = 'paused'; pauseScreen(); }
+  else if (G.state === 'paused') { G.state = 'play'; hideOverlay(); }
+}
+
+/* ================================================================= input = */
+kbEl.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('.kbkey') : null;
+  if (!b) return;
+  initAudio();
+  var k = b.getAttribute('data-key');
+  if (k === 'ENTER') submit();
+  else if (k === 'BACK') backspace();
+  else typeLetter(k);
+});
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+window.addEventListener('keydown', function (e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  var k = e.key ? e.key.toLowerCase() : '';
+  initAudio();
+
+  /* While a row is being typed EVERY letter belongs to the board — M and P
+     are letters here, so they can never be hotkeys. Scripted play caught
+     this typing LLAMA: the M muted the game instead of landing in the row. */
+  if (G.state === 'play') {
+    if (k === 'escape') { e.preventDefault(); togglePause(); return; }
+    if (k === 'enter') { e.preventDefault(); submit(); return; }
+    if (k === 'backspace' || k === 'delete') { e.preventDefault(); backspace(); return; }
+    if (k.length === 1 && k >= 'a' && k <= 'z') { e.preventDefault(); typeLetter(k); }
+    return;
+  }
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'p' || k === 'escape') {
+    if (G.state === 'paused') { e.preventDefault(); togglePause(); }
+    return;
+  }
+  if (k === 'enter' || k === ' ') {
+    if (G.state === 'title' || G.state === 'won' || G.state === 'lost') { e.preventDefault(); newGame(); }
+  }
+});
+
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () {
+  if (G.state === 'play' || G.state === 'paused') togglePause();
+});
+window.addEventListener('blur', function () { if (G.state === 'play' && !G.busy) togglePause(); });
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && G.state === 'play' && !G.busy) togglePause();
+});
+
+/* --------------------------------------------------------------- gamepad - */
+var padSel = -1, padPrev = {}, padT = 0;
+function padDown(p, i) {
+  var now = !!(p.buttons[i] && p.buttons[i].pressed);
+  var was = !!padPrev[i];
+  padPrev[i] = now;
+  return now && !was;
+}
+function selKey(n) {
+  if (padSel >= 0 && padKeys[padSel]) padKeys[padSel].classList.remove('sel');
+  padSel = (n + padKeys.length) % padKeys.length;
+  padKeys[padSel].classList.add('sel');
+}
+function pollPad(dt) {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null, i;
+  for (i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  padT -= dt;
+  var ax = (p.axes && p.axes.length > 0) ? p.axes[0] : 0;
+  var ay = (p.axes && p.axes.length > 1) ? p.axes[1] : 0;
+  var left = ax < -0.5 || padDown(p, 14), right = ax > 0.5 || padDown(p, 15);
+  var up = ay < -0.5 || padDown(p, 12), down = ay > 0.5 || padDown(p, 13);
+  if ((left || right || up || down) && padT <= 0) {
+    padT = 0.16;
+    if (padSel < 0) selKey(0);
+    else if (left) selKey(padSel - 1);
+    else if (right) selKey(padSel + 1);
+    else if (up) selKey(padSel - 10);
+    else if (down) selKey(padSel + 10);
+  }
+  if (padDown(p, 0)) {
+    initAudio();
+    if (G.state === 'title' || G.state === 'won' || G.state === 'lost') newGame();
+    else if (padSel >= 0 && padKeys[padSel]) padKeys[padSel].click();
+  }
+  if (padDown(p, 1)) backspace();
+  if (padDown(p, 2)) submit();
+  if (padDown(p, 9) && (G.state === 'play' || G.state === 'paused')) togglePause();
+}
+
+/* ================================================================== loop = */
+/* Nothing here simulates — the loop only services the gamepad, so the game
+   is fully static between inputs (staticOk in the harness). */
+var lastT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  pollPad(dt);
+}
+
+/* ================================================================== boot = */
+buildBoard();
+buildKeyboard();
+layout();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(layout).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

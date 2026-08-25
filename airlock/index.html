@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Airlock — Air Hockey</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="Neon air hockey. Two mallets, one puck, first to seven. Play the CPU, or grab a friend — two fingers, one screen.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Airlock">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eaf2ff;
+    --dim: rgba(234,242,255,0.58);
+    --panel: rgba(9,13,30,0.62);
+    --line: rgba(255,255,255,0.13);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.22); }
+  body:not(.playing) #topbtns { display: none; }
+
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(11,15,30,0.78), rgba(6,8,18,0.95));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(520px, 100%);
+    background: rgba(10,14,30,0.82);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 22px 20px 20px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(30px, 9vw, 52px);
+    letter-spacing: 0.1em; font-weight: 800; line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 24px rgba(255,204,77,0.45);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(20px, 6vw, 30px); letter-spacing: 0.08em; font-weight: 800; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.05em; margin-bottom: 12px; }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 350px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(255,255,255,0.09); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 14px 0 6px; }
+  .stat { background: rgba(255,255,255,0.045); border: 1px solid var(--line); border-radius: 12px; padding: 8px 6px; }
+  .stat .k { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(17px, 5vw, 23px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .best { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .best b { color: var(--accent); }
+  .btn {
+    margin-top: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; padding: 0 28px;
+    border-radius: 14px; border: 1px solid rgba(255,204,77,0.55);
+    background: rgba(255,204,77,0.13); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.16em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,204,77,0.3); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(255,255,255,0.05); }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(26px, 8vw, 46px); font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+  @media (max-height: 620px) {
+    .card { padding: 14px 16px; border-radius: 16px; }
+    .keys { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   AIRLOCK — air hockey for the Overclock arcade.
+   One puck, two mallets, first to seven. VS CPU, or two humans: on touch
+   each player drags their own mallet (true multitouch), on a keyboard it
+   is WASD against arrows. The table stands upright on phones and lies on
+   its side on desktops; the physics never notices.
+   One file, no assets, oscillator audio.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'airlock_v1';
+var K_MUTE = 'airlock_muted_v1';
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function hyp(x, y) { return Math.sqrt(x * x + y * y); }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function loadJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.5;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.5;
+  var b = document.getElementById('muteBtn');
+  b.classList.toggle('off', m);
+  b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(28, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseBurst(dur, vol, freq) {
+  if (!actx || muted) return;
+  var n = Math.floor(actx.sampleRate * dur);
+  var buf = actx.createBuffer(1, n, actx.sampleRate);
+  var ch = buf.getChannelData(0);
+  for (var i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  var src = actx.createBufferSource(); src.buffer = buf;
+  var f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
+  var g = actx.createGain(); g.gain.value = vol;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(actx.currentTime);
+}
+var sfx = {
+  clack: function (sp) { var v = clamp(0.06 + sp * 0.08, 0.06, 0.2); tone('square', 900 + sp * 300, 500, 0.04, v); noiseBurst(0.03, v * 0.7, 4000); },
+  wall:  function (sp) { tone('square', 340, 240, 0.04, clamp(0.04 + sp * 0.05, 0.04, 0.12)); },
+  goal:  function () { tone('sawtooth', 220, 55, 0.6, 0.2); noiseBurst(0.35, 0.16, 900); tone('triangle', 660, 990, 0.25, 0.14, 0.12); },
+  horn:  function () { tone('sawtooth', 233, 233, 0.55, 0.16); tone('sawtooth', 466, 462, 0.55, 0.1); },
+  serve: function () { tone('triangle', 523, 784, 0.14, 0.11); },
+  win:   function () { tone('triangle', 523, 523, 0.14, 0.13); tone('triangle', 659, 659, 0.14, 0.13, 0.16); tone('triangle', 784, 784, 0.3, 0.15, 0.32); }
+};
+
+/* ---------------------------------------------------------------- table -- */
+/* Simulation is ALWAYS in upright table space: width 1, height 1.62.
+   P1 defends the BOTTOM goal, P2 the TOP. Rendering rotates for screens. */
+var TW = 1, TH = 1.62;
+var PUCK_R = 0.036, MAL_R = 0.062;
+var GOAL_W = 0.36;                     // opening width, centred
+var WIN_SCORE = 7;
+
+var G = {
+  state: 'title',        // title | serve | play | goal | pause | over
+  mode: 'cpu',
+  s1: 0, s2: 0, serveT: 0, goalT: 0, banner: '', bannerT: 0, bannerCol: '#ffcc4d',
+  shake: 0, flash: 0, flashCol: '#ffcc4d', slow: 0,
+  wins: (loadJSON(K_SAVE, {}) || {}).wins || 0,
+  bestStreak: (loadJSON(K_SAVE, {}) || {}).streak || 0,
+  streak: 0
+};
+var puck = { x: 0.5, y: TH / 2, vx: 0, vy: 0, trail: [] };
+var M1 = { x: 0.5, y: TH - 0.18, vx: 0, vy: 0, tx: 0.5, ty: TH - 0.18, col: '#7de2ff', name: 'P1' };
+var M2 = { x: 0.5, y: 0.18, vx: 0, vy: 0, tx: 0.5, ty: 0.18, col: '#ffb04d', name: 'P2' };
+var sparks = [], floaters = [];
+
+function resetPositions(server) {
+  puck.x = 0.5; puck.y = server === 1 ? TH * 0.62 : TH * 0.38;
+  puck.vx = 0; puck.vy = 0; puck.trail.length = 0;
+  M1.x = 0.5; M1.y = TH - 0.18; M1.tx = M1.x; M1.ty = M1.y; M1.vx = 0; M1.vy = 0;
+  M2.x = 0.5; M2.y = 0.18; M2.tx = M2.x; M2.ty = M2.y; M2.vx = 0; M2.vy = 0;
+}
+
+/* -------------------------------------------------------------- overlay -- */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+
+function titleScreen() {
+  G.state = 'title';
+  document.body.classList.remove('playing');
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>AIRLOCK</h1>' +
+      '<div class="tagline">One puck, two mallets, first to seven. On a phone or tablet, two players each drag their own mallet — two fingers, one screen.</div>' +
+      '<div class="keys">' +
+        '<div>Touch<span>Drag your mallet directly</span></div>' +
+        '<div>Mouse (vs CPU)<span>Mallet follows the cursor</span></div>' +
+        '<div>P1 keys<span>WASD</span></div>' +
+        '<div>P2 keys<span>Arrows</span></div>' +
+        '<div>Pause<span>P or Esc</span></div>' +
+        '<div>Mute<span>M</span></div>' +
+      '</div>' +
+      (G.wins > 0 ? '<div class="best">CPU matches won: <b>' + G.wins + '</b> &middot; best streak <b>' + G.bestStreak + '</b></div>' : '') +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="cpu">VS CPU</button>' +
+        '<button class="btn ghost" data-act="vs">2 PLAYERS</button>' +
+      '</div>' +
+    '</div>');
+}
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Paused</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">' + (G.mode === 'cpu' ? 'You' : 'Player 1') + '</div><div class="v accent">' + G.s1 + '</div></div>' +
+        '<div class="stat"><div class="k">' + (G.mode === 'cpu' ? 'CPU' : 'Player 2') + '</div><div class="v">' + G.s2 + '</div></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="quit">QUIT</button>' +
+      '</div>' +
+    '</div>');
+}
+function overScreen(p1won) {
+  G.state = 'over';
+  document.body.classList.remove('playing');
+  if (G.mode === 'cpu') {
+    if (p1won) { G.wins++; G.streak++; if (G.streak > G.bestStreak) G.bestStreak = G.streak; }
+    else G.streak = 0;
+    saveJSON(K_SAVE, { wins: G.wins, streak: G.bestStreak });
+  }
+  var name = G.mode === 'cpu' ? (p1won ? 'YOU WIN' : 'CPU WINS') : (p1won ? 'PLAYER 1 WINS' : 'PLAYER 2 WINS');
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Full time</div>' +
+      '<h2 style="color:' + (p1won ? '#7de2ff' : '#ffb04d') + '">' + name + '</h2>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">' + (G.mode === 'cpu' ? 'You' : 'P1') + '</div><div class="v accent">' + G.s1 + '</div></div>' +
+        '<div class="stat"><div class="k">' + (G.mode === 'cpu' ? 'CPU' : 'P2') + '</div><div class="v">' + G.s2 + '</div></div>' +
+      '</div>' +
+      (G.mode === 'cpu' ? '<div class="best">Streak: <b>' + G.streak + '</b> &middot; best <b>' + G.bestStreak + '</b> &middot; total wins <b>' + G.wins + '</b></div>' : '') +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="again">REMATCH</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>');
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 'cpu') startMatch('cpu');
+  else if (act === 'vs') startMatch('vs');
+  else if (act === 'again') startMatch(G.mode);
+  else if (act === 'resume') togglePause();
+  else if (act === 'quit' || act === 'title') titleScreen();
+});
+function togglePause() {
+  if (G.state === 'play' || G.state === 'serve') { G.prePause = G.state; G.state = 'pause'; pauseScreen(); }
+  else if (G.state === 'pause') { G.state = G.prePause; hideOverlay(); }
+}
+
+function startMatch(mode) {
+  initAudio();
+  hideOverlay();
+  document.body.classList.add('playing');
+  G.mode = mode;
+  G.s1 = 0; G.s2 = 0;
+  sparks.length = 0; floaters.length = 0;
+  serve(Math.random() < 0.5 ? 1 : 2);
+}
+function serve(toWhom) {
+  resetPositions(toWhom);
+  G.state = 'serve'; G.serveT = 1.1;
+  banner('SERVE', '#8effc1');
+  sfx.serve();
+}
+function banner(txt, col) { G.banner = txt; G.bannerCol = col || '#ffcc4d'; G.bannerT = 1.1; }
+
+/* ---------------------------------------------------------------- input -- */
+var keys = Object.create(null);
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+  initAudio();
+  keys[k] = true;
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'p' || k === 'escape') { if (G.state === 'play' || G.state === 'serve' || G.state === 'pause') togglePause(); return; }
+  if (G.state === 'title' && (k === ' ' || k === 'enter')) { startMatch('cpu'); return; }
+  if (G.state === 'over' && (k === ' ' || k === 'enter' || k === 'r')) { startMatch(G.mode); return; }
+});
+window.addEventListener('keyup', function (e) { keys[e.key ? e.key.toLowerCase() : ''] = false; });
+window.addEventListener('blur', function () { for (var k in keys) keys[k] = false; if (G.state === 'play' || G.state === 'serve') togglePause(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden && (G.state === 'play' || G.state === 'serve')) togglePause(); });
+
+/* pointers: each half owns a mallet; mouse drives P1 (or the nearest half in 2P) */
+var cv = document.getElementById('game');
+var ptr1 = -1, ptr2 = -1;
+var mouseSeen = false;
+
+function tableFromScreen(cx, cy) {
+  /* inverse of the render transform */
+  var m = layout();
+  if (m.rot) {
+    /* landscape: table rotated 90° clockwise — P1 right, P2 left */
+    return { x: clamp((cy - m.oy) / m.s, 0, TW), y: clamp((m.ox + m.len - cx) / m.s, 0, TH) };
+  }
+  return { x: clamp((cx - m.ox) / m.s, 0, TW), y: clamp((cy - m.oy) / m.s, 0, TH) };
+}
+function ownHalf(t) { return t.y > TH / 2 ? 1 : 2; }
+
+cv.addEventListener('pointerdown', function (e) {
+  initAudio();
+  var t = tableFromScreen(e.clientX, e.clientY);
+  if (e.pointerType === 'mouse') { mouseSeen = true; M1.tx = t.x; M1.ty = t.y; e.preventDefault(); return; }
+  var half = ownHalf(t);
+  if (half === 1 && ptr1 === -1) { ptr1 = e.pointerId; M1.tx = t.x; M1.ty = t.y; }
+  else if (half === 2 && G.mode === 'vs' && ptr2 === -1) { ptr2 = e.pointerId; M2.tx = t.x; M2.ty = t.y; }
+  else if (half === 2 && G.mode === 'cpu' && ptr1 === -1) { ptr1 = e.pointerId; }   // stray finger: ignore target
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  e.preventDefault();
+});
+cv.addEventListener('pointermove', function (e) {
+  var t = tableFromScreen(e.clientX, e.clientY);
+  if (e.pointerType === 'mouse') { if (mouseSeen) { M1.tx = t.x; M1.ty = t.y; } return; }
+  if (e.pointerId === ptr1) { M1.tx = t.x; M1.ty = t.y; }
+  else if (e.pointerId === ptr2) { M2.tx = t.x; M2.ty = t.y; }
+});
+function endPtr(e) {
+  if (e.pointerId === ptr1) ptr1 = -1;
+  if (e.pointerId === ptr2) ptr2 = -1;
+}
+cv.addEventListener('pointerup', endPtr);
+cv.addEventListener('pointercancel', endPtr);
+window.addEventListener('pointerup', endPtr);
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+var padPrevAny = false;
+function pollPad() {
+  var list = navigator.getGamepads ? navigator.getGamepads() : null;
+  if (!list) return;
+  var gp = null;
+  for (var i = 0; i < list.length; i++) if (list[i] && list[i].connected) { gp = list[i]; break; }
+  if (!gp) return;
+  var ax = gp.axes || [], bt = gp.buttons || [];
+  function pr(i) { var b = bt[i]; return !!b && (b.pressed || b.value > 0.4); }
+  var mx = Math.abs(ax[0] || 0) > 0.2 ? ax[0] : 0;
+  var my = Math.abs(ax[1] || 0) > 0.2 ? ax[1] : 0;
+  if (mx || my) { M1.tx = clamp(M1.tx + mx * 0.03, 0, TW); M1.ty = clamp(M1.ty + my * 0.03, 0, TH); mouseSeen = true; }
+  var any = false;
+  for (var j = 0; j < bt.length; j++) if (pr(j)) { any = true; break; }
+  if (any && !padPrevAny && (G.state === 'title' || G.state === 'over')) startMatch(G.mode || 'cpu');
+  if (pr(9) && !padPrevAny && (G.state === 'play' || G.state === 'pause')) togglePause();
+  padPrevAny = any;
+}
+
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { if (G.state === 'play' || G.state === 'serve' || G.state === 'pause') togglePause(); });
+
+/* keyboard nudges the target point — same pathway as touch, so physics agree */
+function keyboardTargets(dt) {
+  var sp = 1.15 * dt;
+  if (keys['a']) { M1.tx -= sp; mouseSeen = false; }
+  if (keys['d']) { M1.tx += sp; mouseSeen = false; }
+  if (keys['w']) { M1.ty -= sp; mouseSeen = false; }
+  if (keys['s']) { M1.ty += sp; mouseSeen = false; }
+  if (G.mode === 'vs') {
+    if (keys['arrowleft']) M2.tx -= sp;
+    if (keys['arrowright']) M2.tx += sp;
+    if (keys['arrowup']) M2.ty -= sp;
+    if (keys['arrowdown']) M2.ty += sp;
+  }
+}
+
+/* ------------------------------------------------------------------- AI -- */
+function cpuThink(dt) {
+  var diff = clamp(0.55 + G.streak * 0.08 + (G.s2 < G.s1 ? 0.12 : 0), 0.5, 0.95);
+  var speed = 0.9 + diff * 0.9;
+  var home = { x: 0.5, y: 0.18 };
+  var tx = home.x, ty = home.y;
+
+  if (puck.y < TH * 0.55) {
+    /* puck in reach: attack or defend */
+    if (puck.vy > 0.25 && puck.y > 0.5) {
+      /* moving away toward P1 — drift home */
+    } else if (puck.y < MAL_R + PUCK_R + 0.02 && Math.abs(puck.vx) < 0.1 && Math.abs(puck.vy) < 0.1) {
+      /* puck pinned near own goal line: come around behind it */
+      tx = puck.x; ty = Math.max(0.05, puck.y - 0.08);
+    } else {
+      /* line up behind the puck, then push through toward the far goal */
+      var aim = { x: 0.5 + rnd(-0.14, 0.14) * (1.2 - diff), y: TH };
+      var dir = { x: aim.x - puck.x, y: aim.y - puck.y };
+      var dl = hyp(dir.x, dir.y) || 1;
+      tx = puck.x - dir.x / dl * (MAL_R + PUCK_R) * 0.6;
+      ty = puck.y - dir.y / dl * (MAL_R + PUCK_R) * 0.6;
+    }
+  } else if (puck.vy < -0.3) {
+    /* incoming: intercept on our half at the puck's projected x */
+    var steps = (puck.y - 0.3) / Math.max(0.05, -puck.vy);
+    var px = puck.x + puck.vx * steps;
+    /* fold wall bounces */
+    px = Math.abs(px % (2 * TW));
+    if (px > TW) px = 2 * TW - px;
+    tx = lerp(puck.x, px, diff); ty = 0.3;
+  }
+
+  ty = clamp(ty, MAL_R, TH / 2 - MAL_R);
+  tx = clamp(tx, MAL_R, TW - MAL_R);
+  M2.tx = lerp(M2.tx, tx, clamp(speed * dt * 3.4, 0, 1));
+  M2.ty = lerp(M2.ty, ty, clamp(speed * dt * 3.4, 0, 1));
+}
+
+/* -------------------------------------------------------------- physics -- */
+function moveMallet(m, half, dt) {
+  /* mallets chase their target point; velocity is derived for puck impulse */
+  var minY = half === 1 ? TH / 2 + MAL_R : MAL_R;
+  var maxY = half === 1 ? TH - MAL_R : TH / 2 - MAL_R;
+  m.tx = clamp(m.tx, MAL_R, TW - MAL_R);
+  m.ty = clamp(m.ty, minY, maxY);
+  var k = 1 - Math.exp(-26 * dt);
+  var nx = lerp(m.x, m.tx, k), ny = lerp(m.y, m.ty, k);
+  m.vx = (nx - m.x) / dt; m.vy = (ny - m.y) / dt;
+  m.x = nx; m.y = ny;
+}
+
+function inGoalMouth(x) { return Math.abs(x - 0.5) < GOAL_W / 2; }
+
+function stepPuck(dt) {
+  puck.x += puck.vx * dt;
+  puck.y += puck.vy * dt;
+  /* friction: an air table keeps things moving */
+  var f = Math.pow(0.986, dt * 60);
+  puck.vx *= f; puck.vy *= f;
+
+  /* side walls */
+  if (puck.x < PUCK_R) { puck.x = PUCK_R; puck.vx = Math.abs(puck.vx); sfx.wall(hyp(puck.vx, puck.vy)); }
+  if (puck.x > TW - PUCK_R) { puck.x = TW - PUCK_R; puck.vx = -Math.abs(puck.vx); sfx.wall(hyp(puck.vx, puck.vy)); }
+
+  /* end walls: bounce outside the goal mouth, pass through inside it */
+  if (puck.y < PUCK_R) {
+    if (inGoalMouth(puck.x)) { if (puck.y < -PUCK_R * 1.5) return scoreGoal(1); }
+    else { puck.y = PUCK_R; puck.vy = Math.abs(puck.vy); sfx.wall(hyp(puck.vx, puck.vy)); }
+  }
+  if (puck.y > TH - PUCK_R) {
+    if (inGoalMouth(puck.x)) { if (puck.y > TH + PUCK_R * 1.5) return scoreGoal(2); }
+    else { puck.y = TH - PUCK_R; puck.vy = -Math.abs(puck.vy); sfx.wall(hyp(puck.vx, puck.vy)); }
+  }
+
+  /* mallet collisions */
+  hitMallet(M1); hitMallet(M2);
+
+  /* speed cap keeps it playable and un-tunnel-able */
+  var sp = hyp(puck.vx, puck.vy), cap = 3.4;
+  if (sp > cap) { puck.vx *= cap / sp; puck.vy *= cap / sp; }
+  return false;
+}
+function hitMallet(m) {
+  var dx = puck.x - m.x, dy = puck.y - m.y;
+  var d = hyp(dx, dy), rr = PUCK_R + MAL_R;
+  if (d >= rr || d === 0) return;
+  var nx = dx / d, ny = dy / d;
+  puck.x = m.x + nx * (rr + 0.001);
+  puck.y = m.y + ny * (rr + 0.001);
+  var rvx = puck.vx - m.vx, rvy = puck.vy - m.vy;
+  var dot = rvx * nx + rvy * ny;
+  if (dot < 0) {
+    puck.vx = puck.vx - 2 * dot * nx + m.vx * 0.25;
+    puck.vy = puck.vy - 2 * dot * ny + m.vy * 0.25;
+  } else {
+    puck.vx += m.vx * 0.4; puck.vy += m.vy * 0.4;
+  }
+  var sp = hyp(puck.vx, puck.vy);
+  sfx.clack(sp);
+  spark(puck.x, puck.y, m.col, clamp(3 + sp * 4 | 0, 3, 12));
+  G.shake = Math.min(8, G.shake + sp * 1.6);
+}
+function spark(x, y, col, n) {
+  for (var i = 0; i < n; i++) sparks.push({ x: x, y: y, vx: rnd(-0.8, 0.8), vy: rnd(-0.8, 0.8), t: rnd(0.15, 0.4), col: col });
+}
+function floatText(x, y, txt, col) { floaters.push({ x: x, y: y, txt: txt, col: col, t: 1.2 }); }
+
+function scoreGoal(who) {
+  if (who === 1) G.s1++; else G.s2++;
+  G.state = 'goal'; G.goalT = 1.5;
+  G.flash = 0.5; G.flashCol = who === 1 ? '#7de2ff' : '#ffb04d';
+  G.shake = 12; G.slow = 0.5;
+  sfx.goal();
+  floatText(0.5, who === 1 ? 0.3 : TH - 0.3, 'GOAL', who === 1 ? '#7de2ff' : '#ffb04d');
+  var s = Math.max(G.s1, G.s2);
+  if (s >= WIN_SCORE) {
+    setTimeout(function () { sfx.win(); overScreen(G.s1 > G.s2); }, 1100);
+  } else if (s === WIN_SCORE - 1 && G.s1 !== G.s2) {
+    banner('GAME POINT', '#ff4d4d');
+  }
+  return true;
+}
+
+/* ------------------------------------------------------------------ sim -- */
+function update(dt) {
+  if (G.bannerT > 0) G.bannerT -= dt;
+  if (G.flash > 0) G.flash -= dt * 1.6;
+  if (G.shake > 0) { G.shake -= G.shake * 8 * dt + 0.4 * dt; if (G.shake < 0.05) G.shake = 0; }
+  for (var i = sparks.length - 1; i >= 0; i--) {
+    var sp = sparks[i];
+    sp.t -= dt; sp.x += sp.vx * dt; sp.y += sp.vy * dt;
+    if (sp.t <= 0) sparks.splice(i, 1);
+  }
+  for (i = floaters.length - 1; i >= 0; i--) { floaters[i].t -= dt; if (floaters[i].t <= 0) floaters.splice(i, 1); }
+
+  if (G.state === 'goal') {
+    G.goalT -= dt;
+    if (G.goalT <= 0 && Math.max(G.s1, G.s2) < WIN_SCORE) serve(G.s1 > G.s2 ? 2 : 1);
+    return;
+  }
+  if (G.state !== 'play' && G.state !== 'serve') return;
+
+  var ts = 1;
+  if (G.slow > 0) { G.slow -= dt; ts = 0.4; }
+  var sdt = dt * ts;
+
+  pollPad();
+  keyboardTargets(dt);
+  if (G.mode === 'cpu') cpuThink(sdt);
+
+  moveMallet(M1, 1, Math.max(sdt, 0.0001));
+  moveMallet(M2, 2, Math.max(sdt, 0.0001));
+
+  if (G.state === 'serve') {
+    G.serveT -= dt;
+    if (G.serveT <= 0) G.state = 'play';
+    return;
+  }
+
+  /* fixed substeps so a fast puck cannot tunnel a mallet or wall */
+  var steps = 4;
+  for (var s2 = 0; s2 < steps; s2++) {
+    if (stepPuck(sdt / steps)) break;
+  }
+  puck.trail.push({ x: puck.x, y: puck.y });
+  if (puck.trail.length > 14) puck.trail.shift();
+}
+
+/* -------------------------------------------------------------- render --- */
+var stage = document.getElementById('stage');
+var ctx = cv.getContext('2d', { alpha: false });
+var view = { w: 900, h: 600, dpr: 1 };
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(240, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+function layout() {
+  /* upright when the screen is tall, rotated 90° when wide */
+  var rot = view.w > view.h * 1.05;
+  var pad2 = 14, hud = 0;
+  if (!rot) {
+    var s = Math.min((view.w - pad2 * 2) / TW, (view.h - pad2 * 2) / TH);
+    return { rot: false, s: s, ox: (view.w - s * TW) / 2, oy: (view.h - s * TH) / 2, len: s * TH };
+  }
+  var s2 = Math.min((view.w - pad2 * 2) / TH, (view.h - pad2 * 2) / TW);
+  return { rot: true, s: s2, ox: (view.w - s2 * TH) / 2, oy: (view.h - s2 * TW) / 2, len: s2 * TH };
+}
+function SX(m, x, y) { return m.rot ? m.ox + m.len - y * m.s : m.ox + x * m.s; }
+function SY(m, x, y) { return m.rot ? m.oy + x * m.s : m.oy + y * m.s; }
+
+function render(t) {
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  ctx.fillStyle = '#0b0f1e';
+  ctx.fillRect(0, 0, view.w, view.h);
+  if (G.state === 'title') return;
+
+  var m = layout();
+  ctx.save();
+  if (G.shake > 0.3) ctx.translate(rnd(-G.shake, G.shake) * 0.4, rnd(-G.shake, G.shake) * 0.4);
+
+  /* table bed */
+  var x0 = SX(m, 0, 0), y0 = SY(m, 0, 0), x1 = SX(m, TW, TH), y1 = SY(m, TW, TH);
+  var left = Math.min(x0, x1), top = Math.min(y0, y1);
+  var wpx = Math.abs(x1 - x0), hpx = Math.abs(y1 - y0);
+  var g = ctx.createLinearGradient(left, top, left, top + hpx);
+  g.addColorStop(0, '#101830'); g.addColorStop(0.5, '#0d1428'); g.addColorStop(1, '#101830');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.roundRect(left, top, wpx, hpx, 18); ctx.fill();
+
+  /* air holes */
+  ctx.fillStyle = 'rgba(125,226,255,0.06)';
+  for (var ax = 0.08; ax < TW; ax += 0.12) {
+    for (var ay = 0.1; ay < TH; ay += 0.12) {
+      ctx.fillRect(SX(m, ax, ay) - 1, SY(m, ax, ay) - 1, 2, 2);
+    }
+  }
+
+  /* centre line + circle */
+  ctx.strokeStyle = 'rgba(255,204,77,0.4)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath(); ctx.moveTo(SX(m, 0, TH / 2), SY(m, 0, TH / 2)); ctx.lineTo(SX(m, TW, TH / 2), SY(m, TW, TH / 2)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(SX(m, 0.5, TH / 2), SY(m, 0.5, TH / 2), 0.14 * m.s, 0, TAU); ctx.stroke();
+
+  /* rails + goal mouths */
+  ctx.lineWidth = 5;
+  ctx.shadowBlur = 12;
+  function rail(xa, ya, xb, yb, col) {
+    ctx.strokeStyle = col; ctx.shadowColor = col;
+    ctx.beginPath(); ctx.moveTo(SX(m, xa, ya), SY(m, xa, ya)); ctx.lineTo(SX(m, xb, yb), SY(m, xb, yb)); ctx.stroke();
+  }
+  var gl = 0.5 - GOAL_W / 2, gr = 0.5 + GOAL_W / 2;
+  rail(0, 0, 0, TH, '#2d63b8'); rail(TW, 0, TW, TH, '#2d63b8');
+  rail(0, 0, gl, 0, '#2d63b8'); rail(gr, 0, TW, 0, '#2d63b8');
+  rail(0, TH, gl, TH, '#2d63b8'); rail(gr, TH, TW, TH, '#2d63b8');
+  /* goal glow: P2 defends top (orange), P1 bottom (cyan) */
+  rail(gl, 0, gr, 0, 'rgba(255,176,77,0.85)');
+  rail(gl, TH, gr, TH, 'rgba(125,226,255,0.85)');
+  ctx.shadowBlur = 0;
+
+  /* puck trail */
+  for (var i = 0; i < puck.trail.length; i++) {
+    var tr = puck.trail[i], k = i / puck.trail.length;
+    ctx.globalAlpha = k * 0.35;
+    ctx.fillStyle = '#ffcc4d';
+    ctx.beginPath(); ctx.arc(SX(m, tr.x, tr.y), SY(m, tr.x, tr.y), PUCK_R * m.s * k, 0, TAU); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  /* puck */
+  ctx.shadowColor = '#ffcc4d'; ctx.shadowBlur = 16;
+  ctx.fillStyle = '#ffcc4d';
+  ctx.beginPath(); ctx.arc(SX(m, puck.x, puck.y), SY(m, puck.x, puck.y), PUCK_R * m.s, 0, TAU); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(11,15,30,0.5)';
+  ctx.beginPath(); ctx.arc(SX(m, puck.x, puck.y), SY(m, puck.x, puck.y), PUCK_R * m.s * 0.55, 0, TAU); ctx.fill();
+
+  /* mallets */
+  [M1, M2].forEach(function (mm) {
+    var mx = SX(m, mm.x, mm.y), my = SY(m, mm.x, mm.y), r = MAL_R * m.s;
+    ctx.shadowColor = mm.col; ctx.shadowBlur = 18;
+    ctx.fillStyle = mm.col;
+    ctx.beginPath(); ctx.arc(mx, my, r, 0, TAU); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(11,15,30,0.55)';
+    ctx.beginPath(); ctx.arc(mx, my, r * 0.62, 0, TAU); ctx.fill();
+    ctx.fillStyle = mm.col;
+    ctx.beginPath(); ctx.arc(mx, my, r * 0.28, 0, TAU); ctx.fill();
+  });
+
+  /* sparks */
+  for (i = 0; i < sparks.length; i++) {
+    var sp = sparks[i];
+    ctx.globalAlpha = clamp(sp.t / 0.4, 0, 1);
+    ctx.fillStyle = sp.col;
+    ctx.fillRect(SX(m, sp.x, sp.y) - 2, SY(m, sp.x, sp.y) - 2, 4, 4);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  /* score: sits in each defender's half, rotated sensibly */
+  ctx.font = '800 ' + Math.round(m.s * 0.16) + 'px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = '#ffb04d';
+  ctx.fillText(G.s2, SX(m, 0.5, TH * 0.25) + (m.rot ? 0 : 0), SY(m, 0.5, TH * 0.25) + m.s * 0.055);
+  ctx.fillStyle = '#7de2ff';
+  ctx.fillText(G.s1, SX(m, 0.5, TH * 0.75), SY(m, 0.5, TH * 0.75) + m.s * 0.055);
+  ctx.globalAlpha = 1;
+
+  /* banner */
+  if (G.bannerT > 0) {
+    var ba = G.bannerT < 0.3 ? G.bannerT / 0.3 : 1;
+    ctx.globalAlpha = clamp(ba, 0, 1);
+    ctx.font = '800 ' + Math.round(view.h * 0.05) + 'px "Segoe UI", sans-serif';
+    ctx.fillStyle = G.bannerCol;
+    ctx.shadowColor = G.bannerCol; ctx.shadowBlur = 18;
+    ctx.fillText(G.banner, view.w / 2, view.h * 0.5 - view.h * 0.02);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+  for (i = 0; i < floaters.length; i++) {
+    var fl = floaters[i];
+    ctx.globalAlpha = clamp(fl.t, 0, 1);
+    ctx.font = '800 ' + Math.round(m.s * 0.1) + 'px "Segoe UI", sans-serif';
+    ctx.fillStyle = fl.col;
+    ctx.fillText(fl.txt, SX(m, fl.x, fl.y), SY(m, fl.x, fl.y));
+    ctx.globalAlpha = 1;
+  }
+  ctx.textAlign = 'left';
+
+  if (G.flash > 0.01) {
+    ctx.globalAlpha = clamp(G.flash, 0, 1) * 0.4;
+    ctx.fillStyle = G.flashCol;
+    ctx.fillRect(0, 0, view.w, view.h);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ----------------------------------------------------------------- loop -- */
+var lastT = 0, timeAcc = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var raw = (now - lastT) / 1000;
+  lastT = now;
+  if (raw > 0.05) raw = 0.05;
+  if (raw < 0) raw = 0;
+  timeAcc += raw;
+  if (G.state !== 'pause') update(raw);
+  render(timeAcc);
+}
+
+/* ----------------------------------------------------------------- boot -- */
+resetPositions(1);
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

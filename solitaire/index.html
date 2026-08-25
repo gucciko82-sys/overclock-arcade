@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Solitaire — Klondike</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="Klondike solitaire on a neon felt. Draw one or three, unlimited undo, tap-to-move or drag, and an auto-finish when you have it won.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Solitaire">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eaf2ff;
+    --dim: rgba(234,242,255,0.58);
+    --panel: rgba(9,13,30,0.62);
+    --line: rgba(255,255,255,0.13);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    min-width: 44px; height: 44px; border-radius: 12px; padding: 0 10px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 12px; font-weight: 800; letter-spacing: 0.06em;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.22); }
+  body:not(.playing) #topbtns { display: none; }
+
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(11,15,30,0.78), rgba(6,8,18,0.95));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(520px, 100%);
+    background: rgba(10,14,30,0.82);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 22px 20px 20px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(30px, 9vw, 52px);
+    letter-spacing: 0.1em; font-weight: 800; line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 24px rgba(255,204,77,0.45);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(20px, 6vw, 30px); letter-spacing: 0.08em; font-weight: 800; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.05em; margin-bottom: 12px; }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 340px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(255,255,255,0.09); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 14px 0 6px; }
+  .stat { background: rgba(255,255,255,0.045); border: 1px solid var(--line); border-radius: 12px; padding: 8px 6px; }
+  .stat .k { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(17px, 5vw, 23px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .best { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .best b { color: var(--accent); }
+  .btn {
+    margin-top: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; padding: 0 28px;
+    border-radius: 14px; border: 1px solid rgba(255,204,77,0.55);
+    background: rgba(255,204,77,0.13); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: 0.16em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,204,77,0.3); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(255,255,255,0.05); }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(26px, 8vw, 46px); font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+
+  /* ---------- Landscape phone (GAME-RULES 2). Real usable height on an iPhone
+     held sideways is ~342px, not 390. Trim card chrome so the primary action
+     stays above the fold; every tap target stays at or above the 40px floor
+     from GAME-RULES 4. ---------- */
+  @media (max-height: 620px) {
+    .card { padding: 14px 16px 12px; border-radius: 16px; }
+    .keys { display: none; }
+    .btn { margin-top: 8px; min-height: 44px; padding: 0 22px; }
+    .btnrow { gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="topbtns">
+    <button class="iconbtn" id="undoBtn" type="button">UNDO</button>
+    <button class="iconbtn" id="newBtn" type="button">NEW</button>
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   SOLITAIRE — Klondike for the Overclock arcade.
+   Neon felt, procedurally drawn cards, draw-1 or draw-3, unlimited undo,
+   tap a card to send it somewhere sensible or drag it yourself, and an
+   auto-finish that plays the endgame for you once everything is face up.
+   One file, no assets, oscillator audio.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'solitaire_v1';
+var K_MUTE = 'solitaire_muted_v1';
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function loadJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.5;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.5;
+  var b = document.getElementById('muteBtn');
+  b.classList.toggle('off', m);
+  b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(28, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+var sfx = {
+  place: function () { tone('triangle', 500, 380, 0.05, 0.08); },
+  flip:  function () { tone('triangle', 660, 880, 0.06, 0.07); },
+  found: function () { tone('triangle', 700, 1050, 0.09, 0.11); },
+  draw:  function () { tone('square', 300, 260, 0.03, 0.05); },
+  undo:  function () { tone('square', 400, 300, 0.05, 0.06); },
+  bad:   function () { tone('square', 200, 150, 0.07, 0.06); },
+  win:   function () { for (var i = 0; i < 6; i++) tone('triangle', 523 * Math.pow(1.2, i), 523 * Math.pow(1.2, i), 0.16, 0.1, i * 0.09); }
+};
+
+/* ---------------------------------------------------------------- cards -- */
+var SUITS = ['♠', '♥', '♦', '♣'];
+var RED = { '♥': true, '♦': true };
+var RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+
+var G = {
+  state: 'title',        // title | play | won
+  draw3: loadStr('solitaire_draw3', '0') === '1',
+  moves: 0, time: 0, score: 0,
+  wins: (loadJSON(K_SAVE, {}) || {}).wins || 0,
+  bestTime: (loadJSON(K_SAVE, {}) || {}).bestTime || 0,
+  autoT: 0, winT: 0
+};
+var stock = [], waste = [], found = [[], [], [], []], tab = [[], [], [], [], [], [], []];
+var undoStack = [];
+var drag = null;    // {cards, from, fromIdx, x, y, ox, oy}
+var winFx = [];
+
+function mkDeck() {
+  var d = [];
+  for (var s = 0; s < 4; s++) for (var r = 1; r <= 13; r++) d.push({ s: s, r: r, up: false });
+  for (var i = d.length - 1; i > 0; i--) {
+    var j = (Math.random() * (i + 1)) | 0, t = d[i]; d[i] = d[j]; d[j] = t;
+  }
+  return d;
+}
+function deal() {
+  stock = mkDeck(); waste = []; found = [[], [], [], []];
+  tab = [[], [], [], [], [], [], []];
+  for (var c = 0; c < 7; c++) {
+    for (var r2 = c; r2 < 7; r2++) tab[r2].push(stock.pop());
+    tab[c][tab[c].length - 1].up = true;
+  }
+  undoStack.length = 0;
+  G.moves = 0; G.time = 0; G.score = 0; G.autoT = 0;
+  winFx.length = 0;
+}
+
+/* snapshots for undo: cheap full-state copy */
+function snapshot() {
+  undoStack.push(JSON.stringify({ stock: stock, waste: waste, found: found, tab: tab, score: G.score }));
+  if (undoStack.length > 500) undoStack.shift();
+}
+function undo() {
+  if (!undoStack.length || G.state !== 'play') return;
+  var s = JSON.parse(undoStack.pop());
+  stock = s.stock; waste = s.waste; found = s.found; tab = s.tab; G.score = s.score;
+  G.moves++;
+  sfx.undo();
+}
+
+/* ------------------------------------------------------------ rules ------ */
+function canFound(card, fi) {
+  var pile = found[fi];
+  if (!pile.length) return card.r === 1;
+  var top = pile[pile.length - 1];
+  return top.s === card.s && card.r === top.r + 1;
+}
+function canTab(card, ti) {
+  var pile = tab[ti];
+  if (!pile.length) return card.r === 13;
+  var top = pile[pile.length - 1];
+  if (!top.up) return false;
+  return (RED[SUITS[top.s]] !== RED[SUITS[card.s]]) && card.r === top.r - 1;
+}
+function flipReveal(ti) {
+  var p = tab[ti];
+  if (p.length && !p[p.length - 1].up) { p[p.length - 1].up = true; G.score += 5; sfx.flip(); }
+}
+function drawStock() {
+  snapshot();
+  G.moves++;
+  if (!stock.length) {
+    if (!waste.length) { undoStack.pop(); return; }
+    while (waste.length) { var c = waste.pop(); c.up = false; stock.push(c); }
+    sfx.draw();
+    return;
+  }
+  var n = G.draw3 ? 3 : 1;
+  for (var i = 0; i < n && stock.length; i++) {
+    var c2 = stock.pop(); c2.up = true; waste.push(c2);
+  }
+  sfx.draw();
+}
+function checkWin() {
+  var total = found[0].length + found[1].length + found[2].length + found[3].length;
+  if (total === 52 && G.state === 'play') {
+    G.state = 'won';
+    G.wins++;
+    if (!G.bestTime || G.time < G.bestTime) G.bestTime = Math.floor(G.time);
+    saveJSON(K_SAVE, { wins: G.wins, bestTime: G.bestTime });
+    sfx.win();
+    G.winT = 0;
+    setTimeout(wonScreen, 2600);
+  }
+}
+/* everything face-up and stock empty → the game is solved; play it out */
+function canAutoFinish() {
+  if (stock.length || waste.length > 1) return false;
+  for (var i = 0; i < 7; i++) {
+    for (var j = 0; j < tab[i].length; j++) if (!tab[i][j].up) return false;
+  }
+  return found[0].length + found[1].length + found[2].length + found[3].length < 52;
+}
+function autoStep() {
+  /* move the lowest needed card to a foundation */
+  var piles = [waste].concat(tab);
+  for (var p = 0; p < piles.length; p++) {
+    var pile = piles[p];
+    if (!pile.length) continue;
+    var c = pile[pile.length - 1];
+    for (var f = 0; f < 4; f++) {
+      if (canFound(c, f)) {
+        pile.pop(); found[f].push(c);
+        G.score += 10; sfx.found();
+        checkWin();
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/* -------------------------------------------------------------- overlay -- */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+function fmtTime(s) { s = Math.floor(s); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
+function titleScreen() {
+  G.state = 'title';
+  document.body.classList.remove('playing');
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>SOLITAIRE</h1>' +
+      '<div class="tagline">Klondike on neon felt. Tap a card and it goes somewhere sensible; drag it if you disagree. Unlimited undo, and an AUTO button that plays the endgame once you have it won.</div>' +
+      '<div class="keys">' +
+        '<div>Move a card<span>Tap it, or drag it</span></div>' +
+        '<div>Draw<span>Tap the deck</span></div>' +
+        '<div>Undo<span>U or the UNDO button</span></div>' +
+        '<div>New deal<span>N or the NEW button</span></div>' +
+      '</div>' +
+      (G.wins > 0 ? '<div class="best">Wins: <b>' + G.wins + '</b>' + (G.bestTime ? ' &middot; best ' + fmtTime(G.bestTime) : '') + '</div>' : '') +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="d1">DEAL &middot; DRAW 1</button>' +
+        '<button class="btn ghost" data-act="d3">DEAL &middot; DRAW 3</button>' +
+      '</div>' +
+    '</div>');
+}
+function wonScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">All four stacks home</div>' +
+      '<h2>YOU WIN</h2>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Time</div><div class="v accent">' + fmtTime(G.time) + '</div></div>' +
+        '<div class="stat"><div class="k">Moves</div><div class="v">' + G.moves + '</div></div>' +
+        '<div class="stat"><div class="k">Score</div><div class="v">' + G.score + '</div></div>' +
+        '<div class="stat"><div class="k">Total wins</div><div class="v">' + G.wins + '</div></div>' +
+      '</div>' +
+      (G.bestTime ? '<div class="best">Best time: <b>' + fmtTime(G.bestTime) + '</b></div>' : '') +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="d1">NEW &middot; DRAW 1</button>' +
+        '<button class="btn ghost" data-act="d3">NEW &middot; DRAW 3</button>' +
+      '</div>' +
+    '</div>');
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 'd1' || act === 'd3') {
+    G.draw3 = act === 'd3';
+    saveStr('solitaire_draw3', G.draw3 ? '1' : '0');
+    startGame();
+  }
+});
+function startGame() {
+  hideOverlay();
+  document.body.classList.add('playing');
+  deal();
+  G.state = 'play';
+}
+document.getElementById('undoBtn').addEventListener('click', function () { initAudio(); undo(); });
+document.getElementById('newBtn').addEventListener('click', function () { initAudio(); titleScreen(); });
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  initAudio();
+  if (k === 'm') setMuted(!muted);
+  else if (k === 'u' || (k === 'z' && (e.ctrlKey || e.metaKey))) undo();
+  else if (k === 'n') titleScreen();
+  else if (G.state === 'title' && (k === ' ' || k === 'enter')) { G.draw3 = false; startGame(); }
+});
+
+/* -------------------------------------------------------------- layout --- */
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var view = { w: 900, h: 600, dpr: 1 };
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(240, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+function metrics() {
+  var pad = 8;
+  var cw = Math.min((view.w - pad * 8) / 7, 110);
+  var ch = cw * 1.42;
+  var ox = (view.w - (cw * 7 + pad * 6)) / 2;
+  var topY = Math.max(58, view.h * 0.02 + 54);
+  var tabY = topY + ch + 16;
+  var fanUp = Math.max(18, ch * 0.26);       // face-up fan offset
+  var fanDn = Math.max(8, ch * 0.11);        // face-down fan offset
+  return { pad: pad, cw: cw, ch: ch, ox: ox, topY: topY, tabY: tabY, fanUp: fanUp, fanDn: fanDn };
+}
+function colX(m, i) { return m.ox + i * (m.cw + m.pad); }
+
+/* pile hit zones: returns {pile:'stock'|'waste'|'found'|'tab', idx, cardIdx} */
+function hitTest(x, y) {
+  var m = metrics();
+  /* stock + waste top-left, foundations top-right */
+  if (y >= m.topY && y <= m.topY + m.ch) {
+    if (x >= colX(m, 0) && x <= colX(m, 0) + m.cw) return { pile: 'stock' };
+    if (x >= colX(m, 1) && x <= colX(m, 1) + m.cw) return { pile: 'waste' };
+    for (var f = 0; f < 4; f++) {
+      if (x >= colX(m, 3 + f) && x <= colX(m, 3 + f) + m.cw) return { pile: 'found', idx: f };
+    }
+  }
+  /* tableau: walk columns; find deepest card under the point */
+  for (var c = 0; c < 7; c++) {
+    var px = colX(m, c);
+    if (x < px || x > px + m.cw) continue;
+    var pile = tab[c];
+    if (!pile.length) {
+      if (y >= m.tabY && y <= m.tabY + m.ch) return { pile: 'tab', idx: c, cardIdx: -1 };
+      continue;
+    }
+    var yy = m.tabY;
+    var best = null;
+    for (var i = 0; i < pile.length; i++) {
+      var hgt = (i === pile.length - 1) ? m.ch : (pile[i].up ? m.fanUp : m.fanDn);
+      if (y >= yy && y <= yy + ((i === pile.length - 1) ? m.ch : hgt)) best = i;
+      yy += (pile[i].up ? m.fanUp : m.fanDn);
+    }
+    /* also allow grabbing below the last card's fan into its body */
+    if (best === null && y >= m.tabY && y <= yy - (pile[pile.length - 1].up ? m.fanUp : m.fanDn) + m.ch) best = pile.length - 1;
+    if (best !== null) return { pile: 'tab', idx: c, cardIdx: best };
+  }
+  return null;
+}
+function cardPos(pile, idx, cardIdx) {
+  var m = metrics();
+  if (pile === 'stock') return { x: colX(m, 0), y: m.topY };
+  if (pile === 'waste') return { x: colX(m, 1), y: m.topY };
+  if (pile === 'found') return { x: colX(m, 3 + idx), y: m.topY };
+  var y = m.tabY;
+  for (var i = 0; i < cardIdx; i++) y += tab[idx][i].up ? m.fanUp : m.fanDn;
+  return { x: colX(m, idx), y: y };
+}
+
+/* --------------------------------------------------------------- moves --- */
+function tryAutoMove(src) {
+  /* tap: waste/tab top card → foundation first, else best tableau spot */
+  var card, take = 1;
+  if (src.pile === 'waste') {
+    if (!waste.length) return false;
+    card = waste[waste.length - 1];
+  } else if (src.pile === 'tab') {
+    var pile = tab[src.idx];
+    if (src.cardIdx < 0 || !pile.length) return false;
+    card = pile[src.cardIdx];
+    if (!card.up) { if (src.cardIdx === pile.length - 1) { snapshot(); flipReveal(src.idx); G.moves++; return true; } return false; }
+    take = pile.length - src.cardIdx;
+  } else return false;
+
+  /* single card: try foundation */
+  if (take === 1) {
+    for (var f = 0; f < 4; f++) {
+      if (canFound(card, f)) { moveCards(src, { pile: 'found', idx: f }, 1); return true; }
+    }
+  }
+  /* try tableau homes */
+  for (var t2 = 0; t2 < 7; t2++) {
+    if (src.pile === 'tab' && t2 === src.idx) continue;
+    if (canTab(card, t2)) { moveCards(src, { pile: 'tab', idx: t2 }, take); return true; }
+  }
+  return false;
+}
+function moveCards(src, dst, count) {
+  snapshot();
+  var cards;
+  if (src.pile === 'waste') cards = waste.splice(waste.length - count, count);
+  else if (src.pile === 'found') cards = found[src.idx].splice(found[src.idx].length - count, count);
+  else cards = tab[src.idx].splice(src.cardIdx, count);
+
+  if (dst.pile === 'found') { found[dst.idx] = found[dst.idx].concat(cards); G.score += 10; sfx.found(); }
+  else { tab[dst.idx] = tab[dst.idx].concat(cards); if (src.pile === 'waste') G.score += 5; sfx.place(); }
+  if (src.pile === 'tab') flipReveal(src.idx);
+  if (src.pile === 'found') G.score -= 10;
+  G.moves++;
+  checkWin();
+}
+
+/* ---------------------------------------------------------------- input -- */
+var pressPt = null;
+cv.addEventListener('pointerdown', function (e) {
+  initAudio();
+  if (G.state !== 'play') { e.preventDefault(); return; }
+  var x = e.clientX, y = e.clientY;
+  var hit = hitTest(x, y);
+  pressPt = { x: x, y: y, hit: hit, moved: false };
+  if (!hit) return;
+  if (hit.pile === 'tab' && hit.cardIdx >= 0 && tab[hit.idx][hit.cardIdx] && tab[hit.idx][hit.cardIdx].up) {
+    var pos = cardPos('tab', hit.idx, hit.cardIdx);
+    drag = { src: hit, count: tab[hit.idx].length - hit.cardIdx, x: x, y: y, ox: x - pos.x, oy: y - pos.y };
+  } else if (hit.pile === 'waste' && waste.length) {
+    var pos2 = cardPos('waste');
+    drag = { src: hit, count: 1, x: x, y: y, ox: x - pos2.x, oy: y - pos2.y };
+  }
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  e.preventDefault();
+});
+cv.addEventListener('pointermove', function (e) {
+  if (!pressPt) return;
+  if (Math.abs(e.clientX - pressPt.x) + Math.abs(e.clientY - pressPt.y) > 8) pressPt.moved = true;
+  if (drag) { drag.x = e.clientX; drag.y = e.clientY; }
+});
+function pointerEnd(e) {
+  if (G.state !== 'play') { pressPt = null; drag = null; return; }
+  var wasDrag = drag && pressPt && pressPt.moved;
+  var hit = pressPt && pressPt.hit;
+
+  if (wasDrag) {
+    /* drop: what pile is under the card's top-left-ish point? */
+    var m = metrics();
+    var dropHit = hitTest(e.clientX, e.clientY) || hitTest(drag.x - drag.ox + m.cw / 2, drag.y - drag.oy + m.ch / 2);
+    var did = false;
+    if (dropHit) {
+      var card = drag.src.pile === 'waste' ? waste[waste.length - 1] : tab[drag.src.idx][drag.src.cardIdx];
+      if (dropHit.pile === 'found' && drag.count === 1 && canFound(card, dropHit.idx)) {
+        moveCards(drag.src, dropHit, 1); did = true;
+      } else if (dropHit.pile === 'tab' && canTab(card, dropHit.idx) && !(drag.src.pile === 'tab' && dropHit.idx === drag.src.idx)) {
+        moveCards(drag.src, dropHit, drag.count); did = true;
+      }
+    }
+    if (!did) sfx.bad();
+  } else if (hit) {
+    /* tap */
+    if (hit.pile === 'stock') drawStock();
+    else tryAutoMove(hit);
+  }
+  drag = null; pressPt = null;
+}
+cv.addEventListener('pointerup', pointerEnd);
+cv.addEventListener('pointercancel', function () { drag = null; pressPt = null; });
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+/* -------------------------------------------------------------- render --- */
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
+}
+function drawCardFace(c, x, y, m) {
+  var red = RED[SUITS[c.s]];
+  roundRect(x, y, m.cw, m.ch, m.cw * 0.09);
+  ctx.fillStyle = '#eef3ff';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(20,30,60,0.5)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  var col = red ? '#d8384f' : '#1b2340';
+  ctx.fillStyle = col;
+  var fs = Math.max(11, m.cw * 0.26);
+  ctx.font = '800 ' + fs + 'px "Segoe UI", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(RANKS[c.r - 1], x + m.cw * 0.08, y + fs + m.cw * 0.04);
+  ctx.font = '600 ' + fs + 'px "Segoe UI", sans-serif';
+  ctx.fillText(SUITS[c.s], x + m.cw * 0.08, y + fs * 2 + m.cw * 0.02);
+  /* big centre pip */
+  ctx.font = '600 ' + m.cw * 0.52 + 'px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.globalAlpha = 0.9;
+  ctx.fillText(SUITS[c.s], x + m.cw / 2, y + m.ch * 0.72);
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+}
+function drawCardBack(x, y, m) {
+  roundRect(x, y, m.cw, m.ch, m.cw * 0.09);
+  ctx.fillStyle = '#182a55';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(125,226,255,0.5)';
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(125,226,255,0.25)';
+  roundRect(x + 5, y + 5, m.cw - 10, m.ch - 10, m.cw * 0.06);
+  ctx.stroke();
+  /* little chevron weave */
+  ctx.strokeStyle = 'rgba(125,226,255,0.16)';
+  ctx.beginPath();
+  for (var yy = y + 12; yy < y + m.ch - 8; yy += 9) {
+    for (var xx = x + 8; xx < x + m.cw - 12; xx += 12) {
+      ctx.moveTo(xx, yy + 4); ctx.lineTo(xx + 6, yy); ctx.lineTo(xx + 12, yy + 4);
+    }
+  }
+  ctx.stroke();
+}
+function drawSlot(x, y, m, label) {
+  roundRect(x, y, m.cw, m.ch, m.cw * 0.09);
+  ctx.strokeStyle = 'rgba(125,226,255,0.28)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  if (label) {
+    ctx.fillStyle = 'rgba(234,242,255,0.22)';
+    ctx.font = '600 ' + m.cw * 0.42 + 'px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, x + m.cw / 2, y + m.ch / 2);
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  }
+}
+
+function render(t) {
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  /* neon felt */
+  var g = ctx.createRadialGradient(view.w / 2, view.h * 0.3, 40, view.w / 2, view.h * 0.5, view.h);
+  g.addColorStop(0, '#12303c'); g.addColorStop(1, '#0b0f1e');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, view.w, view.h);
+  if (G.state === 'title') return;
+
+  var m = metrics();
+
+  /* HUD */
+  ctx.font = '700 11px "Segoe UI", sans-serif';
+  ctx.fillStyle = 'rgba(234,242,255,0.6)';
+  ctx.textAlign = 'left';
+  ctx.fillText('TIME ' + fmtTime(G.time) + '   ·   MOVES ' + G.moves + '   ·   SCORE ' + Math.max(0, G.score) + (G.draw3 ? '   ·   DRAW 3' : '   ·   DRAW 1'), m.ox, m.topY - 12);
+
+  /* stock */
+  if (stock.length) drawCardBack(colX(m, 0), m.topY, m);
+  else drawSlot(colX(m, 0), m.topY, m, '↺');
+  /* waste: show up to 3 in draw-3 */
+  if (waste.length) {
+    var show = G.draw3 ? Math.min(3, waste.length) : 1;
+    for (var wv = show; wv >= 1; wv--) {
+      var wc = waste[waste.length - wv];
+      var isDragTop = drag && drag.src.pile === 'waste' && wv === 1;
+      if (!isDragTop) drawCardFace(wc, colX(m, 1) + (show - wv) * m.cw * 0.18, m.topY, m);
+    }
+  } else drawSlot(colX(m, 1), m.topY, m);
+  /* foundations */
+  for (var f = 0; f < 4; f++) {
+    var fp = found[f];
+    if (fp.length) drawCardFace(fp[fp.length - 1], colX(m, 3 + f), m.topY, m);
+    else drawSlot(colX(m, 3 + f), m.topY, m, 'A');
+  }
+  /* tableau */
+  for (var c = 0; c < 7; c++) {
+    var pile = tab[c];
+    if (!pile.length) { drawSlot(colX(m, c), m.tabY, m, 'K'); continue; }
+    var y = m.tabY;
+    for (var i = 0; i < pile.length; i++) {
+      var dragged = drag && drag.src.pile === 'tab' && drag.src.idx === c && i >= drag.src.cardIdx;
+      if (!dragged) {
+        if (pile[i].up) drawCardFace(pile[i], colX(m, c), y, m);
+        else drawCardBack(colX(m, c), y, m);
+      }
+      y += pile[i].up ? m.fanUp : m.fanDn;
+    }
+  }
+
+  /* AUTO button when solvable */
+  if (G.state === 'play' && canAutoFinish()) {
+    var bw = 120, bx = view.w / 2 - bw / 2, by = view.h - 64;
+    roundRect(bx, by, bw, 44, 12);
+    ctx.fillStyle = 'rgba(255,204,77,0.16)';
+    ctx.fill();
+    ctx.strokeStyle = '#ffcc4d'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = '#ffcc4d';
+    ctx.font = '800 14px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('AUTO ▶', bx + bw / 2, by + 22);
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+    G.autoBtn = { x: bx, y: by, w: bw, h: 44 };
+  } else G.autoBtn = null;
+
+  /* dragged stack on top */
+  if (drag) {
+    var dx = drag.x - drag.ox, dy = drag.y - drag.oy;
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 18;
+    if (drag.src.pile === 'waste') {
+      drawCardFace(waste[waste.length - 1], dx, dy, m);
+    } else {
+      var pile2 = tab[drag.src.idx];
+      var yy2 = dy;
+      for (var k2 = drag.src.cardIdx; k2 < pile2.length; k2++) {
+        drawCardFace(pile2[k2], dx, yy2, m);
+        yy2 += m.fanUp;
+      }
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  /* win cascade */
+  if (G.state === 'won') {
+    G.winT += 0.016;
+    if (winFx.length < 60 && Math.random() < 0.4) {
+      winFx.push({ x: colX(m, 3 + ((Math.random() * 4) | 0)) + m.cw / 2, y: m.topY + m.ch / 2, vx: (Math.random() - 0.5) * 500, vy: -Math.random() * 380, s: (Math.random() * 4) | 0, r: 1 + ((Math.random() * 13) | 0) });
+    }
+    for (var w2 = 0; w2 < winFx.length; w2++) {
+      var fx = winFx[w2];
+      fx.vy += 600 * 0.016; fx.x += fx.vx * 0.016; fx.y += fx.vy * 0.016;
+      if (fx.y > view.h - m.ch && fx.vy > 0) { fx.vy *= -0.75; fx.y = view.h - m.ch; }
+      drawCardFace({ s: fx.s, r: fx.r, up: true }, fx.x, fx.y, m);
+    }
+  }
+}
+
+/* handle AUTO button taps (canvas-drawn button) */
+cv.addEventListener('pointerdown', function (e) {
+  if (G.autoBtn && G.state === 'play') {
+    var b = G.autoBtn;
+    if (e.clientX >= b.x && e.clientX <= b.x + b.w && e.clientY >= b.y && e.clientY <= b.y + b.h) {
+      G.autoT = 0.01;   // start auto-finish ticker
+    }
+  }
+});
+
+/* ----------------------------------------------------------------- loop -- */
+var lastT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  if (G.state === 'play') {
+    G.time += dt;
+    if (G.autoT > 0) {
+      G.autoT -= dt;
+      if (G.autoT <= 0) {
+        if (autoStep()) G.autoT = 0.12;
+        else G.autoT = 0;
+      }
+    }
+  }
+  render(now / 1000);
+}
+
+/* ----------------------------------------------------------------- boot -- */
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

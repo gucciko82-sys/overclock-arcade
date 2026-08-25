@@ -1,0 +1,1660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Pitch — Home Run Derby</title>
+<meta name="theme-color" content="#2b3140">
+<meta name="description" content="Golden hour at the ballpark. Ten outs, one swing at a time — fastball, curve, changeup, slider. Time the barrel and put one over the wall.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pitch">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #2b3140;
+    --accent: #e2b45f;
+    --fg: #f2ece0;
+    --dim: rgba(242,236,224,0.62);
+    --panel: rgba(28,33,42,0.74);
+    --line: rgba(242,236,224,0.16);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+  #overlay, #topbtns, #touchui { cursor: auto; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .iconbtn:active { background: rgba(226,180,95,0.25); }
+  body:not(.playing) #topbtns { display: none; }
+
+  #touchui { position: absolute; inset: 0; z-index: 5; pointer-events: none; display: none; }
+  body.touch.playing #touchui { display: block; }
+  .tbtn {
+    position: absolute; pointer-events: auto;
+    border-radius: 14px;
+    background: rgba(242,236,224,0.09); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tbtn:active { background: rgba(226,180,95,0.3); }
+  #tUp   { left: max(12px, env(safe-area-inset-left)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 62px); width: 62px; height: 56px; }
+  #tDown { left: max(12px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom)); width: 62px; height: 56px; }
+  #tSwing {
+    right: max(14px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom));
+    width: 92px; height: 84px; border-radius: 18px; font-size: 13px; letter-spacing: 0.14em;
+    color: #241c10; border-color: rgba(226,180,95,0.6); background: rgba(226,180,95,0.85);
+  }
+  @media (max-width: 420px) {
+    #tUp, #tDown { width: 54px; height: 50px; }
+    #tUp { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 56px); }
+    #tSwing { width: 80px; height: 74px; }
+  }
+
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(32,38,48,0.78), rgba(12,15,20,0.94));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(540px, 100%);
+    background: rgba(30,35,45,0.92);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 22px 20px 20px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.65);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 {
+    margin: 6px 0 2px;
+    font-size: clamp(30px, 9vw, 52px);
+    letter-spacing: 0.16em; font-weight: 700; line-height: 1;
+    color: var(--accent);
+  }
+  h2 { margin: 2px 0 6px; font-size: clamp(20px, 6vw, 30px); letter-spacing: 0.08em; font-weight: 700; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.04em; margin-bottom: 12px; }
+  .keys {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    font-size: 12.5px; color: var(--dim);
+    margin: 12px auto 4px; max-width: 360px; text-align: left;
+  }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px;
+    border-bottom: 1px dashed rgba(242,236,224,0.1); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 6px; }
+  .stats.two { grid-template-columns: repeat(2, 1fr); }
+  .stat { background: rgba(242,236,224,0.05); border: 1px solid var(--line); border-radius: 10px; padding: 8px 4px; }
+  .stat .k { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
+  .stat .v { font-size: clamp(16px, 5vw, 23px); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .v.accent { color: var(--accent); }
+  .best { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .best b { color: var(--accent); }
+  .btn {
+    margin-top: 16px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; padding: 0 28px;
+    border-radius: 10px; border: 1px solid rgba(226,180,95,0.6);
+    background: rgba(226,180,95,0.15); color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.16em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(226,180,95,0.32); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(242,236,224,0.05); }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .paused { font-size: clamp(26px, 8vw, 46px); font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+  @media (max-height: 620px) {
+    .card { padding: 14px 16px; border-radius: 12px; }
+    .keys { display: none; }
+    .stats { margin: 10px 0 4px; }
+    .btn { margin-top: 10px; min-height: 46px; }
+  }
+  @media (max-width: 400px) {
+    .btn { padding: 0 18px; letter-spacing: 0.1em; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Pause">&#10073;&#10073;</button>
+  </div>
+  <div id="touchui">
+    <button class="tbtn" id="tUp" type="button" aria-label="Uppercut swing">UPPER</button>
+    <button class="tbtn" id="tDown" type="button" aria-label="Level swing">LEVEL</button>
+    <button class="tbtn" id="tSwing" type="button" aria-label="Swing">SWING</button>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   PITCH — home run derby for the Overclock arcade.
+   Golden hour, ten outs, and a guy on the mound who will not throw you the
+   same thing twice. Fastball, curve, changeup, slider — the barrel only
+   pays if the timing is honest. One file, no assets, oscillator audio.
+   ========================================================================= */
+"use strict";
+
+var TAU = Math.PI * 2;
+var K_SAVE = 'pitch_v1';
+var K_MUTE = 'pitch_muted_v1';
+
+/* --- field geometry, in feet ------------------------------------------- */
+var PLATE_U   = 0;        /* home plate */
+var MOUND_U   = 60.5;     /* rubber */
+var REL_U     = 54;       /* release point (extension off the rubber) */
+var REL_H     = 6.1;
+var CATCH_U   = -4.2;
+var WALL_U    = 375;      /* the fence */
+var WALL_H    = 10;
+var VIEW_SPAN = 82;       /* feet across the screen at plate zoom */
+var VIEW_U0   = -16;
+var G_FT      = 32.174;
+var DRAG      = 0.0021;   /* 1/ft — tuned so 105 mph at 28 deg = ~410 ft */
+var LIFT      = 0.0014;   /* backspin Magnus, perpendicular to velocity */
+var FLIGHT_TS = 1.2;      /* ball flight runs a touch quick so a homer isn't a coffee break */
+
+var FAR_ROWS  = 13;
+var FAR_ROOF  = 60;       /* nominal height of the far structure, in far-feet */
+var FAR_TOP   = 50;       /* top row of seats */
+/* farK and farWallFt are solved per layout in resize(): the far side has to
+   fill the sky on a tall phone and stay out of the way in landscape, and its
+   padded wall has to be tall enough that the pitch is always thrown against
+   dark green rather than against a crowd. */
+var farK = 0.4, farWallFt = 18;
+
+var WIND_T    = 0.95;     /* seconds of windup before release */
+var READY_T   = 0.55;
+var SWING_LEAD = 0.045;   /* barrel takes this long to reach the zone */
+var MISS_W    = 0.155;    /* |timing error| beyond this and you swing through it */
+var OUTS_MAX  = 10;
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function pick(a) { return a[(Math.random() * a.length) | 0]; }
+function easeOut(t) { var k = 1 - t; return 1 - k * k * k; }
+function loadJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null ? d : v; } catch (e) { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+function mulberry(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------------------------------------------------------------- audio -- */
+var actx = null, muted = loadStr(K_MUTE, '0') === '1', master = null;
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.42;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = m; saveStr(K_MUTE, m ? '1' : '0');
+  if (master) master.gain.value = m ? 0 : 0.42;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = m ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(24, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseBurst(dur, vol, freq, delay, type, q) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var n = Math.max(1, Math.floor(actx.sampleRate * dur));
+  var buf = actx.createBuffer(1, n, actx.sampleRate);
+  var ch = buf.getChannelData(0);
+  for (var i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  var src = actx.createBufferSource(); src.buffer = buf;
+  var f = actx.createBiquadFilter(); f.type = type || 'lowpass'; f.frequency.value = freq;
+  if (q) f.Q.value = q;
+  var g = actx.createGain(); g.gain.value = vol;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+}
+/* crowd = shaped noise with a slow swell baked into the buffer */
+function crowd(level, dur, delay, rise) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var n = Math.max(1, Math.floor(actx.sampleRate * dur));
+  var buf = actx.createBuffer(1, n, actx.sampleRate);
+  var ch = buf.getChannelData(0);
+  var up = clamp(rise === undefined ? 0.25 : rise, 0.02, 0.9);
+  for (var i = 0; i < n; i++) {
+    var p = i / n;
+    var env = p < up ? Math.pow(p / up, 1.4) : Math.pow(1 - (p - up) / (1 - up), 1.8);
+    ch[i] = (Math.random() * 2 - 1) * env;
+  }
+  var src = actx.createBufferSource(); src.buffer = buf;
+  var f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 760; f.Q.value = 0.7;
+  var g = actx.createGain(); g.gain.value = level;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+}
+var sfx = {
+  crack: function (q) {
+    /* the sharp part is noise; the wood is a fast falling tone */
+    noiseBurst(0.03, 0.34 + q * 0.3, 4200, 0, 'highpass');
+    noiseBurst(0.05, 0.18 + q * 0.2, 1600, 0, 'bandpass', 1.2);
+    tone('triangle', 900 + q * 500, 190, 0.11, 0.20 + q * 0.16);
+    tone('sine', 240, 90, 0.16, 0.1);
+  },
+  weak:   function () { noiseBurst(0.04, 0.2, 900, 0, 'bandpass', 1.5); tone('sine', 300, 120, 0.1, 0.11); },
+  whiff:  function () { noiseBurst(0.14, 0.10, 1100, 0, 'bandpass', 0.6); },
+  mitt:   function () { noiseBurst(0.06, 0.3, 620); tone('sine', 170, 66, 0.1, 0.13); },
+  ump:    function () { tone('square', 300, 250, 0.13, 0.05); tone('square', 250, 190, 0.2, 0.045, 0.14); },
+  homer:  function () { crowd(0.5, 2.6, 0, 0.18); tone('sine', 523, 523, 0.3, 0.07, 0.05); tone('sine', 659, 659, 0.34, 0.07, 0.22); tone('sine', 784, 784, 0.5, 0.075, 0.42); },
+  moon:   function () { crowd(0.62, 3.4, 0, 0.14); tone('sine', 523, 523, 0.28, 0.07, 0.05); tone('sine', 659, 659, 0.28, 0.07, 0.2); tone('sine', 784, 784, 0.28, 0.07, 0.36); tone('sine', 1047, 1047, 0.7, 0.08, 0.52); },
+  groan:  function () { crowd(0.16, 1.1, 0, 0.3); },
+  murmur: function () { crowd(0.055, 3.2, 0, 0.45); },
+  tally:  function () { tone('sine', 392, 392, 0.24, 0.08); tone('sine', 494, 494, 0.28, 0.08, 0.2); tone('sine', 587, 587, 0.5, 0.09, 0.4); }
+};
+
+/* ---------------------------------------------------------------- pitches -- */
+/* vBrk: extra feet of hump-then-drop against the straight line (+ = falls off
+   the table late).  lBrk: feet of sideways sweep mid-flight.  Both formulas
+   land on the same commanded target, so what changes is the SHAPE of the path. */
+var PITCHES = {
+  fastball: { name: 'FASTBALL', mph: [92, 97], dur: [0.62, 0.68], vBrk: -0.20, vExp: 2.0, lBrk: 0.10, lExp: 2.0, arm: 1.00 },
+  slider:   { name: 'SLIDER',   mph: [84, 88], dur: [0.74, 0.82], vBrk: 1.05,  vExp: 2.4, lBrk: 2.30, lExp: 2.6, arm: 0.97 },
+  changeup: { name: 'CHANGEUP', mph: [80, 84], dur: [0.86, 0.94], vBrk: 1.30,  vExp: 2.5, lBrk: 0.35, lExp: 2.2, arm: 1.00 },
+  curve:    { name: 'CURVE',    mph: [76, 80], dur: [0.98, 1.08], vBrk: 3.60,  vExp: 3.0, lBrk: 0.30, lExp: 2.0, arm: 0.88 }
+};
+var PITCH_KEYS = ['fastball', 'slider', 'changeup', 'curve'];
+var forceType = null;   /* test hook */
+
+/* ---------------------------------------------------------------- state -- */
+var sv = loadJSON(K_SAVE, {}) || {};
+var G = {
+  state: 'title',      /* title | play | pause | over */
+  hr: 0, outs: 0, pitches: 0,
+  longest: 0, total: 0, contacts: 0,
+  bestHR: (sv && typeof sv.hr === 'number' && isFinite(sv.hr)) ? sv.hr : 0,
+  bestLong: (sv && typeof sv.longest === 'number' && isFinite(sv.longest)) ? sv.longest : 0,
+  bestTotal: (sv && typeof sv.total === 'number' && isFinite(sv.total)) ? sv.total : 0,
+  banner: '', bannerSub: '', bannerT: 0, bannerBig: false,
+  shake: 0, flash: 0, newBest: false
+};
+var P = {
+  phase: 'ready',      /* ready | wind | flight | hit | result */
+  t: 0, type: 'fastball', def: PITCHES.fastball,
+  dur: 0.7, mph: 94, hTarget: 2.6, latTarget: 0, latDir: 1,
+  swung: false, sw: 0, plane: 0, err: 0,
+  outcome: '', dist: 0, ev: 0, la: 0,
+  resultT: 0, holdT: 0
+};
+var ball = { u: REL_U, h: REL_H, lat: 0, vu: 0, vh: 0, live: false, flying: false, foul: false, cleared: false, hitWall: false, bounces: 0, dist: 0, spin: 0 };
+var trail = [];
+var fx = [];
+var ump = { callT: 0 };
+var crowdHype = 0;
+var plane = 0;         /* -1 level, 0 neutral, +1 uppercut */
+
+/* --------------------------------------------------------------- canvas -- */
+var stage = document.getElementById('stage');
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d', { alpha: false });
+var view = { w: 900, h: 600, dpr: 1 };
+var groundY = 430, bandH = 170, platePx = 11;
+var cam = { u0: VIEW_U0, px: 11 };
+var farStand = null, bleachCrowd = null, shaggers = null;
+
+function resize() {
+  var w = Math.max(240, stage.clientWidth || window.innerWidth);
+  var h = Math.max(240, stage.clientHeight || window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = w; view.h = h; view.dpr = dpr;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+  groundY = Math.round(h * (h > w ? 0.78 : 0.735));
+  bandH = h - groundY;
+  platePx = w / VIEW_SPAN;
+  var standPx = Math.max(60, groundY - h * 0.30);
+  farK = clamp(standPx / (FAR_ROOF * platePx), 0.2, 2.2);
+  farWallFt = FAR_ROOF * clamp(7.2 * platePx / standPx, 0.26, 0.58);
+  if (G.state === 'title' || P.phase !== 'hit') { cam.px = platePx; cam.u0 = VIEW_U0; }
+  buildFarStand();
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+function buildFarStand() {
+  /* The opposite side of the park. It is anchored to the ground line and
+     scaled at FAR_SCALE, so it behaves like something a long way off: it
+     towers over you at plate zoom and settles into a band when the camera
+     pulls back for a fly ball. Screen-space x, world-ish y. */
+  var rng = mulberry(9021);
+  var rows = [];
+  var n = Math.max(26, Math.round(view.w / 11));
+  for (var r = 0; r < FAR_ROWS; r++) {
+    var row = [];
+    for (var i = 0; i < n; i++) {
+      var f = (i + rng() * 0.5) / n;
+      /* aisles cut the bowl into sections, and nobody sits shoulder to
+         shoulder — the empties are what stop it reading as wallpaper */
+      var aisle = Math.abs((f * 7) % 1 - 0.5) > 0.455;
+      row.push({ x: f, c: rng(), ph: rng() * TAU, d: rng(), skip: aisle || rng() < 0.18, j: rng() });
+    }
+    rows.push(row);
+  }
+  farStand = { rows: rows };
+}
+(function buildWorldCrowd() {
+  var rng = mulberry(4477);
+  bleachCrowd = [];
+  for (var i = 0; i < 460; i++) {
+    var u = 381 + rng() * 96;
+    var ramp = 9 + (u - 375) * 0.31;             /* seats rise going back */
+    bleachCrowd.push({ u: u, h: ramp - 1.2 - rng() * 5.0, c: rng(), ph: rng() * TAU });
+  }
+  shaggers = [];
+  for (var s = 0; s < 3; s++) shaggers.push({ u: 190 + s * 68 + rng() * 22, ph: rng() * TAU });
+})();
+
+/* ----------------------------------------------------------- projection -- */
+function sx(u) { return (u - cam.u0) * cam.px; }
+function sy(h) { return groundY - h * cam.px; }
+
+/* -------------------------------------------------------- pitch geometry -- */
+/* p = 0 at release, 1 at the plate. Past 1 the ball finishes into the mitt. */
+function pitchHeight(def, p, hTarget) {
+  var q = Math.min(p, 1);
+  var base = REL_H + (hTarget - REL_H) * q;
+  var brk = def.vBrk * (q - Math.pow(q, def.vExp));
+  var h = base + brk;
+  if (p > 1) h = lerp(hTarget, 1.75, clamp((p - 1) / 0.28, 0, 1));
+  return h;
+}
+function pitchLat(def, p, latTarget, dir) {
+  var q = Math.min(p, 1);
+  return latTarget * q + def.lBrk * dir * (Math.pow(q, def.lExp) - q);
+}
+function pitchU(p) {
+  if (p <= 1) return REL_U * (1 - p);
+  return CATCH_U * clamp((p - 1) / 0.28, 0, 1);
+}
+function trackBall() {
+  var p = P.t / P.dur;
+  ball.u = pitchU(p);
+  ball.h = pitchHeight(P.def, p, P.hTarget);
+  ball.lat = pitchLat(P.def, p, P.latTarget, P.latDir);
+}
+
+/* --------------------------------------------------------------- pitching -- */
+function pickPitch() {
+  var hard = clamp(G.outs / OUTS_MAX, 0, 1);
+  var key;
+  if (forceType && PITCHES[forceType]) key = forceType;
+  else {
+    var bp = 0.34 + hard * 0.34;
+    if (Math.random() > bp) key = 'fastball';
+    else { var s = Math.random(); key = s < 0.37 ? 'curve' : (s < 0.70 ? 'slider' : 'changeup'); }
+  }
+  var def = PITCHES[key];
+  var ts = lerp(1.0, 0.86, hard);
+  P.type = key; P.def = def;
+  P.dur = rnd(def.dur[0], def.dur[1]) * ts;
+  P.mph = Math.round(rnd(def.mph[0], def.mph[1]) / ts);
+  P.hTarget = rnd(1.5, 3.6);
+  P.latTarget = rnd(-0.95, 0.95);
+  P.latDir = Math.random() < 0.5 ? -1 : 1;
+  P.swung = false; P.sw = 0; P.err = 0;
+  P.outcome = ''; P.dist = 0; P.ev = 0; P.la = 0;
+  ball.foul = false; ball.cleared = false; ball.hitWall = false;
+  ball.live = false; ball.flying = false; ball.bounces = 0; ball.dist = 0;
+  trail.length = 0;
+}
+function nextPitch() {
+  if (G.outs >= OUTS_MAX) { endRound(); return; }
+  pickPitch();
+  P.phase = 'ready'; P.t = 0;
+  G.pitches++;
+}
+
+/* ---------------------------------------------------------------- swing -- */
+function swing(forcedErr) {
+  if (G.state !== 'play') return;
+  if (P.phase !== 'wind' && P.phase !== 'flight') return;
+  if (P.swung) return;
+  initAudio();
+  P.swung = true; P.sw = 0; P.plane = plane;
+  var err;
+  if (typeof forcedErr === 'number') err = forcedErr;
+  else if (P.phase === 'wind') err = -(P.dur + (WIND_T - P.t));
+  else err = (P.t + SWING_LEAD) - P.dur;
+  P.err = err;
+  resolveSwing(err);
+}
+
+function resolveSwing(err) {
+  var ae = Math.abs(err);
+  if (ae > MISS_W) {
+    sfx.whiff();
+    finishPitch('MISS', 'SWING AND A MISS', true);
+    return;
+  }
+  var q = Math.pow(1 - ae / MISS_W, 0.85);
+  var hp = 1 - clamp((Math.abs(P.hTarget - 2.55) - 0.5) / 1.6, 0, 1) * 0.72;
+  var lp = 1 - clamp((Math.abs(P.latTarget) - 0.45) / 1.4, 0, 1) * 0.58;
+  var Q = q * hp * lp;
+
+  /* a wider foul band than feels obvious — mistimed contact that stays alive
+     is what makes an at-bat feel like baseball rather than a coin flip */
+  if (Q < 0.36) { foulBall(Q); return; }
+
+  var base = P.plane > 0 ? 33 : (P.plane < 0 ? 11 : 22);
+  var la = base + err * -95 + (P.hTarget - 2.55) * 3.2 + rnd(-2.6, 2.6);
+  var ev;
+  if (Q >= 0.85) ev = 99 + (Q - 0.85) * 82;
+  else if (Q >= 0.60) ev = 82 + (Q - 0.60) * 68;
+  else ev = 55 + (Q - 0.36) * 112.5;
+  ev *= 1 + rnd(-0.018, 0.018);
+  la = clamp(la, -14, 66);
+  if (la > 58 && Q < 0.82) { foulBall(Q); return; }
+
+  sfx.crack(clamp((Q - 0.3) / 0.7, 0, 1));
+  G.shake = Math.max(G.shake, 3 + Q * 9);
+  launchBall(ev, la, false);
+  P.outcome = Q >= 0.85 ? 'BARREL' : (Q >= 0.6 ? 'SOLID' : 'WEAK');
+  addFloat(sx(0), sy(P.hTarget), timingWord(err), '#f2ece0', 14);
+}
+function timingWord(err) {
+  var ms = Math.round(Math.abs(err) * 1000);
+  if (ms <= 14) return 'PERFECT';
+  return (err < 0 ? 'EARLY ' : 'LATE ') + ms + 'ms';
+}
+function foulBall(Q) {
+  sfx.weak();
+  G.shake = Math.max(G.shake, 3);
+  ball.foul = true;
+  var back = Math.random() < 0.5;
+  launchBall(back ? 42 : 58, back ? 96 : 74, true);
+  if (back) ball.vu = -Math.abs(ball.vu) * 1.5;
+  P.outcome = 'FOUL';
+}
+function launchBall(ev, la, foul) {
+  var v = ev * 1.4667, r = la * Math.PI / 180;
+  ball.u = 1.1;
+  ball.h = clamp(P.hTarget, 1.5, 3.7);
+  ball.lat = 0;
+  ball.vu = v * Math.cos(r);
+  ball.vh = v * Math.sin(r);
+  ball.live = true; ball.flying = true; ball.foul = !!foul;
+  ball.cleared = false; ball.hitWall = false; ball.bounces = 0; ball.dist = 0;
+  P.ev = Math.round(ev); P.la = Math.round(la);
+  P.phase = 'hit'; P.t = 0;
+  trail.length = 0;
+}
+
+function stepBall(dt) {
+  var n = 5, s = dt * FLIGHT_TS / n;
+  for (var i = 0; i < n; i++) {
+    if (!ball.live) return;
+    var sp = Math.sqrt(ball.vu * ball.vu + ball.vh * ball.vh) || 0.001;
+    var au = -DRAG * sp * ball.vu - LIFT * sp * ball.vh;
+    var ah = -G_FT - DRAG * sp * ball.vh + LIFT * sp * ball.vu;
+    ball.vu += au * s; ball.vh += ah * s;
+    var pu = ball.u;
+    ball.u += ball.vu * s;
+    ball.h += ball.vh * s;
+    ball.spin += sp * s * 0.28;
+    if (!ball.foul && !ball.cleared && !ball.hitWall && pu < WALL_U && ball.u >= WALL_U) {
+      if (ball.h > WALL_H) { ball.cleared = true; crowdHype = 1; }
+      else {
+        ball.hitWall = true; ball.dist = WALL_U;
+        ball.u = WALL_U; ball.vu = -Math.abs(ball.vu) * 0.32; ball.vh *= 0.5;
+      }
+    }
+    if (ball.h <= 0) {
+      ball.h = 0;
+      if (ball.bounces === 0 && !ball.hitWall) ball.dist = Math.max(0, ball.u);
+      ball.bounces++;
+      if (ball.bounces <= 2 && !ball.cleared && Math.abs(ball.vh) > 8) {
+        ball.vh = Math.abs(ball.vh) * 0.34; ball.vu *= 0.6;
+      } else {
+        ball.live = false; ball.flying = false;
+        landed();
+        return;
+      }
+    }
+  }
+}
+
+function landed() {
+  var d = Math.round(ball.dist);
+  if (ball.foul) { finishPitch('FOUL', 'FOUL BALL', false); return; }
+  G.contacts++;
+  G.total += d;
+  if (d > G.longest) G.longest = d;
+  P.dist = d;
+  if (ball.cleared) {
+    G.hr++;
+    crowdHype = 1;
+    var big = d >= 450;
+    G.flash = Math.max(G.flash, big ? 0.5 : 0.28);
+    G.shake = Math.max(G.shake, big ? 16 : 9);
+    if (big) sfx.moon(); else sfx.homer();
+    addFloat(sx(ball.u), sy(6), d + ' FT', '#e2b45f', 26);
+    finishPitch('HR', big ? 'NO DOUBT — ' + d + ' FEET' : 'HOME RUN — ' + d + ' FT', false, true);
+  } else {
+    sfx.groan();
+    var word = ball.hitWall ? 'OFF THE WALL' : (P.la < 8 ? 'GROUND OUT' : (P.la > 45 ? 'POPPED UP' : (d > 300 ? 'CAUGHT AT THE TRACK' : 'FLY OUT')));
+    addFloat(sx(ball.u), sy(4), d + ' FT', 'rgba(242,236,224,0.85)', 15);
+    finishPitch(P.la < 8 ? 'GROUNDER' : 'FLYOUT', word + ' · ' + d + ' FT', true);
+  }
+}
+
+function finishPitch(kind, msg, isOut, big) {
+  P.outcome = kind;
+  G.banner = msg; G.bannerT = 1.9; G.bannerBig = !!big;
+  if (isOut) G.outs++;
+  P.phase = 'result';
+  P.resultT = big ? 2.2 : (isOut ? 1.4 : 1.15);
+}
+
+function addFloat(x, y, txt, col, size) {
+  fx.push({ x: x, y: y, txt: txt, col: col, size: size || 15, life: 1.5, t: 1.5 });
+}
+
+/* ---------------------------------------------------------------- input -- */
+var held = { up: false, down: false };
+function updPlane() { plane = held.up ? 1 : (held.down ? -1 : 0); }
+
+cv.addEventListener('pointerdown', function (e) {
+  initAudio();
+  if (G.state === 'play') swing();
+  e.preventDefault();
+});
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+window.addEventListener('keydown', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+  if (e.repeat) return;
+  initAudio();
+  if (k === 'm') { setMuted(!muted); return; }
+  if (k === 'p' || k === 'escape') { if (G.state === 'play' || G.state === 'pause') togglePause(); return; }
+  if (G.state === 'title' && (k === ' ' || k === 'enter')) { startRound(); return; }
+  if (G.state === 'over' && (k === ' ' || k === 'enter' || k === 'r')) { startRound(); return; }
+  if (k === 'arrowup' || k === 'w') { held.up = true; updPlane(); }
+  else if (k === 'arrowdown' || k === 's') { held.down = true; updPlane(); }
+  else if (k === ' ') { if (G.state === 'play') swing(); }
+});
+window.addEventListener('keyup', function (e) {
+  var k = e.key ? e.key.toLowerCase() : '';
+  if (k === 'arrowup' || k === 'w') { held.up = false; updPlane(); }
+  else if (k === 'arrowdown' || k === 's') { held.down = false; updPlane(); }
+});
+(function () {
+  function hold(id, prop) {
+    var b = document.getElementById(id);
+    b.addEventListener('pointerdown', function (e) { initAudio(); held[prop] = true; updPlane(); e.preventDefault(); });
+    b.addEventListener('pointerup', function () { held[prop] = false; updPlane(); });
+    b.addEventListener('pointercancel', function () { held[prop] = false; updPlane(); });
+    b.addEventListener('pointerleave', function () { held[prop] = false; updPlane(); });
+  }
+  hold('tUp', 'up'); hold('tDown', 'down');
+  var s = document.getElementById('tSwing');
+  s.addEventListener('pointerdown', function (e) { initAudio(); if (G.state === 'play') swing(); e.preventDefault(); });
+})();
+
+var padSwing = false, padPause = false;
+function pollPad() {
+  var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var p = null;
+  for (var i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { p = pads[i]; break; }
+  if (!p) return;
+  var ay = p.axes && p.axes.length > 1 ? p.axes[1] : 0;
+  var dUp = !!(p.buttons[12] && p.buttons[12].pressed) || ay < -0.4;
+  var dDn = !!(p.buttons[13] && p.buttons[13].pressed) || ay > 0.4;
+  held.up = dUp; held.down = dDn; updPlane();
+  var a = !!(p.buttons[0] && p.buttons[0].pressed);
+  if (a && !padSwing) {
+    initAudio();
+    if (G.state === 'play') swing();
+    else if (G.state === 'title' || G.state === 'over') startRound();
+  }
+  padSwing = a;
+  var st = !!(p.buttons[9] && p.buttons[9].pressed);
+  if (st && !padPause && (G.state === 'play' || G.state === 'pause')) togglePause();
+  padPause = st;
+}
+
+window.addEventListener('blur', function () { if (G.state === 'play') togglePause(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden && G.state === 'play') togglePause(); });
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { if (G.state === 'play' || G.state === 'pause') togglePause(); });
+
+/* -------------------------------------------------------------- overlay -- */
+var overlay = document.getElementById('overlay');
+function hideOverlay() { overlay.classList.remove('on'); overlay.innerHTML = ''; }
+function showOverlay(h) { overlay.innerHTML = h; overlay.classList.add('on'); }
+function bestLine() {
+  if (!G.bestHR && !G.bestLong) return '';
+  return '<div class="best">Best round: <b>' + G.bestHR + '</b> home run' + (G.bestHR === 1 ? '' : 's') +
+    (G.bestLong ? ' &middot; longest <b>' + G.bestLong + ' ft</b>' : '') + '</div>';
+}
+function titleScreen() {
+  G.state = 'title';
+  document.body.classList.remove('playing');
+  cam.px = platePx; cam.u0 = VIEW_U0;
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>PITCH</h1>' +
+      '<div class="tagline">Golden hour, ten outs, and a guy on the mound who will not throw you the same thing twice. Fastball, slider, changeup, curve — square one up and put it over the wall at 375.</div>' +
+      '<div class="keys">' +
+        '<div>Swing<span>Click, Space, or tap SWING</span></div>' +
+        '<div>Swing plane<span>W / S or Up / Down</span></div>' +
+        '<div>Gamepad<span>A to swing, D-pad for plane</span></div>' +
+        '<div>Outs<span>Miss, take a strike, or make an out</span></div>' +
+        '<div>Pause<span>P or Esc &middot; Mute M</span></div>' +
+      '</div>' +
+      bestLine() +
+      '<button class="btn" data-act="start">STEP IN</button>' +
+    '</div>');
+}
+function pauseScreen() {
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Time</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Homers</div><div class="v accent">' + G.hr + '</div></div>' +
+        '<div class="stat"><div class="k">Outs</div><div class="v">' + G.outs + ' / ' + OUTS_MAX + '</div></div>' +
+        '<div class="stat"><div class="k">Longest</div><div class="v">' + G.longest + '</div></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">RESUME</button>' +
+        '<button class="btn ghost" data-act="quit">QUIT</button>' +
+      '</div>' +
+    '</div>');
+}
+function endRound() {
+  G.state = 'over';
+  document.body.classList.remove('playing');
+  cam.px = platePx; cam.u0 = VIEW_U0;
+  var better = G.hr > G.bestHR || (G.hr === G.bestHR && G.longest > G.bestLong);
+  G.newBest = better;
+  if (better) {
+    G.bestHR = G.hr; G.bestLong = G.longest; G.bestTotal = G.total;
+    saveJSON(K_SAVE, { hr: G.bestHR, longest: G.bestLong, total: G.bestTotal });
+  }
+  sfx.tally();
+  var head = G.hr >= 12 ? 'THE PARK IS EMPTY' : (G.hr >= 6 ? 'THAT WILL PLAY' : (G.hr >= 1 ? 'GOT ONE OUT' : 'TEN OUTS, NO SOUVENIRS'));
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Round over &middot; ' + OUTS_MAX + ' outs</div>' +
+      '<h2>' + head + '</h2>' +
+      (better ? '<div class="tagline" style="color:var(--accent)">NEW BEST ROUND</div>' : '') +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Home runs</div><div class="v accent">' + G.hr + '</div></div>' +
+        '<div class="stat"><div class="k">Longest</div><div class="v">' + G.longest + ' ft</div></div>' +
+        '<div class="stat"><div class="k">Total feet</div><div class="v">' + G.total.toLocaleString('en-US') + '</div></div>' +
+      '</div>' +
+      bestLine() +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="start">SWING AGAIN</button>' +
+        '<button class="btn ghost" data-act="title">TITLE</button>' +
+      '</div>' +
+    '</div>');
+}
+overlay.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!btn) return;
+  initAudio();
+  var act = btn.getAttribute('data-act');
+  if (act === 'start') startRound();
+  else if (act === 'resume') togglePause();
+  else if (act === 'quit' || act === 'title') titleScreen();
+});
+function togglePause() {
+  if (G.state === 'play') { G.state = 'pause'; pauseScreen(); }
+  else if (G.state === 'pause') { G.state = 'play'; hideOverlay(); }
+}
+function startRound() {
+  initAudio();
+  hideOverlay();
+  document.body.classList.add('playing');
+  G.hr = 0; G.outs = 0; G.pitches = 0;
+  G.longest = 0; G.total = 0; G.contacts = 0;
+  G.banner = ''; G.bannerT = 0; G.shake = 0; G.flash = 0; G.newBest = false;
+  fx.length = 0; trail.length = 0;
+  crowdHype = 0; ump.callT = 0;
+  cam.px = platePx; cam.u0 = VIEW_U0;
+  G.state = 'play';
+  pickPitch();
+  P.phase = 'ready'; P.t = 0;
+  G.pitches = 1;
+  sfx.murmur();
+}
+
+/* ------------------------------------------------------------------ sim -- */
+function update(dt) {
+  if (G.bannerT > 0) G.bannerT -= dt;
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 26);
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 1.6);
+  if (crowdHype > 0) crowdHype = Math.max(0, crowdHype - dt * 0.3);
+  if (ump.callT > 0) ump.callT -= dt;
+  for (var i = fx.length - 1; i >= 0; i--) {
+    fx[i].t -= dt; fx[i].y -= dt * 26;
+    if (fx[i].t <= 0) fx.splice(i, 1);
+  }
+  if (G.state !== 'play') { camEase(dt); return; }
+
+  P.t += dt;
+  if (P.swung && P.sw < 1) P.sw = Math.min(1, P.sw + dt / 0.30);
+
+  if (P.phase === 'ready') {
+    ball.u = REL_U + 4; ball.h = 4.4; ball.lat = 0;
+    if (P.t >= READY_T) { P.phase = 'wind'; P.t = 0; }
+  } else if (P.phase === 'wind') {
+    ball.u = REL_U + 5.5; ball.h = 4.2; ball.lat = 0;
+    if (P.t >= WIND_T) { P.phase = 'flight'; P.t = 0; trackBall(); }
+  } else if (P.phase === 'flight') {
+    trackBall();
+    var p = P.t / P.dur;
+    if (!P.swung && p >= 1.02 && !P.outcome) {
+      /* the ball is by you — the umpire has an opinion */
+      var isStrike = P.hTarget >= 1.55 && P.hTarget <= 3.45 && Math.abs(P.latTarget) <= 0.82;
+      sfx.mitt();
+      ump.callT = isStrike ? 0.9 : 0.5;
+      sfx.ump();
+      if (isStrike) finishPitch('STRIKE', 'CALLED STRIKE', true);
+      else finishPitch('BALL', 'BALL — ' + P.def.name + ' off the plate', false);
+    }
+  } else if (P.phase === 'hit') {
+    stepBall(dt);
+    if (ball.flying) {
+      trail.push({ u: ball.u, h: ball.h });
+      if (trail.length > 30) trail.shift();
+    }
+  } else if (P.phase === 'result') {
+    P.resultT -= dt;
+    if (P.resultT <= 0) nextPitch();
+  }
+  camEase(dt);
+}
+
+function camEase(dt) {
+  var tpx = platePx, tu0 = VIEW_U0;
+  if (G.state === 'play' && (P.phase === 'hit' || (P.phase === 'result' && P.dist > 0)) && !ball.foul) {
+    /* Pull back to follow the ball — and once it is really travelling, bring
+       the fence into frame so you can see what it has to beat. */
+    var bu = ball.u;
+    var reveal = lerp(126, WALL_U + 82, clamp((bu - 90) / 120, 0, 1));
+    var needU = Math.max(bu + 66, reveal);
+    var pxH = view.w / (needU - VIEW_U0);
+    var pxV = (groundY - view.h * 0.15) / Math.max(20, ball.h + 14);
+    tpx = Math.min(platePx, pxH, pxV);
+  }
+  var out = tpx < cam.px;
+  var k = 1 - Math.pow(out ? 0.0009 : 0.06, dt);
+  cam.px += (tpx - cam.px) * k;
+  cam.u0 += (tu0 - cam.u0) * k;
+}
+
+/* ------------------------------------------------------------- the park -- */
+function drawSky() {
+  var W = view.w, H = view.h;
+  var g = ctx.createLinearGradient(0, 0, 0, groundY);
+  g.addColorStop(0, '#3f5c7c');
+  g.addColorStop(0.34, '#7e91a0');
+  g.addColorStop(0.68, '#d8ad7d');
+  g.addColorStop(1, '#efc894');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, groundY + 2);
+  /* low sun behind the third base side */
+  var sunX = W * 0.17, sunY = H * 0.30;
+  var sg = ctx.createRadialGradient(sunX, sunY, 2, sunX, sunY, H * 0.42);
+  sg.addColorStop(0, 'rgba(255,235,186,0.85)');
+  sg.addColorStop(0.14, 'rgba(252,214,150,0.34)');
+  sg.addColorStop(1, 'rgba(250,206,140,0)');
+  ctx.fillStyle = sg;
+  ctx.fillRect(sunX - H * 0.42, sunY - H * 0.42, H * 0.84, H * 0.84);
+  ctx.fillStyle = 'rgba(255,243,208,0.9)';
+  ctx.beginPath(); ctx.arc(sunX, sunY, H * 0.026, 0, TAU); ctx.fill();
+
+  /* the warm band that sits on the stadium rim — without it a tight camera
+     only ever sees the cold top of the gradient and the hour is lost */
+  var rim = groundY - FAR_ROOF * cam.px * farK;
+  var glowH = Math.max(70, H * 0.22);
+  if (rim > -glowH) {
+    var rg = ctx.createLinearGradient(0, rim - glowH, 0, rim + 6);
+    rg.addColorStop(0, 'rgba(238,186,124,0)');
+    rg.addColorStop(0.55, 'rgba(242,192,130,0.32)');
+    rg.addColorStop(1, 'rgba(250,214,158,0.62)');
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, Math.max(0, rim - glowH), W, Math.min(groundY, rim + 6) - Math.max(0, rim - glowH));
+  }
+
+  /* a couple of long lit clouds, low and slow */
+  var cy4 = H * 0.16;
+  for (var ci = 0; ci < 3; ci++) {
+    var cw = W * (0.30 + ci * 0.10), cx4 = ((ci * 0.42 + 0.05) * W + Math.sin(ci * 2.1) * 20);
+    var chh = H * (0.016 + ci * 0.004);
+    var cyy = cy4 + ci * H * 0.045;
+    var cg = ctx.createRadialGradient(cx4, cyy, 0, cx4, cyy, cw * 0.55);
+    cg.addColorStop(0, 'rgba(255,228,192,' + (0.20 - ci * 0.045).toFixed(3) + ')');
+    cg.addColorStop(1, 'rgba(255,228,192,0)');
+    ctx.fillStyle = cg;
+    ctx.save();
+    ctx.translate(cx4, cyy);
+    ctx.scale(1, chh / (cw * 0.55));
+    ctx.beginPath(); ctx.arc(0, 0, cw * 0.55, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawFarStand(t) {
+  if (!farStand) return;
+  var W = view.w, H = view.h;
+  var fp = cam.px * farK;
+  function fy(h) { return groundY - h * fp; }
+  var yWall = fy(farWallFt), yTop = fy(FAR_TOP), yRoof = fy(FAR_ROOF);
+
+  /* the seating bowl */
+  var bowl = ctx.createLinearGradient(0, yTop, 0, yWall);
+  bowl.addColorStop(0, '#6b6f7a');
+  bowl.addColorStop(1, '#4e535d');
+  ctx.fillStyle = bowl;
+  ctx.fillRect(0, yTop, W, yWall - yTop + 1);
+
+  /* the crowd — rows of little people. Skip rows when they'd be under two
+     pixels tall; a smear of noise reads worse than fewer, clearer figures. */
+  var rows = farStand.rows;
+  var bowlH = yWall - yTop;
+  var nRows = clamp(Math.round(bowlH / 5), 4, rows.length);
+  var step = bowlH / nRows;
+  var fw = clamp(fp * 0.5, 1, 5), fh = Math.max(1.6, step * 0.62);
+  var head = fp > 3.6;
+  var hype = crowdHype;
+  for (var r = 0; r < nRows; r++) {
+    var y = yTop + r * step;
+    if (y > groundY || y + fh < -4) continue;
+    var row = rows[r];
+    ctx.fillStyle = 'rgba(36,40,48,0.16)';
+    ctx.fillRect(0, y + step * 0.86, W, Math.max(1, step * 0.14));
+    for (var j = 0; j < row.length; j++) {
+      var c = row[j];
+      if (c.skip) continue;
+      var bob = hype > 0 ? Math.sin(t * 10 + c.ph) * hype * step * 0.55 : 0;
+      var cx3 = c.x * W + (c.j - 0.5) * fw * 1.6, cy3 = y - bob + c.j * step * 0.22;
+      ctx.fillStyle = c.c < 0.16 ? '#b0a08e' : (c.c < 0.33 ? '#6b6874'
+        : (c.c < 0.50 ? '#8d7a6a' : (c.c < 0.66 ? '#5a6472' : (c.c < 0.82 ? '#9a7c66' : '#7d8892'))));
+      ctx.fillRect(cx3, cy3 + fh * 0.32, fw, fh * 0.68);
+      if (head) {
+        ctx.fillStyle = 'rgba(58,46,40,0.75)';
+        ctx.fillRect(cx3 + fw * 0.18, cy3, fw * 0.64, fh * 0.36);
+      }
+    }
+  }
+  /* the batter's eye — the dark panel dead centre that every park has, and
+     the thing that keeps a white ball readable against all those people */
+  var beH = Math.min(bowlH * 0.86, W * 0.14);
+  var beW = clamp(beH * 2.1, W * 0.16, W * 0.42);
+  var beX = W * 0.34 - beW * 0.5, beY = yWall - beH;
+  var bg2 = ctx.createLinearGradient(0, beY, 0, yWall);
+  bg2.addColorStop(0, '#2e4336');
+  bg2.addColorStop(1, '#213028');
+  ctx.fillStyle = bg2;
+  ctx.fillRect(beX, beY, beW, beH);
+  ctx.fillStyle = 'rgba(126,138,122,0.28)';
+  ctx.fillRect(beX, beY, beW, Math.max(1, fp * 0.45));
+  /* concourse shadow under the seats */
+  ctx.fillStyle = 'rgba(30,34,40,0.4)';
+  ctx.fillRect(0, yWall - Math.max(1.5, fp * 1.1), W, Math.max(1.5, fp * 1.1));
+
+  /* the padded wall the pitch is thrown against — dark, so the ball reads */
+  var wg = ctx.createLinearGradient(0, yWall, 0, groundY);
+  wg.addColorStop(0, '#2c4a33');
+  wg.addColorStop(1, '#1d3524');
+  ctx.fillStyle = wg;
+  ctx.fillRect(0, yWall, W, groundY - yWall + 2);
+  ctx.fillStyle = 'rgba(224,200,110,0.55)';
+  ctx.fillRect(0, yWall, W, Math.max(1, fp * 0.4));
+  /* wall seams */
+  ctx.strokeStyle = 'rgba(14,26,18,0.4)'; ctx.lineWidth = 1;
+  var seam = Math.max(18, fp * 12);
+  for (var sxp = (sx(0) % seam + seam) % seam; sxp < W; sxp += seam) {
+    ctx.beginPath(); ctx.moveTo(sxp, yWall); ctx.lineTo(sxp, groundY); ctx.stroke();
+  }
+
+  /* roof structure over the top row */
+  ctx.fillStyle = '#565c66';
+  ctx.fillRect(0, yRoof, W, yTop - yRoof + 1);
+  ctx.fillStyle = '#3f444d';
+  ctx.fillRect(0, yRoof, W, Math.max(1.5, fp * 1.2));
+  ctx.strokeStyle = 'rgba(48,52,60,0.7)'; ctx.lineWidth = Math.max(1, fp * 0.4);
+  var colStep = Math.max(40, fp * 26);
+  for (var cx2 = 20; cx2 < W; cx2 += colStep) {
+    ctx.beginPath(); ctx.moveTo(cx2, yRoof); ctx.lineTo(cx2, yTop); ctx.stroke();
+  }
+
+  /* light towers on the roof */
+  var towerH = fy(FAR_ROOF + 24);
+  if (yRoof - towerH > 6) {
+    for (var i = 0; i < 4; i++) {
+      var lx = W * (0.10 + i * 0.27);
+      var bw = Math.max(2, fp * 0.7);
+      ctx.fillStyle = '#4b515a';
+      ctx.fillRect(lx - bw / 2, towerH, bw, yRoof - towerH);
+      var hw = Math.max(10, fp * 5), hh = Math.max(5, fp * 2.2);
+      ctx.fillRect(lx - hw / 2, towerH - hh, hw, hh);
+      ctx.fillStyle = 'rgba(255,246,214,0.55)';
+      for (var b = 0; b < 4; b++) ctx.fillRect(lx - hw / 2 + 1 + b * (hw / 4), towerH - hh + 1, Math.max(1.4, hw / 6), Math.max(1.4, hh - 2));
+    }
+  }
+
+  /* atmospheric haze — sunlit from the third base side */
+  var hz = ctx.createLinearGradient(0, yRoof - 30, 0, groundY);
+  hz.addColorStop(0, 'rgba(238,204,158,0.34)');
+  hz.addColorStop(1, 'rgba(226,178,124,0.16)');
+  ctx.fillStyle = hz;
+  ctx.fillRect(0, Math.min(towerH, yRoof) - 4, W, groundY - Math.min(towerH, yRoof) + 6);
+  var side = ctx.createLinearGradient(0, 0, W, 0);
+  side.addColorStop(0, 'rgba(255,222,170,0.22)');
+  side.addColorStop(0.55, 'rgba(255,222,170,0)');
+  ctx.fillStyle = side;
+  ctx.fillRect(0, Math.min(towerH, yRoof) - 4, W, groundY - Math.min(towerH, yRoof) + 6);
+}
+
+function drawFieldBand() {
+  var W = view.w, H = view.h;
+  var top = groundY, bh = bandH;
+  /* mowed stripes running out from the plate */
+  var stripe = 26;
+  var u0 = cam.u0 - 4, u1 = cam.u0 + W / cam.px + 4;
+  var start = Math.floor(u0 / stripe) * stripe;
+  for (var u = start; u < u1; u += stripe) {
+    var x0 = sx(u), x1 = sx(u + stripe);
+    if (x1 < 0 || x0 > W) continue;
+    var even = (Math.floor(u / stripe) % 2 + 2) % 2 === 0;
+    ctx.fillStyle = even ? '#5d7c40' : '#4f6c36';
+    ctx.fillRect(x0, top, x1 - x0 + 1, bh);
+  }
+  /* a warm light gradient over the grass */
+  var lg = ctx.createLinearGradient(0, top, 0, H);
+  lg.addColorStop(0, 'rgba(255,214,150,0.20)');
+  lg.addColorStop(1, 'rgba(30,36,26,0.30)');
+  ctx.fillStyle = lg;
+  ctx.fillRect(0, top, W, bh);
+
+  /* dirt: home circle and the mound. Both radii scale with the camera or the
+     circles turn into tall skinny lakes the moment we zoom out for a fly ball. */
+  function dirt(uc, ru, col) {
+    var rx = ru * cam.px;
+    var ry = Math.min(bh * 0.55, rx * 0.55);
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.ellipse(sx(uc), top + ry * 0.90, rx, ry, 0, 0, TAU);
+    ctx.fill();
+  }
+  dirt(1, 13, '#9d6c44');
+  dirt(MOUND_U, 9, '#a3714a');
+  /* the mound itself, a low rise above the action line */
+  ctx.fillStyle = '#a3714a';
+  ctx.beginPath();
+  ctx.moveTo(sx(MOUND_U - 9), top + 1);
+  ctx.quadraticCurveTo(sx(MOUND_U), top - 0.85 * cam.px, sx(MOUND_U + 9), top + 1);
+  ctx.closePath(); ctx.fill();
+  /* rubber */
+  ctx.fillStyle = '#efeade';
+  ctx.fillRect(sx(MOUND_U) - 0.9 * cam.px, top - 0.72 * cam.px, 1.8 * cam.px, Math.max(1.4, 0.16 * cam.px));
+
+  /* warning track hugging the fence */
+  var tx0 = sx(WALL_U - 22), tx1 = sx(WALL_U);
+  if (tx1 > 0 && tx0 < W) {
+    var tg = ctx.createLinearGradient(0, top, 0, top + bh);
+    tg.addColorStop(0, '#a87b52');
+    tg.addColorStop(0.62, '#a87b52');
+    tg.addColorStop(1, 'rgba(168,123,82,0)');
+    ctx.fillStyle = tg;
+    ctx.fillRect(tx0, top, tx1 - tx0, bh);
+  }
+
+  /* chalk: the foul line running across the near field, and the box */
+  ctx.strokeStyle = 'rgba(246,244,236,0.7)';
+  ctx.lineWidth = Math.max(1.2, bh * 0.012);
+  ctx.beginPath();
+  ctx.moveTo(0, top + bh * 0.82);
+  ctx.lineTo(W, top + bh * 0.79);
+  ctx.stroke();
+  /* batter's box, home plate — sized in feet so they hold at any zoom */
+  var boxY = top + Math.min(bh * 0.10, cam.px * 1.4);
+  var bx0 = sx(-3.4), bx1 = sx(2.9);
+  if (bx1 > 0 && bx0 < W && cam.px > 3) {
+    ctx.lineWidth = Math.max(1, cam.px * 0.09);
+    ctx.strokeRect(bx0, boxY, bx1 - bx0, Math.min(bh * 0.5, cam.px * 5.2));
+  }
+  var px2 = sx(0), pw = Math.max(3, 1.45 * cam.px), phh = Math.max(2, cam.px * 0.9);
+  ctx.fillStyle = '#f4f1e6';
+  ctx.beginPath();
+  ctx.moveTo(px2 - pw / 2, boxY + phh * 0.5);
+  ctx.lineTo(px2 + pw / 2, boxY + phh * 0.5);
+  ctx.lineTo(px2 + pw / 2, boxY + phh * 1.1);
+  ctx.lineTo(px2, boxY + phh * 1.5);
+  ctx.lineTo(px2 - pw / 2, boxY + phh * 1.1);
+  ctx.closePath(); ctx.fill();
+}
+
+function drawWall(t) {
+  var W = view.w, H = view.h;
+  var wx = sx(WALL_U);
+  if (wx > W + 4) return;
+  var wallTop = sy(WALL_H);
+  var wallBase = groundY + bandH * 0.30;
+  /* bleachers behind the fence first, so the fence caps them */
+  drawBleachers(t);
+  /* the fence */
+  var wg = ctx.createLinearGradient(0, wallTop, 0, wallBase);
+  wg.addColorStop(0, '#2f5233');
+  wg.addColorStop(1, '#1e3722');
+  ctx.fillStyle = wg;
+  ctx.fillRect(wx, wallTop, W - wx + 2, wallBase - wallTop);
+  /* padding seams */
+  ctx.strokeStyle = 'rgba(12,22,14,0.45)';
+  ctx.lineWidth = 1;
+  for (var u = WALL_U + 12; u < WALL_U + 260; u += 12) {
+    var sxx = sx(u);
+    if (sxx > W) break;
+    ctx.beginPath(); ctx.moveTo(sxx, wallTop + 1); ctx.lineTo(sxx, wallBase); ctx.stroke();
+  }
+  /* the yellow line on top */
+  ctx.fillStyle = '#e8c74a';
+  ctx.fillRect(wx, wallTop - Math.max(1.6, cam.px * 0.5), W - wx + 2, Math.max(1.6, cam.px * 0.5));
+  /* the 375 marker */
+  if (cam.px > 1.1) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(238,236,224,0.72)';
+    ctx.font = '700 ' + Math.round(clamp(cam.px * 2.6, 9, 17)) + 'px "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('375', wx + 6, wallTop + (wallBase - wallTop) * 0.62);
+    ctx.restore();
+  }
+}
+
+function drawBleachers(t) {
+  var W = view.w, H = view.h;
+  var wx = sx(WALL_U);
+  if (wx > W) return;
+  /* stepped seating rising away behind the fence */
+  var topH = 40;
+  ctx.fillStyle = '#4a4f58';
+  ctx.beginPath();
+  ctx.moveTo(sx(WALL_U), sy(9));
+  ctx.lineTo(sx(WALL_U + 100), sy(topH));
+  ctx.lineTo(sx(WALL_U + 132), sy(topH));
+  ctx.lineTo(sx(WALL_U + 132), sy(9));
+  ctx.closePath(); ctx.fill();
+  /* seat rows */
+  ctx.strokeStyle = 'rgba(30,34,40,0.45)';
+  ctx.lineWidth = 1;
+  for (var r = 12; r < topH; r += 4) {
+    var uu = WALL_U + (r - 9) / (topH - 9) * 100;
+    ctx.beginPath();
+    ctx.moveTo(sx(uu), sy(r));
+    ctx.lineTo(sx(WALL_U + 132), sy(r));
+    ctx.stroke();
+  }
+  /* the crowd */
+  var hype = crowdHype;
+  var rad = Math.max(1, cam.px * 0.55);
+  for (var i = 0; i < bleachCrowd.length; i++) {
+    var c = bleachCrowd[i];
+    var bx = sx(c.u);
+    if (bx < -20 || bx > W + 20) continue;
+    var bob = hype > 0 ? Math.sin(t * 11 + c.ph) * hype * 1.6 : 0;
+    var by = sy(c.h + bob);
+    ctx.fillStyle = c.c < 0.22 ? '#b8a58f' : (c.c < 0.44 ? '#6e6a72' : (c.c < 0.66 ? '#8d7a6a' : (c.c < 0.85 ? '#5a6472' : '#a8836a')));
+    ctx.fillRect(bx, by, rad * 1.5, rad * 2.4);
+    ctx.fillStyle = 'rgba(40,36,34,0.6)';
+    ctx.fillRect(bx, by, rad * 1.5, rad * 0.8);
+  }
+  /* scoreboard on stilts above the seats */
+  var sbx = sx(WALL_U + 16), sbx2 = sx(WALL_U + 78);
+  if (sbx2 > 0 && sbx < W && cam.px > 0.9) {
+    var yTop = sy(74), yBot = sy(46);
+    ctx.fillStyle = '#3b4149';
+    ctx.fillRect(sbx, yTop, sbx2 - sbx, yBot - yTop);
+    ctx.fillStyle = '#20252c';
+    ctx.fillRect(sbx + 4, yTop + 4, sbx2 - sbx - 8, yBot - yTop - 8);
+    ctx.fillStyle = '#4a5058';
+    ctx.fillRect(sbx + (sbx2 - sbx) * 0.2, yBot, 4, sy(9) - yBot);
+    ctx.fillRect(sbx + (sbx2 - sbx) * 0.75, yBot, 4, sy(9) - yBot);
+    var fs = Math.round(clamp((yBot - yTop) * 0.24, 6, 22));
+    if (fs >= 8) {
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = '700 ' + fs + 'px "Segoe UI", sans-serif';
+      ctx.fillStyle = '#e2b45f';
+      ctx.fillText('HR ' + G.hr, (sbx + sbx2) / 2, yTop + (yBot - yTop) * 0.42);
+      ctx.fillStyle = 'rgba(236,232,220,0.72)';
+      ctx.font = '700 ' + Math.round(fs * 0.78) + 'px "Segoe UI", sans-serif';
+      ctx.fillText('OUT ' + G.outs + '/' + OUTS_MAX, (sbx + sbx2) / 2, yTop + (yBot - yTop) * 0.78);
+      ctx.restore();
+    }
+  }
+}
+
+/* ------------------------------------------------------------- figures --- */
+/* Everyone is drawn in feet with y pointing up, so the proportions stay
+   honest at every zoom. Heads are about 1/7.7 of standing height. */
+function inFeet(u, fn, scale) {
+  var s = cam.px * (scale || 1);
+  ctx.save();
+  ctx.translate(sx(u), groundY);
+  ctx.scale(s, -s);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  fn();
+  ctx.restore();
+}
+function limb(x1, y1, x2, y2, w, col) {
+  ctx.strokeStyle = col; ctx.lineWidth = w;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+}
+function blob(x, y, rx, ry, rot, col) {
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot || 0, 0, TAU); ctx.fill();
+}
+
+var UNI_PANT = '#d9d3c3', UNI_TOP = '#efe9db', UNI_TRIM = '#26395f';
+var SKIN = '#c08a62', SKIN_D = '#a5714d', SHOE = '#22262e';
+
+function drawBatter(t) {
+  var sw = P.swung ? P.sw : 0;
+  var e = sw <= 0 ? 0 : easeOut(sw);
+  var pl = P.swung ? P.plane : plane;
+  inFeet(-1.6, function () {
+    var rot = e;                       /* hip/shoulder rotation through the ball */
+    var settle = Math.sin(t * 1.6) * 0.03;
+    var hipX = rot * 0.30, hipY = 2.52 - rot * 0.14 + settle;
+    var shX = hipX + 0.10 + rot * 0.30, shY = 4.18 - rot * 0.12 + settle;
+
+    /* legs: a hitter is coiled, so the knees carry real bend */
+    limb(-0.88, 0.06, -0.74 + rot * 0.14, 1.26, 0.30, UNI_PANT);
+    limb(-0.74 + rot * 0.14, 1.26, hipX - 0.34, hipY, 0.40, UNI_PANT);
+    limb(0.88 + rot * 0.12, 0.06, 0.74 + rot * 0.12, 1.32, 0.30, UNI_PANT);
+    limb(0.74 + rot * 0.12, 1.32, hipX + 0.30, hipY, 0.40, UNI_PANT);
+    /* cleats */
+    blob(-0.90, 0.08, 0.32, 0.12, 0, SHOE);
+    blob(0.94 + rot * 0.12, 0.08, 0.34, 0.12, 0, SHOE);
+    /* pelvis */
+    blob(hipX, hipY - 0.08, 0.44, 0.30, 0, UNI_PANT);
+
+    /* torso */
+    ctx.fillStyle = UNI_TOP;
+    ctx.beginPath();
+    ctx.moveTo(hipX - 0.40, hipY);
+    ctx.lineTo(hipX + 0.40, hipY);
+    ctx.lineTo(shX + 0.46, shY);
+    ctx.lineTo(shX - 0.46, shY);
+    ctx.closePath(); ctx.fill();
+    /* belt + jersey stripe */
+    ctx.fillStyle = UNI_TRIM;
+    ctx.fillRect(hipX - 0.40, hipY - 0.06, 0.80, 0.16);
+    ctx.strokeStyle = 'rgba(38,57,95,0.5)'; ctx.lineWidth = 0.05;
+    ctx.beginPath(); ctx.moveTo(shX - 0.05, shY - 0.05); ctx.lineTo(hipX - 0.02, hipY + 0.1); ctx.stroke();
+
+    /* head + helmet */
+    var hx = shX + 0.16, hy = shY + 0.66;
+    blob(hx, hy, 0.30, 0.34, 0, SKIN);
+    ctx.fillStyle = UNI_TRIM;
+    ctx.beginPath();
+    ctx.arc(hx, hy + 0.04, 0.35, 0, Math.PI);
+    ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx, hy + 0.06, 0.35, 0.36, 0, Math.PI, TAU); ctx.fill();
+    /* ear flap toward the pitcher */
+    blob(hx + 0.22, hy - 0.06, 0.14, 0.20, 0, UNI_TRIM);
+    /* jaw shadow */
+    blob(hx + 0.10, hy - 0.20, 0.16, 0.11, 0, SKIN_D);
+
+    /* The barrel sweeps from up behind the shoulder, through the zone flat at
+       contact, and finishes wrapped up in front. Interpolating straight from
+       "up behind" to "down in front" made him chop wood, so contact gets its
+       own keyframe at e = 0.62 and the finish comes back UP. */
+    var a0 = 2.45, aC = 0.02, a1 = -1.05, eC = 0.62;
+    var batAng, hxs, hys;
+    if (e <= eC) {
+      var k1 = e / eC;
+      batAng = lerp(a0, aC, k1);
+      hxs = lerp(-0.66, 0.60, k1); hys = lerp(4.38, 3.78, k1);
+    } else {
+      var k2 = (e - eC) / (1 - eC);
+      batAng = lerp(aC, a1, k2);
+      hxs = lerp(0.60, 0.24, k2); hys = lerp(3.78, 4.55, k2);
+    }
+    batAng += (pl > 0 ? 0.26 : (pl < 0 ? -0.18 : 0));
+    hys += settle;
+    /* arms */
+    limb(shX - 0.36, shY - 0.04, hxs - 0.12, hys, 0.25, SKIN);
+    limb(shX + 0.30, shY - 0.02, hxs + 0.06, hys - 0.05, 0.25, SKIN);
+    /* the bat */
+    var bl = 2.75;
+    var bx2 = hxs + Math.cos(batAng) * bl, by2 = hys + Math.sin(batAng) * bl;
+    /* faint arc left behind the barrel */
+    if (e > 0.02 && e < 0.98) {
+      ctx.strokeStyle = 'rgba(246,240,226,0.16)';
+      ctx.lineWidth = 0.22;
+      ctx.beginPath();
+      ctx.arc(hxs, hys, bl, batAng, lerp(a0, a1, Math.max(0, e - 0.28)), false);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#3a2c1c'; ctx.lineWidth = 0.15;
+    ctx.beginPath(); ctx.moveTo(hxs, hys); ctx.lineTo(lerp(hxs, bx2, 0.28), lerp(hys, by2, 0.28)); ctx.stroke();
+    ctx.strokeStyle = '#c99a5f'; ctx.lineWidth = 0.17;
+    ctx.beginPath(); ctx.moveTo(lerp(hxs, bx2, 0.26), lerp(hys, by2, 0.26)); ctx.lineTo(lerp(hxs, bx2, 0.62), lerp(hys, by2, 0.62)); ctx.stroke();
+    ctx.lineWidth = 0.24;
+    ctx.beginPath(); ctx.moveTo(lerp(hxs, bx2, 0.6), lerp(hys, by2, 0.6)); ctx.lineTo(bx2, by2); ctx.stroke();
+    ctx.fillStyle = '#3a2c1c';
+    ctx.beginPath(); ctx.arc(hxs - Math.cos(batAng) * 0.12, hys - Math.sin(batAng) * 0.12, 0.10, 0, TAU); ctx.fill();
+    /* batting gloves */
+    blob(hxs, hys, 0.12, 0.12, 0, '#33405c');
+  });
+}
+
+function drawCatcher(t) {
+  var reach = 0;
+  if (G.state === 'play' && (P.phase === 'flight')) reach = clamp((P.t / P.dur - 0.55) / 0.5, 0, 1);
+  var mittH = P.phase === 'flight' ? lerp(1.7, clamp(P.hTarget, 0.9, 3.6), reach) : 1.7;
+  inFeet(CATCH_U - 0.4, function () {
+    var pant = '#cfc9ba', gear = '#2b3f68', mask = '#232830', guard = '#39507e';
+    /* A real squat: heels under him, knees high and splayed forward, hips
+       almost on the ground, back leaning out over the plate. Drawn upright
+       he just looked like a short man wearing a mask. */
+    var hipX = -0.62, hipY = 0.98;
+    var bkKx = -0.16, bkKy = 1.34, frKx = 0.92, frKy = 1.28;
+    blob(-0.62, 0.08, 0.30, 0.11, 0, SHOE);
+    blob(0.72, 0.08, 0.30, 0.11, 0, SHOE);
+    limb(-0.58, 0.12, bkKx, bkKy, 0.30, pant);        /* back shin */
+    limb(bkKx, bkKy, hipX + 0.10, hipY, 0.36, pant);  /* back thigh, folded */
+    limb(0.68, 0.12, frKx, frKy, 0.30, pant);         /* front shin */
+    limb(frKx, frKy, hipX + 0.16, hipY + 0.06, 0.36, pant);
+    limb(-0.54, 0.20, bkKx - 0.04, bkKy - 0.06, 0.20, guard);   /* shin guards */
+    limb(0.70, 0.20, frKx + 0.02, frKy - 0.06, 0.20, guard);
+    blob(hipX + 0.05, hipY, 0.40, 0.26, 0, pant);
+
+    /* chest protector, leaning out toward the hitter */
+    var shX = 0.18, shY = 2.32;
+    ctx.fillStyle = gear;
+    ctx.beginPath();
+    ctx.moveTo(hipX - 0.16, hipY + 0.10); ctx.lineTo(hipX + 0.40, hipY + 0.02);
+    ctx.lineTo(shX + 0.40, shY); ctx.lineTo(shX - 0.34, shY + 0.10);
+    ctx.closePath(); ctx.fill();
+
+    /* head, mask, helmet */
+    var hx = shX + 0.26, hy = shY + 0.56;
+    blob(hx, hy, 0.29, 0.32, 0, SKIN);
+    ctx.fillStyle = mask;
+    ctx.beginPath(); ctx.arc(hx, hy + 0.05, 0.35, 0, Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx + 0.06, hy - 0.02, 0.35, -1.45, 1.35); ctx.fill();
+    ctx.strokeStyle = 'rgba(214,214,208,0.32)'; ctx.lineWidth = 0.045;
+    for (var i2 = -2; i2 <= 2; i2++) {
+      ctx.beginPath(); ctx.moveTo(hx + 0.06, hy + i2 * 0.13); ctx.lineTo(hx + 0.42, hy + i2 * 0.13); ctx.stroke();
+    }
+
+    /* mitt hand out front, tracking the pitch; bare hand tucked behind the hip */
+    limb(shX + 0.24, shY - 0.10, 0.85, mittH + 0.28, 0.20, SKIN);
+    blob(1.16, mittH, 0.36, 0.38, 0.25, '#8a5a33');
+    blob(1.16, mittH, 0.22, 0.24, 0.25, '#a8703f');
+    limb(shX - 0.24, shY - 0.16, hipX - 0.18, hipY + 0.42, 0.18, SKIN);
+  }, 1.22);
+}
+
+function drawUmpire(t) {
+  var call = ump.callT > 0 ? clamp(ump.callT / 0.9, 0, 1) : 0;
+  inFeet(CATCH_U - 2.5, function () {
+    var shirt = '#2b3038', slack = '#4a4f58';
+    /* bent over the catcher's shoulder, hands on the knees — until he
+       straightens up to punch out a strike */
+    var up = call;                                  /* 0 crouched, 1 punching */
+    var hipY = lerp(1.86, 2.72, up), hipX = lerp(-0.30, -0.08, up);
+    var shX = lerp(0.78, 0.12, up), shY = lerp(3.02, 4.40, up);
+    var kBx = -0.44, kBy = 1.20, kFx = 0.62, kFy = 1.24;
+    blob(-0.62, 0.08, 0.30, 0.11, 0, SHOE);
+    blob(0.72, 0.08, 0.30, 0.11, 0, SHOE);
+    limb(-0.58, 0.12, kBx, kBy, 0.30, slack);
+    limb(kBx, kBy, hipX - 0.16, hipY, 0.38, slack);
+    limb(0.68, 0.12, kFx, kFy, 0.30, slack);
+    limb(kFx, kFy, hipX + 0.20, hipY, 0.38, slack);
+    blob(hipX, hipY - 0.06, 0.42, 0.28, 0, slack);
+
+    ctx.fillStyle = shirt;
+    ctx.beginPath();
+    ctx.moveTo(hipX - 0.36, hipY + 0.04); ctx.lineTo(hipX + 0.36, hipY - 0.02);
+    ctx.lineTo(shX + 0.40, shY); ctx.lineTo(shX - 0.38, shY + 0.10);
+    ctx.closePath(); ctx.fill();
+
+    var hx = shX + lerp(0.30, 0.14, up), hy = shY + 0.56;
+    blob(hx, hy, 0.28, 0.31, 0, SKIN);
+    ctx.fillStyle = '#1c2028';
+    ctx.beginPath(); ctx.arc(hx, hy + 0.05, 0.31, 0, Math.PI); ctx.fill();
+    ctx.fillRect(hx, hy + 0.01, 0.42, 0.09);
+
+    if (up > 0.02) {
+      /* the punch: fist up and out */
+      limb(shX + 0.30, shY - 0.06, shX + 0.55 + up * 0.55, shY + 0.15 + up * 0.85, 0.20, SKIN);
+      limb(shX - 0.28, shY - 0.10, shX - 0.62, shY - 1.05, 0.19, SKIN);
+    } else {
+      limb(shX + 0.30, shY - 0.06, kFx + 0.06, kFy + 0.20, 0.20, SKIN);
+      limb(shX - 0.26, shY - 0.12, kBx + 0.02, kBy + 0.22, 0.19, SKIN);
+    }
+  }, 1.16);
+}
+
+function drawPitcher(t) {
+  var ph;
+  if (P.phase === 'ready') ph = 0;
+  else if (P.phase === 'wind') ph = P.t / WIND_T;
+  else ph = 1 + clamp(P.t / 0.45, 0, 1) * 0.6;
+  var lift = Math.max(0, 1 - Math.pow((ph - 0.38) / 0.24, 2));     /* knee lift bell */
+  var stride = clamp((ph - 0.52) / 0.42, 0, 1);
+  var whip = clamp((ph - 0.80) / 0.22, 0, 1);
+  var follow = clamp((ph - 1.0) / 0.6, 0, 1);
+  var rock = Math.max(0, 1 - Math.pow((ph - 0.16) / 0.18, 2));
+
+  inFeet(MOUND_U, function () {
+    ctx.translate(0, 0.85);   /* he's standing on the mound */
+    var lean = stride * 0.55 + follow * 0.35;
+    var hipX = -stride * 0.55 - follow * 0.30 + rock * 0.14;
+    var hipY = 2.86 - lift * 0.10 - follow * 0.30;
+    var shX = hipX - lean * 0.55, shY = 4.50 - follow * 0.55;
+
+    /* back (drive) leg stays near the rubber and bends as he pushes */
+    var bkFootX = 0.34 + rock * 0.10, bkFootY = follow * 1.05;
+    var bkKx = hipX + 0.62 - stride * 0.18, bkKy = hipY - 1.32;
+    limb(bkFootX, bkFootY, bkKx, bkKy, 0.30, UNI_PANT);
+    limb(bkKx, bkKy, hipX + 0.20, hipY, 0.38, UNI_PANT);
+    blob(bkFootX + 0.10, bkFootY + 0.05, 0.30, 0.11, follow * 0.6, SHOE);
+
+    /* front leg: knee drives up, shin hangs, then it strides out to the plate */
+    var fkX = hipX - 0.72 - stride * 0.85;
+    var fkY = hipY - 1.34 + lift * 1.62 - stride * 0.16;
+    var hang = lift * (1 - stride);
+    var ffX = lerp(fkX + 0.34, hipX - 0.24 - stride * 2.40, stride);
+    var ffY = lerp(0.02, Math.max(0.4, fkY - 0.78), hang);
+    limb(hipX - 0.30, hipY, fkX, fkY, 0.38, UNI_PANT);
+    limb(fkX, fkY, ffX, ffY, 0.30, UNI_PANT);
+    blob(ffX - 0.06, ffY + 0.05, 0.30, 0.11, 0, SHOE);
+    blob(hipX, hipY - 0.06, 0.42, 0.28, 0, UNI_PANT);
+
+    /* torso */
+    ctx.fillStyle = UNI_TOP;
+    ctx.beginPath();
+    ctx.moveTo(hipX - 0.38, hipY); ctx.lineTo(hipX + 0.38, hipY);
+    ctx.lineTo(shX + 0.44, shY); ctx.lineTo(shX - 0.44, shY);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = UNI_TRIM;
+    ctx.fillRect(hipX - 0.38, hipY - 0.06, 0.76, 0.15);
+
+    /* head + cap, facing the plate */
+    var hx = shX - 0.16 - lean * 0.20, hy = shY + 0.62;
+    blob(hx, hy, 0.29, 0.32, 0, SKIN);
+    ctx.fillStyle = UNI_TRIM;
+    ctx.beginPath(); ctx.arc(hx, hy + 0.05, 0.32, 0, Math.PI); ctx.fill();
+    ctx.fillRect(hx - 0.62, hy + 0.02, 0.34, 0.09);
+
+    /* Arms. Before the windup he is at the set, hands together at the belt —
+       without this he stands there with both arms out like a scarecrow. */
+    var set = 1 - clamp(ph / 0.22, 0, 1);
+    var armA = lerp(-0.30, 3.35, whip < 1 ? Math.pow(whip, 0.75) : 1 + follow * 0.35);
+    var back = clamp((ph - 0.30) / 0.42, 0, 1);
+    var a = whip > 0 ? armA : lerp(1.9, -0.30, back);
+    a = lerp(a, 4.05, set);
+    var reach = lerp(1.42, 0.72, set);
+    var ex = shX + 0.34, ey = shY - 0.05;
+    var hxx = ex + Math.cos(a) * reach, hyy = ey + Math.sin(a) * reach;
+    limb(ex, ey, ex + Math.cos(a + 0.35) * reach * 0.55, ey + Math.sin(a + 0.35) * reach * 0.55, 0.20, SKIN);
+    limb(ex + Math.cos(a + 0.35) * reach * 0.55, ey + Math.sin(a + 0.35) * reach * 0.55, hxx, hyy, 0.18, SKIN);
+
+    /* glove arm out front then tucked */
+    var gA = lerp(lerp(3.05, 4.3, follow), 4.5, set);
+    var gR = lerp(1.25, 0.80, set);
+    var gx = shX - 0.30 + Math.cos(gA) * gR, gy = shY - 0.1 + Math.sin(gA) * gR;
+    limb(shX - 0.30, shY - 0.05, gx, gy, 0.19, SKIN);
+    blob(gx, gy, 0.30, 0.32, 0, '#7a4f2c');
+  });
+}
+
+function drawShaggers(t) {
+  for (var i = 0; i < shaggers.length; i++) {
+    var s = shaggers[i];
+    if (sx(s.u) < -30 || sx(s.u) > view.w + 30) continue;
+    (function (s2) {
+      inFeet(s2.u, function () {
+        var sway = Math.sin(t * 0.8 + s2.ph) * 0.06;
+        limb(-0.28, 0.06, -0.16 + sway, 1.5, 0.26, '#c9c3b4');
+        limb(0.30, 0.06, 0.16 + sway, 1.5, 0.26, '#c9c3b4');
+        ctx.fillStyle = '#e6e0d2';
+        ctx.beginPath();
+        ctx.moveTo(-0.36, 1.45); ctx.lineTo(0.36, 1.45);
+        ctx.lineTo(0.40, 4.35); ctx.lineTo(-0.40, 4.35);
+        ctx.closePath(); ctx.fill();
+        limb(-0.34, 4.2, -0.62, 2.8, 0.17, SKIN);
+        limb(0.34, 4.2, 0.62, 2.8, 0.17, SKIN);
+        blob(0.02, 4.9, 0.28, 0.31, 0, SKIN);
+        ctx.fillStyle = UNI_TRIM;
+        ctx.beginPath(); ctx.arc(0.02, 4.92, 0.31, 0, Math.PI); ctx.fill();
+      });
+    })(s);
+  }
+}
+
+/* ---------------------------------------------------------------- ball --- */
+function ballRadius() {
+  var depth = P.phase === 'flight' ? clamp(1 - ball.u / REL_U, 0, 1) : 1;
+  var base = Math.max(3.4, cam.px * 0.42);
+  if (P.phase === 'flight') base = Math.max(3.4, cam.px * (0.30 + depth * 0.20));
+  return base;
+}
+function drawBall(t) {
+  if (G.state === 'title') return;
+  if (P.phase === 'ready' || P.phase === 'wind') return;
+  var x = sx(ball.u), y = sy(ball.h);
+  var r = ballRadius();
+  /* trail on a struck ball */
+  if (trail.length > 1) {
+    ctx.lineCap = 'round';
+    for (var i = 1; i < trail.length; i++) {
+      var a = i / trail.length;
+      ctx.strokeStyle = 'rgba(246,242,232,' + (a * 0.34).toFixed(3) + ')';
+      ctx.lineWidth = r * a * 1.1;
+      ctx.beginPath();
+      ctx.moveTo(sx(trail[i - 1].u), sy(trail[i - 1].h));
+      ctx.lineTo(sx(trail[i].u), sy(trail[i].h));
+      ctx.stroke();
+    }
+  }
+  /* ground shadow so the height reads */
+  if (ball.h > 0.2) {
+    var sh = clamp(1 - ball.h / 70, 0.12, 0.5);
+    ctx.fillStyle = 'rgba(24,30,20,' + (sh * 0.5).toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.ellipse(x, groundY + bandH * 0.12, r * 1.3, r * 0.45, 0, 0, TAU);
+    ctx.fill();
+  }
+  /* the ball */
+  ctx.fillStyle = '#f6f3e8';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(60,52,44,0.5)'; ctx.lineWidth = Math.max(0.7, r * 0.14);
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+  if (r > 4) {
+    ctx.strokeStyle = '#b8534a'; ctx.lineWidth = Math.max(0.7, r * 0.13);
+    var s2 = ball.spin;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(s2) * r * 0.35, y + Math.sin(s2) * r * 0.35, r * 0.72, s2 + 0.7, s2 + 2.1);
+    ctx.stroke();
+  }
+}
+
+/* ----------------------------------------------------------------- HUD --- */
+function drawHUD(t) {
+  var W = view.w, H = view.h;
+  ctx.textAlign = 'left';
+  ctx.font = '700 22px "Segoe UI", sans-serif';
+  ctx.fillStyle = '#e2b45f';
+  ctx.fillText(String(G.hr), 14, 32);
+  ctx.font = '700 10px "Segoe UI", sans-serif';
+  ctx.fillStyle = 'rgba(242,236,224,0.66)';
+  ctx.fillText('HOME RUNS', 14 + ctx.measureText('X').width * 0 + (String(G.hr).length * 14) + 6, 31);
+
+  /* out pips */
+  var pw = 9, gap = 3.2;
+  for (var i = 0; i < OUTS_MAX; i++) {
+    var px2 = 14 + i * (pw + gap);
+    if (i < G.outs) {
+      ctx.fillStyle = '#c2503f';
+      ctx.fillRect(px2, 42, pw, 11);
+    } else {
+      ctx.strokeStyle = 'rgba(242,236,224,0.4)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px2 + 0.5, 42.5, pw - 1, 10);
+    }
+  }
+  ctx.font = '700 10px "Segoe UI", sans-serif';
+  ctx.fillStyle = 'rgba(242,236,224,0.6)';
+  ctx.fillText('LONGEST ' + (G.longest ? G.longest + ' FT' : '—'), 14, 68);
+
+  /* swing plane indicator, bottom-left, out of the touch buttons' way */
+  var word = plane > 0 ? 'UPPERCUT' : (plane < 0 ? 'LEVEL' : 'NEUTRAL');
+  ctx.font = '700 10px "Segoe UI", sans-serif';
+  ctx.fillStyle = plane === 0 ? 'rgba(242,236,224,0.5)' : '#e2b45f';
+  ctx.textAlign = 'right';
+  ctx.fillText('SWING · ' + word, W - 14, H - 14);
+  ctx.textAlign = 'left';
+
+  /* banner */
+  if (G.bannerT > 0 && G.banner) {
+    var a = clamp(G.bannerT / 0.3, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = 'center';
+    var fs = Math.round(clamp(W * (G.bannerBig ? 0.055 : 0.040), 16, G.bannerBig ? 46 : 30));
+    ctx.font = '700 ' + fs + 'px "Segoe UI", sans-serif';
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(18,22,28,0.55)';
+    ctx.strokeText(G.banner, W / 2, H * 0.24);
+    ctx.fillStyle = G.bannerBig ? '#e2b45f' : '#f4efe2';
+    ctx.fillText(G.banner, W / 2, H * 0.24);
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
+
+  /* floaters */
+  for (var f = 0; f < fx.length; f++) {
+    var o = fx[f];
+    ctx.save();
+    ctx.globalAlpha = clamp(o.t / 0.6, 0, 1);
+    ctx.textAlign = 'center';
+    ctx.font = '700 ' + o.size + 'px "Segoe UI", sans-serif';
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(18,22,28,0.5)';
+    ctx.strokeText(o.txt, clamp(o.x, 40, W - 40), o.y);
+    ctx.fillStyle = o.col;
+    ctx.fillText(o.txt, clamp(o.x, 40, W - 40), o.y);
+    ctx.restore();
+  }
+  ctx.textAlign = 'left';
+}
+
+/* -------------------------------------------------------------- render --- */
+function render(t) {
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  var W = view.w, H = view.h;
+  if (G.shake > 0.3) {
+    ctx.translate(rnd(-G.shake, G.shake) * 0.4, rnd(-G.shake, G.shake) * 0.4);
+  }
+  drawSky();
+  drawFarStand(t);
+  drawFieldBand();
+  drawWall(t);
+  drawShaggers(t);
+  drawPitcher(t);
+  drawBall(t);
+  drawUmpire(t);
+  drawCatcher(t);
+  drawBatter(t);
+
+  if (G.flash > 0.01) {
+    ctx.fillStyle = 'rgba(255,238,206,' + (G.flash * 0.35).toFixed(3) + ')';
+    ctx.fillRect(-30, -30, W + 60, H + 60);
+  }
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  if (G.state !== 'title') drawHUD(t);
+}
+
+/* ---------------------------------------------------------------- loop --- */
+var lastT = 0, nowT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  nowT += dt;
+  pollPad();
+  update(dt);
+  render(nowT);
+}
+
+/* ---------------------------------------------------------------- boot --- */
+resize();
+if (window.ResizeObserver) {
+  try { new window.ResizeObserver(resize).observe(stage); } catch (e) {}
+}
+setMuted(muted);
+pickPitch();
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

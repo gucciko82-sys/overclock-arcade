@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Syntax — Sentence Lab</title>
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="A calm sentence lab. Capitals, end marks, commas, apostrophes and homophones — one rule at a time, always explained.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Syntax">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --bg: #0b0f1e;
+    --accent: #ffcc4d;
+    --fg: #eaf2ff;
+    --dim: rgba(234,242,255,0.58);
+    --panel: rgba(9,13,30,0.62);
+    --line: rgba(255,255,255,0.13);
+    --ok: #4fd39a;
+    --ok-edge: #7ff0c0;
+    --bad: #ff8a7a;
+    --bad-edge: #ffbdb3;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; touch-action: manipulation;
+  }
+  #stage {
+    position: fixed; inset: 0; overflow: hidden;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(255,204,77,0.08), rgba(255,204,77,0) 60%),
+      radial-gradient(90% 70% at 50% 110%, rgba(79,211,154,0.07), rgba(79,211,154,0) 65%),
+      var(--bg);
+  }
+
+  #brand {
+    position: absolute; top: 12px; left: max(12px, env(safe-area-inset-left));
+    font-size: 18px; font-weight: 700; letter-spacing: 0.22em; color: var(--accent);
+    text-shadow: 0 0 18px rgba(255,204,77,0.35); z-index: 4; pointer-events: none;
+  }
+  #brand small { display: block; font-size: 8.5px; letter-spacing: 0.3em; color: var(--dim); font-weight: 600; }
+  body.playing #brand { display: none; }
+
+  #topbtns {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    display: flex; gap: 6px; z-index: 6;
+  }
+  .iconbtn {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line);
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .iconbtn:active { background: rgba(255,204,77,0.25); }
+  body:not(.playing) #topbtns { display: none; }
+
+  /* ------------------------------------------------------------- play -- */
+  #play {
+    position: absolute; inset: 0; display: none;
+    flex-direction: column; gap: 6px;
+    padding: 8px max(10px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-right));
+  }
+  body.playing #play { display: flex; }
+
+  #hud {
+    flex: 0 0 auto; min-height: 44px; padding-right: 104px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  #hudTitle { font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+  #hudSub { font-size: 11px; color: var(--dim); letter-spacing: 0.05em; margin-top: 2px; }
+
+  #scroll { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+  /* centres a short item on a tall phone, but still grows and scrolls for the
+     long ones — min-height, not justify-content on the scroller, or the top of
+     an over-tall paragraph becomes unreachable */
+  #inner { min-height: 100%; display: flex; flex-direction: column; justify-content: center; padding-bottom: 10px; }
+  #prompt {
+    font-size: clamp(12.5px, 3.6vw, 15px); color: var(--fg); line-height: 1.35;
+    margin: 2px 0 10px; text-align: center;
+  }
+  #work { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+
+  .tilerow {
+    display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+    width: 100%; max-width: 700px;
+  }
+  .tilerow.left { justify-content: flex-start; }
+  .wtile {
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    min-height: 46px; min-width: 44px; padding: 4px 10px;
+    border-radius: 10px; border: 1px solid var(--line);
+    background: rgba(255,255,255,0.05); color: var(--fg);
+    font-family: inherit; font-size: clamp(14px, 4vw, 18px); font-weight: 600;
+    line-height: 1.15; letter-spacing: 0.01em;
+    cursor: pointer; overflow-wrap: anywhere; max-width: 100%;
+  }
+  .wtile.flat { cursor: default; background: transparent; border-color: transparent; padding: 4px 3px; min-width: 0; }
+  .wtile.on { background: rgba(255,204,77,0.18); border-color: rgba(255,204,77,0.75); color: var(--accent); }
+  .wtile.ok { background: rgba(79,211,154,0.16); border: 2px solid var(--ok-edge); color: var(--ok); }
+  .wtile.bad { background: rgba(255,138,122,0.14); border: 2px dashed var(--bad-edge); color: var(--bad); }
+  .wtile.miss { background: rgba(255,204,77,0.12); border: 2px dotted var(--accent); color: var(--accent); }
+  .wtile.fixed { background: rgba(79,211,154,0.16); border: 2px solid var(--ok-edge); color: var(--ok); }
+  .wtile .mk { font-size: 12px; font-weight: 800; }
+  .wtile .cm { color: var(--accent); font-weight: 800; }
+  .wtile[disabled] { opacity: 0.9; }
+
+  .blank {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 46px; min-width: 78px; padding: 4px 10px;
+    border-radius: 10px; border: 2px dashed rgba(255,204,77,0.7);
+    background: rgba(255,204,77,0.08); color: var(--accent);
+    font-size: clamp(14px, 4vw, 18px); font-weight: 700;
+  }
+
+  .sentbox {
+    width: 100%; max-width: 640px;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: rgba(255,255,255,0.04);
+    padding: 12px 12px; text-align: center;
+    font-size: clamp(15px, 4.4vw, 20px); line-height: 1.45; overflow-wrap: anywhere;
+  }
+
+  .line {
+    width: 100%; max-width: 700px; min-height: 58px;
+    border: 1px dashed rgba(255,255,255,0.22); border-radius: 12px;
+    background: rgba(255,255,255,0.03); padding: 6px;
+    display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; justify-content: center;
+  }
+  .line .hint { color: var(--dim); font-size: 12px; align-self: center; margin: auto; }
+  .banklabel { font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--dim); }
+
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: 100%; max-width: 640px; }
+  .opt {
+    min-height: 48px; padding: 8px 14px; border-radius: 10px;
+    border: 1px solid var(--line); background: rgba(255,255,255,0.05); color: var(--fg);
+    font-family: inherit; font-size: clamp(13.5px, 3.8vw, 16px); font-weight: 600;
+    cursor: pointer; overflow-wrap: anywhere; max-width: 100%;
+    display: inline-flex; align-items: center; justify-content: center; text-align: center;
+  }
+  .opt.on { background: rgba(255,204,77,0.18); border-color: rgba(255,204,77,0.75); color: var(--accent); }
+  .opt.ok { background: rgba(79,211,154,0.16); border: 2px solid var(--ok-edge); color: var(--ok); }
+  .opt.bad { background: rgba(255,138,122,0.14); border: 2px dashed var(--bad-edge); color: var(--bad); }
+  .opt.wide { width: 100%; }
+  .mark { min-width: 56px; min-height: 52px; font-size: 24px; font-weight: 800; }
+
+  #feedback { width: 100%; max-width: 640px; margin: 4px auto 0; }
+  .fb {
+    border-radius: 12px; padding: 11px 13px;
+    font-size: clamp(12.5px, 3.5vw, 15px); line-height: 1.42;
+    border: 1px solid var(--line); background: rgba(255,255,255,0.05);
+  }
+  .fb.good { border: 1px solid var(--ok-edge); background: rgba(79,211,154,0.12); }
+  .fb.teach { border: 1px solid rgba(255,204,77,0.55); background: rgba(255,204,77,0.09); }
+  .fb .hd { font-weight: 800; letter-spacing: 0.06em; display: block; margin-bottom: 4px; }
+  .fb.good .hd { color: var(--ok); }
+  .fb.teach .hd { color: var(--accent); }
+  .fb p { margin: 5px 0 0; }
+  .fb b { color: var(--accent); }
+
+  #actions { flex: 0 0 auto; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; padding-top: 4px; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 50px; padding: 0 24px;
+    border-radius: 10px; border: 1px solid rgba(255,204,77,0.6);
+    background: rgba(255,204,77,0.15); color: var(--accent);
+    font-family: inherit; font-size: 13.5px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .btn:active { background: rgba(255,204,77,0.32); }
+  .btn.ghost { border-color: var(--line); color: var(--fg); background: rgba(255,255,255,0.05); }
+  .btn[disabled] { opacity: 0.4; }
+  .btnrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+
+  /* ------------------------------------------------------------ overlay -- */
+  #overlay {
+    position: absolute; inset: 0; z-index: 10; display: none;
+    align-items: safe center; justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    background: radial-gradient(120% 90% at 50% 0%, rgba(12,17,36,0.86), rgba(5,7,16,0.96));
+    overflow-y: auto;
+  }
+  #overlay.on { display: flex; }
+  .card {
+    width: min(560px, 100%);
+    background: rgba(13,18,38,0.94);
+    border: 1px solid var(--line); border-radius: 16px;
+    padding: 20px 18px 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.65);
+    text-align: center;
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 6px 0 2px; font-size: clamp(30px, 9vw, 50px); letter-spacing: 0.16em; font-weight: 700; line-height: 1; color: var(--accent); text-shadow: 0 0 26px rgba(255,204,77,0.3); }
+  h2 { margin: 2px 0 6px; font-size: clamp(18px, 5.4vw, 26px); letter-spacing: 0.07em; font-weight: 700; }
+  .tagline { font-size: 12.5px; color: var(--dim); letter-spacing: 0.03em; margin-bottom: 10px; line-height: 1.45; }
+  .keys { display: grid; grid-template-columns: 1fr; gap: 5px; font-size: 12.5px; color: var(--dim); margin: 10px auto 4px; max-width: 360px; text-align: left; }
+  .keys > div { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 4px; }
+  .keys span { color: var(--fg); font-weight: 700; }
+
+  .stagelist { display: flex; flex-direction: column; gap: 7px; margin: 10px 0 4px; text-align: left; }
+  .srow {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    min-height: 50px; padding: 6px 11px; border-radius: 11px;
+    border: 1px solid var(--line); background: rgba(255,255,255,0.05); color: var(--fg);
+    font-family: inherit; font-size: 13.5px; font-weight: 600; text-align: left; cursor: pointer;
+  }
+  .srow .num { flex: 0 0 26px; height: 26px; border-radius: 7px; background: rgba(255,204,77,0.16); color: var(--accent); font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .srow .nm { flex: 1 1 auto; line-height: 1.2; overflow-wrap: anywhere; }
+  .srow .st { flex: 0 0 auto; font-size: 11px; color: var(--dim); letter-spacing: 0.06em; }
+  .srow.done { border-color: rgba(79,211,154,0.5); }
+  .srow.done .st { color: var(--ok); }
+  .srow.locked { opacity: 0.45; cursor: not-allowed; }
+
+  .prow { display: flex; align-items: center; gap: 9px; margin: 6px 0; }
+  .prow .pn { flex: 0 0 96px; font-size: 11.5px; letter-spacing: 0.05em; color: var(--fg); text-align: left; }
+  .bar { flex: 1 1 auto; height: 12px; border-radius: 7px; background: rgba(255,255,255,0.08); overflow: hidden; border: 1px solid var(--line); }
+  .bar > i { display: block; height: 100%; background: linear-gradient(90deg, rgba(255,204,77,0.85), rgba(79,211,154,0.85)); }
+  .prow .pv { flex: 0 0 78px; font-size: 11px; color: var(--dim); text-align: right; font-variant-numeric: tabular-nums; }
+  .prow .pv.weak { color: var(--bad); font-weight: 700; }
+  .paused { font-size: clamp(24px, 7vw, 40px); font-weight: 700; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent); }
+
+  @media (max-height: 620px) {
+    .card { padding: 13px 14px; border-radius: 12px; }
+    .keys { display: none; }
+    h1 { font-size: clamp(26px, 7vw, 38px); }
+    .srow { min-height: 46px; }
+  }
+  @media (max-width: 380px) {
+    .btn { padding: 0 16px; font-size: 12.5px; letter-spacing: 0.1em; }
+    .wtile { padding: 4px 8px; gap: 3px; }
+    .prow .pn { flex-basis: 82px; font-size: 11px; }
+    .prow .pv { flex-basis: 66px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="brand">SYNTAX<small>SENTENCE LAB</small></div>
+  <div id="topbtns">
+    <button class="iconbtn" id="muteBtn" type="button" aria-label="Mute">&#9835;</button>
+    <button class="iconbtn" id="pauseBtn" type="button" aria-label="Menu">&#10073;&#10073;</button>
+  </div>
+  <div id="play">
+    <div id="hud"><div id="hudTitle">&nbsp;</div><div id="hudSub">&nbsp;</div></div>
+    <div id="scroll">
+      <div id="inner">
+        <div id="prompt"></div>
+        <div id="work"></div>
+        <div id="feedback"></div>
+      </div>
+    </div>
+    <div id="actions"></div>
+  </div>
+  <div id="overlay"></div>
+</div>
+<script>
+/* =========================================================================
+   SYNTAX — the sentence lab for the Overclock arcade.
+   The pun is grammar syntax / code syntax; the job is teaching a kid to
+   write one clean sentence. Seven stages, every wrong answer explained in
+   plain words, weak rules resurfaced, a parent-readable progress panel.
+   One file, no assets, oscillator audio, no timers and no way to lose.
+   ========================================================================= */
+"use strict";
+
+var SYNTAX_FILE_MARKER = "SYNTAX_OVERCLOCK_SENTENCE_LAB_V1";
+var K_SAVE = 'syntax_v1';
+var K_MUTE = 'syntax_muted_v1';
+
+/* ================================================================ words == */
+/* These lists are the game's teaching vocabulary AND the ground truth the
+   content self-check runs against, so every authored sentence must be
+   spelled out of them. */
+var PROPER = {
+  sarah: 'name', ben: 'name', mia: 'name', jordan: 'name', anna: 'name',
+  milo: 'pet', rusty: 'pet', pepper: 'pet', clover: 'pet',
+  oakwood: 'place', riverside: 'place', ohio: 'place', texas: 'place',
+  monday: 'day', tuesday: 'day', wednesday: 'day', friday: 'day', saturday: 'day', sunday: 'day',
+  march: 'month', june: 'month', october: 'month'
+};
+var CAP_WHY = {
+  name: 'Names of people always get a capital letter.',
+  pet: "A pet's name is a name too, so it gets a capital letter.",
+  place: 'The name of a place always gets a capital letter.',
+  day: 'Days of the week always get a capital letter.',
+  month: 'The names of months always get a capital letter.',
+  start: 'Every sentence starts with a capital letter.',
+  i: 'The word I is always a capital, even all by itself.'
+};
+var QUESTION_STARTERS = ['who','what','where','when','why','how','is','are','was','were','do','does','did','can','could','will','would','should','have','has','had','am','may'];
+var EXCLAIM_CUES = ['wow','look','watch','hooray','yay','oh','help','won','amazing','huge','never','stop','hurry','great'];
+var INTRO_STARTERS = ['after','before','when','while','if','since','because','although','finally','first','then','next','yesterday','on','in','during','at','later','once','suddenly','every'];
+var CONJ = ['and','but','or','so','yet'];
+var SUBORDINATORS = ['because','when','while','if','after','before','since','although','unless','until','though','whenever'];
+var PRONOUNS = ['i','he','she','we','they','it','you','who','everyone','nobody','there'];
+/* verbs that take a whole clause after them — "Sarah said we needed a bath" is
+   one sentence, not two, so these switch the run-on detector off */
+var REPORT_VERBS = ['said','says','say','think','thinks','know','knows','told','tell','felt','feel','hope','hopes','wish','asked','ask','saw','see','sees','heard','hear'];
+var DETS = ['the','my','our','a','an','his','her','their','its','this','that','these','those','some','all','every','both','two','one'];
+var VERBS = ['ran','run','runs','sat','sit','sits','barked','bark','barks','washed','wash','dried','dry','rode','ride','rides','got','get','gets','was','were','is','are','am','be','been','blew','blow','rained','rain','rains','turned','turn','turns','stopped','stop','stops','went','go','goes','planted','plant','plants','played','play','plays','feed','feeds','fed','sleeps','sleep','slept','naps','nap','likes','like','liked','love','loves','helped','help','helps','visit','visits','drove','drive','drives','won','win','wins','watched','watch','watches','look','looks','looked','does','do','did','has','have','had','will','can','could','would','should','may','might','ate','eat','eats','made','make','makes','saw','see','sees','jumped','jump','jumps','walked','walk','walks','read','reads','put','chased','chase','chases','found','find','finds','took','take','takes','gave','give','gives','felt','feel','feels','said','say','says','called','call','calls','painted','paint','baked','bake','filled','fill','spilled','spill','waited','wait','waits','carried','carry','picked','pick','picks','wagged','wag','licked','lick','purred','purr','hopped','hop','dug','dig','swim','swam','threw','throw','caught','catch','need','needs','want','wants','know','knows','think','thinks','shook','shake','covered','cover','curls','curl','bring','brings','brought','come','comes','came','packed','pack','grabbed','grab','wanted','hanging','hang','smells','smell','stayed','stay','told','tell','left','leave','loved','finished','finish'];
+var NOUNS = ['dog','dogs','cat','cats','bike','bikes','park','school','ball','balls','yard','porch','kite','game','games','team','leash','leashes','bed','window','windows','bird','birds','book','books','pancakes','lunch','noon','morning','day','days','rain','mud','soup','truck','seeds','sister','brother','puppy','puppies','fish','apples','cheese','crackers','glove','bat','cap','homework','sun','pizza','water','blanket','room','jacket','jackets','shoes','shoe','hole','bath','fur','smell','tail','ears','toys','box','door','doors','backpacks','backpack','song','songs','mail','fence','hill','wagon','sock','socks','snack','snacks','fish','walk','house','store','town','library','practice','kitchen','field','trail','tree','trees','table','chair','floor','coat','boots','gloves','friend','friends','class','teacher','bus'];
+var NOUNS_PLURAL = ['dogs','cats','bikes','balls','windows','birds','books','puppies','apples','crackers','leashes','toys','doors','backpacks','songs','jackets','shoes','socks','snacks','friends','trees','boots','gloves','seeds','fish','crackers','games','days'];
+var ADJECTIVES = ['new','soft','red','blue','big','muddy','huge','loud','warm','hot','cold','sunny','softest','best','funny','happy','tired','ready','late','excited','quiet','busy','wet','dry','clean','dirty','little','tall','small','sleepy','hungry','proud','kind','brave','always'];
+var GERUNDS = ['going','coming','playing','running','riding','reading','waiting','singing','sleeping','helping','looking','making','getting','staying','bringing'];
+var PLACE_NOUNS = ['school','park','town','store','house','bed','practice','library','game','yard','kitchen','field','class','bus'];
+var PLACE_PREPS = ['over','in','out','up','down','under','right','and','to','back','from','near'];
+var CONTRACTIONS = {
+  "it's": ['it is','it has'],
+  "let's": ['let us'],
+  "don't": ['do not'],
+  "we're": ['we are'],
+  "they're": ['they are'],
+  "you're": ['you are'],
+  "can't": ['can not','cannot'],
+  "didn't": ['did not'],
+  "isn't": ['is not'],
+  "i'm": ['i am'],
+  "she's": ['she is','she has'],
+  "he's": ['he is'],
+  "that's": ['that is'],
+  "we'll": ['we will']
+};
+
+function has(list, w) { return list.indexOf(w) >= 0; }
+function bare(t) { return String(t).toLowerCase().replace(/[^a-z']/g, ''); }
+function words_(s) { return String(s).toLowerCase().replace(/[^a-z' ]/g, ' ').split(/\s+/).filter(Boolean); }
+function isVerb(w) { return has(VERBS, w); }
+function isSubjWord(w) { return has(PRONOUNS, w) || has(DETS, w) || !!PROPER[w]; }
+
+/* how many subject+verb clauses live in a stretch of text */
+function clauseCount(text) {
+  var ws = words_(text), n = 0, i = 0;
+  while (i < ws.length) {
+    if (isSubjWord(ws[i])) {
+      var lim = Math.min(ws.length, i + 8), j = i + 1, found = -1;
+      while (j < lim) { if (isVerb(ws[j])) { found = j; break; } j++; }
+      if (found >= 0) { n++; i = found + 1; continue; }
+    }
+    i++;
+  }
+  return n;
+}
+function startsSub(text) { return has(SUBORDINATORS, words_(text)[0] || ''); }
+function isRunon(text) {
+  if (/[,;]/.test(text)) return false;
+  var ws = words_(text);
+  for (var i = 0; i < ws.length; i++) if (has(CONJ, ws[i]) || has(REPORT_VERBS, ws[i])) return false;
+  return clauseCount(text) >= 2;
+}
+function isComplete(text) {
+  if (isRunon(text)) return false;
+  return startsSub(text) ? clauseCount(text) >= 2 : clauseCount(text) >= 1;
+}
+function classify(text) { return isRunon(text) ? 'runon' : (isComplete(text) ? 'sentence' : 'fragment'); }
+
+/* the possessive rule, done by machine so the content can be checked */
+function expectedPossessive(owner) {
+  var o = String(owner);
+  if (o.toLowerCase() === 'it') return 'its';
+  return /s$/.test(o) ? o + "'" : o + "'s";
+}
+/* PROPER lookup that tolerates Ben's / Bens */
+function properOf(tok) {
+  var b = bare(tok);
+  if (PROPER[b]) return PROPER[b];
+  var s = b.replace(/'s$/, '').replace(/'$/, '');
+  if (PROPER[s]) return PROPER[s];
+  s = b.replace(/s$/, '');
+  if (PROPER[s]) return PROPER[s];
+  return null;
+}
+/* independent capitalisation audit: which token indexes are mis-capitalised */
+function capFaults(tokens) {
+  var bad = [], startNext = true;
+  for (var i = 0; i < tokens.length; i++) {
+    var t = tokens[i], letters = t.replace(/[^A-Za-z']/g, '');
+    if (!letters) { if (/[.!?]$/.test(t)) startNext = true; continue; }
+    var isCap = /^[A-Z]/.test(letters);
+    var want = startNext || !!properOf(t) || bare(t) === 'i';
+    if (want !== isCap) bad.push(i);
+    startNext = /[.!?]["')]?$/.test(t);
+  }
+  return bad;
+}
+</script>
+<script>
+/* ============================================================== content == */
+/* Stage 1 — capitals and end marks. Stored in their CORRECT form; the game
+   lowercases the words and strips the mark, so the answer key is derived
+   rather than typed twice. */
+var CAPS_ITEMS = [
+  { c: "Sarah rode her bike to the park.", k: 'telling' },
+  { c: "My dog Milo sleeps on the porch.", k: 'telling' },
+  { c: "Did Ben feed the cat on Tuesday?", k: 'asking' },
+  { c: "We ride to Riverside in June.", k: 'telling' },
+  { c: "Look at that huge kite!", k: 'strong' },
+  { c: "When does Mia get home from school?", k: 'asking' },
+  { c: "I love reading in the yard.", k: 'telling' },
+  { c: "Our team won the game!", k: 'strong' },
+  { c: "Does Rusty like the new leash?", k: 'asking' },
+  { c: "On Saturday we drove to Ohio.", k: 'telling' }
+];
+
+var TYPE_ITEMS = [
+  { t: "Ran all the way home.", type: 'fragment',
+    why: "Somebody is missing. Who ran? A sentence needs a naming part.",
+    fix: { opts: ["He ran all the way home.", "Ran all the way home.", "Ran all the way home and back."], a: 0 } },
+  { t: "The puppy in the yard.", type: 'fragment',
+    why: "Nothing is happening here. There is no action word telling what the puppy did.",
+    fix: { opts: ["The puppy in the yard barked.", "The puppy in the yard.", "In the yard the puppy."], a: 0 } },
+  { t: "Ben washed the car and Mia dried it.", type: 'sentence',
+    why: "Two whole ideas joined with the word and. That is allowed." },
+  { t: "We rode our bikes we got muddy.", type: 'runon',
+    why: "Two whole sentences are crashing into each other with nothing between them.",
+    fix: { opts: ["We rode our bikes, and we got muddy.", "We rode our bikes we got muddy.", "We rode our bikes we got muddy we went home."], a: 0 } },
+  { t: "Because the rain stopped.", type: 'fragment',
+    why: "The word because promises more. It leaves you waiting for the rest.",
+    fix: { opts: ["Because the rain stopped, we went outside.", "Because the rain finally stopped.", "Because the rain stopped."], a: 0 } },
+  { t: "Milo barked at the mail truck.", type: 'sentence',
+    why: "A naming part (Milo) and an action part (barked). That is a whole sentence." },
+  { t: "The soup was hot I blew on it.", type: 'runon',
+    why: "Two sentences are glued together with no comma and no joining word.",
+    fix: { opts: ["The soup was hot, so I blew on it.", "The soup was hot I blew on it.", "The soup was hot I blew on it I ate it."], a: 0 } },
+  { t: "My sister and I planted seeds.", type: 'sentence',
+    why: "One naming part (my sister and I) and one action (planted). Whole sentence." },
+  { t: "Sat by the window all morning.", type: 'fragment',
+    why: "Who sat? The naming part never shows up.",
+    fix: { opts: ["The cat sat by the window all morning.", "Sat by the window all morning.", "Sat by the window all morning and afternoon."], a: 0 } },
+  { t: "It rained all day the yard turned to mud.", type: 'runon',
+    why: "Two complete ideas running together in one breath.",
+    fix: { opts: ["It rained all day, so the yard turned to mud.", "It rained all day the yard turned to mud.", "It rained all day the yard turned to mud we stayed inside."], a: 0 } }
+];
+
+var BUILD_ITEMS = [
+  { tiles: ['we','ate','lunch','at','noon'],
+    valid: ['we ate lunch at noon', 'at noon we ate lunch'] },
+  { tiles: ['the','cat','slept','on','my','bed'],
+    valid: ['the cat slept on my bed', 'on my bed the cat slept'] },
+  { tiles: ['sarah','rides','her','bike','every','day'],
+    valid: ['sarah rides her bike every day', 'every day sarah rides her bike'] },
+  { tiles: ['rusty','barks','loudly'],
+    valid: ['rusty barks loudly', 'rusty loudly barks'] },
+  { tiles: ['i','read','a','book','quietly'],
+    valid: ['i read a book quietly', 'i quietly read a book', 'quietly i read a book'] },
+  { tiles: ['ben','made','pancakes','this','morning'],
+    valid: ['ben made pancakes this morning', 'this morning ben made pancakes'] }
+];
+
+var COMMA_ITEMS = [
+  { w: "We packed apples cheese and crackers", a: [2,3], r: 'list' },
+  { w: "Mia has a dog a cat and two fish", a: [3,5], r: 'list' },
+  { w: "Ben grabbed his glove his bat and his cap", a: [3,5], r: 'list' },
+  { w: "After the game we ate pizza", a: [2], r: 'intro' },
+  { w: "On Saturday morning Ben walked the dog", a: [2], r: 'intro' },
+  { w: "Finally the sun came out", a: [0], r: 'intro' },
+  { w: "Rusty wanted a walk but it was raining", a: [3], r: 'compound' },
+  { w: "I finished my homework and I rode my bike", a: [3], r: 'compound' },
+  { w: "We can ride bikes or we can swim", a: [3], r: 'compound' }
+];
+
+var APOS_ITEMS = [
+  { t: "___ raining again.", opts: ["Its","It's"], a: "It's", kind: 'contraction', expand: "It is" },
+  { t: "The dog wagged ___ tail.", opts: ["it's","its"], a: "its", kind: 'possessive', owner: 'it' },
+  { t: "___ go to the park!", opts: ["Lets","Let's"], a: "Let's", kind: 'contraction', expand: "Let us" },
+  { t: "That is ___ bike.", opts: ["Bens","Ben's","Bens'"], a: "Ben's", kind: 'possessive', owner: 'Ben' },
+  { t: "All the ___ leashes are hanging up.", opts: ["dogs","dog's","dogs'"], a: "dogs'", kind: 'possessive', owner: 'dogs' },
+  { t: "___ not going to rain today.", opts: ["Its","It's"], a: "It's", kind: 'contraction', expand: "It is" },
+  { t: "The ___ ears are soft.", opts: ["rabbits","rabbit's","rabbits'"], a: "rabbit's", kind: 'possessive', owner: 'rabbit' },
+  { t: "We ___ find the ball.", opts: ["dont","don't"], a: "don't", kind: 'contraction', expand: "do not" },
+  { t: "The ___ toys are in a box.", opts: ["childrens","children's","childrens'"], a: "children's", kind: 'possessive', owner: 'children' }
+];
+
+var HOMO_ITEMS = [
+  { t: "The kids left ___ backpacks by the door.", opts: ["their","there","they're"], a: "their" },
+  { t: "Put the box over ___.", opts: ["their","there","they're"], a: "there" },
+  { t: "___ going to love this song.", opts: ["Their","There","They're"], a: "They're" },
+  { t: "___ is a bird on the fence.", opts: ["Their","There","They're"], a: "There" },
+  { t: "Mia and Ben said ___ ready.", opts: ["their","there","they're"], a: "they're" },
+  { t: "Is this ___ jacket?", opts: ["your","you're"], a: "your" },
+  { t: "___ going to be late.", opts: ["Your","You're"], a: "You're" },
+  { t: "I like ___ new shoes.", opts: ["your","you're"], a: "your" },
+  { t: "We have ___ puppies.", opts: ["to","too","two"], a: "two" },
+  { t: "It is ___ hot to play outside.", opts: ["to","too","two"], a: "too" },
+  { t: "Ben wants ___ ride his bike.", opts: ["to","too","two"], a: "to" },
+  { t: "Can I come ___?", opts: ["to","too","two"], a: "too" }
+];
+
+var PARA_ITEMS = [
+  { clean: "On Saturday my dog Milo dug a hole in the yard. He was covered in mud, and he shook it all over me. Sarah said we needed to give him a bath. Now his fur is soft and it's the best smell ever.",
+    count: 5,
+    errors: [
+      { i: 0,  wrong: "on",        right: "On",     rule: 'capitals',    opts: ["on","On","ON"],           why: "Every sentence starts with a capital letter, so <b>on</b> should be <b>On</b>." },
+      { i: 1,  wrong: "saturday",  right: "Saturday", rule: 'capitals',  opts: ["saturday","Saturday"],    why: "Days of the week always get a capital, so <b>saturday</b> should be <b>Saturday</b>." },
+      { i: 4,  wrong: "milo",      right: "Milo",   rule: 'capitals',    opts: ["milo","Milo"],            why: "<b>milo</b> is your dog's name, and names get a capital: <b>Milo</b>." },
+      { i: 27, wrong: "too",       right: "to",     rule: 'homophones',  opts: ["to","too","two"],         why: "\"needed <b>to</b> give\" is the to that goes in front of an action word. <b>too</b> means also or very." },
+      { i: 38, wrong: "its",       right: "it's",   rule: 'apostrophes', opts: ["its","it's"],             why: "Here you mean <b>it is</b> the best smell, so it needs the apostrophe: <b>it's</b>." }
+    ] },
+  { clean: "Ben and I ride bikes to the park every Friday. We bring water, a ball, and a big blanket. Do you want to come with us? There is always room for one more. My bike is red and Ben's bike is blue.",
+    count: 5,
+    errors: [
+      { i: 9,  wrong: "friday.",  right: "Friday.", rule: 'capitals',   opts: ["friday.","Friday."],       why: "Days of the week always get a capital, so <b>friday</b> should be <b>Friday</b>." },
+      { i: 10, wrong: "we",       right: "We",      rule: 'capitals',   opts: ["we","We"],                 why: "A new sentence starts here, and sentences start with a capital: <b>We</b>." },
+      { i: 25, wrong: "us.",      right: "us?",     rule: 'endmarks',   opts: ["us.","us?","us!"],         why: "\"Do you want to come with us\" is <b>asking</b> something, so it ends with a question mark." },
+      { i: 26, wrong: "Their",    right: "There",   rule: 'homophones', opts: ["Their","There","They're"], why: "<b>There</b> is the one that goes with <b>is</b> and points to a place. <b>Their</b> shows who owns something." },
+      { i: 38, wrong: "Bens",     right: "Ben's",   rule: 'apostrophes',opts: ["Bens","Ben's","Bens'"],    why: "The bike belongs to Ben, so add an apostrophe and an s: <b>Ben's</b>." }
+    ] },
+  { clean: "My cat Pepper sleeps in the sunny window. She likes to watch the birds, but she never chases them. When it rains, she curls up on my bed. I think she's the softest cat in Oakwood.",
+    count: 4,
+    errors: [
+      { i: 2,  wrong: "pepper",    right: "Pepper",   rule: 'capitals',    opts: ["pepper","Pepper"],   why: "<b>pepper</b> is the cat's name, and names always get a capital: <b>Pepper</b>." },
+      { i: 10, wrong: "too",       right: "to",       rule: 'homophones',  opts: ["to","too","two"],    why: "\"likes <b>to</b> watch\" — this to goes in front of an action word. <b>too</b> means also." },
+      { i: 30, wrong: "shes",      right: "she's",    rule: 'apostrophes', opts: ["shes","she's"],      why: "This is short for <b>she is</b>, and the apostrophe stands in for the missing i: <b>she's</b>." },
+      { i: 35, wrong: "oakwood.",  right: "Oakwood.", rule: 'capitals',    opts: ["oakwood.","Oakwood."], why: "<b>Oakwood</b> is the name of a place, so it gets a capital." }
+    ] }
+];
+
+var RULE_NAMES = {
+  capitals: 'Capitals', endmarks: 'End marks', structure: 'Whole sentences',
+  building: 'Word order', commas: 'Commas', apostrophes: 'Apostrophes', homophones: 'Sound-alikes'
+};
+var RULE_ORDER = ['capitals','endmarks','structure','building','commas','apostrophes','homophones'];
+
+var STAGES = [
+  { id: 'caps',  name: 'Capitals & End Marks', rules: ['capitals','endmarks'], items: CAPS_ITEMS,
+    blurb: 'Tap the words that need a capital, then choose how the sentence ends.' },
+  { id: 'type',  name: 'Sentence, Fragment or Run-on', rules: ['structure'], items: TYPE_ITEMS,
+    blurb: 'Decide what you are looking at — then fix the ones that are broken.' },
+  { id: 'build', name: 'Building Sentences', rules: ['building'], items: BUILD_ITEMS,
+    blurb: 'Tap the word tiles into an order that makes a real sentence.' },
+  { id: 'comma', name: 'Commas', rules: ['commas'], items: COMMA_ITEMS,
+    blurb: 'Tap the word that a comma should come AFTER.' },
+  { id: 'apos',  name: 'Apostrophes', rules: ['apostrophes'], items: APOS_ITEMS,
+    blurb: 'Short-for words and belongs-to words — including the its / it’s trap.' },
+  { id: 'homo',  name: 'Sound-Alike Words', rules: ['homophones'], items: HOMO_ITEMS,
+    blurb: 'their / there / they’re, your / you’re, to / too / two.' },
+  { id: 'para',  name: 'Editing a Paragraph', rules: ['capitals','endmarks','apostrophes','homophones'], items: PARA_ITEMS,
+    blurb: 'A short story with mistakes hiding in it. Find every one.' }
+];
+
+/* tag every item with its stage + the rule the queue weights it by */
+(function tagItems() {
+  for (var s = 0; s < STAGES.length; s++) {
+    for (var i = 0; i < STAGES[s].items.length; i++) {
+      var it = STAGES[s].items[i];
+      it.stage = s; it.idx = i;
+      it.rule = STAGES[s].id === 'para' ? 'capitals' : STAGES[s].rules[0];
+      it.stageId = STAGES[s].id;
+    }
+  }
+})();
+</script>
+<script>
+/* ================================================================ audio == */
+function loadStr(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function saveStr(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+
+var actx = null, master = null, muted = loadStr(K_MUTE, '0') === '1';
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') { try { actx.resume(); } catch (e) {} } return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = muted ? 0 : 0.32;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function setMuted(m) {
+  muted = !!m; saveStr(K_MUTE, muted ? '1' : '0');
+  if (master) master.gain.value = muted ? 0 : 0.32;
+  var b = document.getElementById('muteBtn');
+  if (b) b.innerHTML = muted ? '&#215;' : '&#9835;';
+}
+function tone(type, f0, f1, dur, vol, delay) {
+  if (!actx || muted) return;
+  var t = actx.currentTime + (delay || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(24, f1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+var sfx = {
+  tap:   function () { tone('sine', 520, 520, 0.05, 0.06); },
+  good:  function () { tone('sine', 523, 523, 0.14, 0.09); tone('sine', 784, 784, 0.24, 0.08, 0.11); },
+  learn: function () { tone('triangle', 300, 250, 0.18, 0.07); tone('triangle', 250, 240, 0.22, 0.05, 0.16); },
+  unlock:function () { tone('sine', 392, 392, 0.16, 0.09); tone('sine', 523, 523, 0.16, 0.09, 0.15); tone('sine', 659, 659, 0.34, 0.09, 0.3); }
+};
+
+/* ================================================================ save === */
+function freshSave() {
+  var r = {};
+  for (var i = 0; i < RULE_ORDER.length; i++) r[RULE_ORDER[i]] = { seen: 0, right: 0 };
+  return { v: 1, unlocked: 1, rules: r, done: {} };
+}
+function num(v) { var n = Number(v); return (isFinite(n) && n >= 0) ? Math.floor(n) : 0; }
+function loadSave() {
+  var raw = null;
+  try { raw = JSON.parse(localStorage.getItem(K_SAVE) || 'null'); } catch (e) { raw = null; }
+  var out = freshSave();
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  var u = Number(raw.unlocked);
+  out.unlocked = (isFinite(u) && u >= 1) ? Math.min(STAGES.length, Math.floor(u)) : 1;
+  if (raw.rules && typeof raw.rules === 'object' && !Array.isArray(raw.rules)) {
+    for (var i = 0; i < RULE_ORDER.length; i++) {
+      var k = RULE_ORDER[i], v = raw.rules[k];
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        var seen = num(v.seen), right = Math.min(num(v.right), seen);
+        out.rules[k] = { seen: seen, right: right };
+      }
+    }
+  }
+  if (raw.done && typeof raw.done === 'object' && !Array.isArray(raw.done)) {
+    for (var s = 0; s < STAGES.length; s++) {
+      if (raw.done[STAGES[s].id] === true) out.done[STAGES[s].id] = true;
+    }
+  }
+  return out;
+}
+function saveNow() { try { localStorage.setItem(K_SAVE, JSON.stringify(SV)); } catch (e) {} }
+
+var SV = loadSave();
+
+/* =============================================================== state === */
+var G = {
+  screen: 'title',      /* title | menu | progress | play | paused | stagedone */
+  stage: 0,
+  queue: [],
+  item: null,
+  phase: 'answer',      /* answer | fix | result */
+  sel: null,            /* per-item working state */
+  asked: 0, firstRight: 0,
+  lastFeedback: '',
+  lastWrongRule: null
+};
+
+function weakness(rule) {
+  var r = SV.rules[rule];
+  if (!r || r.seen < 1) return 0;
+  return 1 - (r.right / r.seen);
+}
+function recordRule(rule, ok) {
+  var r = SV.rules[rule];
+  if (!r) { r = SV.rules[rule] = { seen: 0, right: 0 }; }
+  r.seen++; if (ok) r.right++;
+  saveNow();
+}
+</script>
+<script>
+/* ================================================================= dom === */
+var stageEl = document.getElementById('stage');
+var overlay = document.getElementById('overlay');
+var playEl  = document.getElementById('play');
+var promptEl = document.getElementById('prompt');
+var workEl = document.getElementById('work');
+var fbEl = document.getElementById('feedback');
+var actEl = document.getElementById('actions');
+var hudT = document.getElementById('hudTitle');
+var hudS = document.getElementById('hudSub');
+var scrollEl = document.getElementById('scroll');
+
+function el(tag, cls, txt) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (txt !== undefined && txt !== null) e.textContent = txt;
+  return e;
+}
+function btn(cls, txt) { var b = el('button', cls, txt); b.type = 'button'; return b; }
+function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+function hideOverlay() { overlay.classList.remove('on'); clear(overlay); }
+function showOverlay(html) { overlay.innerHTML = html; overlay.classList.add('on'); }
+
+/* ------------------------------------------------------------ overlays -- */
+function titleScreen() {
+  G.screen = 'title';
+  document.body.classList.remove('playing');
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Overclock Arcade</div>' +
+      '<h1>SYNTAX</h1>' +
+      '<div class="tagline">The sentence lab. Capitals, end marks, commas, apostrophes and the sound-alike words — one rule at a time, and every miss gets explained. No timer, no way to lose.</div>' +
+      '<div class="keys">' +
+        '<div>Choose<span>Tap a tile or a button</span></div>' +
+        '<div>Check answer<span>Enter</span></div>' +
+        '<div>Pick an option<span>Number keys 1-9</span></div>' +
+        '<div>Menu<span>Esc or P</span></div>' +
+        '<div>Mute<span>M</span></div>' +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="menu">START LEARNING</button>' +
+        '<button class="btn ghost" data-act="progress">PROGRESS</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function menuScreen() {
+  G.screen = 'menu';
+  document.body.classList.remove('playing');
+  var rows = '';
+  for (var i = 0; i < STAGES.length; i++) {
+    var st = STAGES[i];
+    var locked = i + 1 > SV.unlocked;
+    var done = SV.done[st.id] === true;
+    rows += '<button class="srow ' + (locked ? 'locked' : (done ? 'done' : '')) + '" type="button" ' +
+      (locked ? 'disabled ' : '') + 'data-act="stage" data-stage="' + i + '">' +
+      '<span class="num">' + (i + 1) + '</span>' +
+      '<span class="nm">' + esc(st.name) + '</span>' +
+      '<span class="st">' + (locked ? 'LOCKED' : (done ? '✓ DONE' : 'OPEN')) + '</span>' +
+      '</button>';
+  }
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Pick a lesson</div>' +
+      '<h2>THE LADDER</h2>' +
+      '<div class="tagline">Finish a lesson to open the next one. Anything you have opened can be replayed any time.</div>' +
+      '<div class="stagelist">' + rows + '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn ghost" data-act="progress">PROGRESS</button>' +
+        '<button class="btn ghost" data-act="title">BACK</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function progressScreen() {
+  G.screen = 'progress';
+  document.body.classList.remove('playing');
+  var rows = '', anyWeak = false;
+  for (var i = 0; i < RULE_ORDER.length; i++) {
+    var k = RULE_ORDER[i], r = SV.rules[k];
+    var pct = r.seen ? Math.round(r.right / r.seen * 100) : 0;
+    var weak = r.seen >= 3 && pct < 70;
+    if (weak) anyWeak = true;
+    rows += '<div class="prow">' +
+      '<span class="pn">' + esc(RULE_NAMES[k]) + '</span>' +
+      '<span class="bar"><i style="width:' + (r.seen ? pct : 0) + '%"></i></span>' +
+      '<span class="pv' + (weak ? ' weak' : '') + '">' + (r.seen ? (r.right + '/' + r.seen + ' · ' + pct + '%') : 'not yet') + '</span>' +
+      '</div>';
+  }
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">For the grown-ups</div>' +
+      '<h2>PROGRESS BY RULE</h2>' +
+      '<div class="tagline">Correct on the first try, per rule. Rules under 70% are marked and come around more often in practice.</div>' +
+      rows +
+      '<div class="tagline" style="margin-top:12px">' +
+        (anyWeak ? 'Highlighted rules are the ones worth sitting with.' : 'Nothing is lagging behind right now.') +
+      '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="mixed">MIXED PRACTICE</button>' +
+        '<button class="btn ghost" data-act="reset">RESET</button>' +
+        '<button class="btn ghost" data-act="menu">BACK</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function pauseScreen() {
+  G.screen = 'paused';
+  showOverlay(
+    '<div class="card">' +
+      '<div class="paused">Break</div>' +
+      '<div class="tagline">Nothing is running. Take all the time you want.</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="resume">KEEP GOING</button>' +
+        '<button class="btn ghost" data-act="menu">LESSONS</button>' +
+      '</div>' +
+    '</div>');
+}
+
+function stageDoneScreen() {
+  G.screen = 'stagedone';
+  document.body.classList.remove('playing');
+  var st = STAGES[G.stage];
+  var pct = G.asked ? Math.round(G.firstRight / G.asked * 100) : 0;
+  var mastered = pct >= 70;
+  var unlockedNew = false;
+  if (mastered && st) {
+    SV.done[st.id] = true;
+    if (G.stage + 1 >= SV.unlocked && G.stage + 1 < STAGES.length) { SV.unlocked = G.stage + 2; unlockedNew = true; }
+    saveNow();
+  }
+  if (mastered) sfx.unlock(); else sfx.learn();
+  var next = STAGES[G.stage + 1];
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">' + esc(st ? st.name : 'Practice') + '</div>' +
+      '<h2>' + (mastered ? 'NICE WORK' : 'GOOD PRACTICE') + '</h2>' +
+      '<div class="tagline">Right on the first try: <b style="color:var(--accent)">' + G.firstRight + ' of ' + G.asked + '</b> (' + pct + '%).' +
+        (mastered ? (unlockedNew && next ? '<br>You just opened <b style="color:var(--accent)">' + esc(next.name) + '</b>.' : '<br>That rule is looking solid.')
+                  : '<br>Run it again — the ones you missed will come back around.') + '</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="again">TRY IT AGAIN</button>' +
+        (mastered && next && SV.unlocked > G.stage + 1 ? '<button class="btn" data-act="nextstage">NEXT LESSON</button>' : '') +
+        '<button class="btn ghost" data-act="menu">LESSONS</button>' +
+      '</div>' +
+    '</div>');
+}
+
+overlay.addEventListener('click', function (e) {
+  var t = e.target;
+  var b = (t && t.closest) ? t.closest('[data-act]') : null;
+  if (!b || b.disabled) return;
+  initAudio();
+  var act = b.getAttribute('data-act');
+  if (act === 'menu') menuScreen();
+  else if (act === 'title') titleScreen();
+  else if (act === 'progress') progressScreen();
+  else if (act === 'stage') startStage(parseInt(b.getAttribute('data-stage'), 10));
+  else if (act === 'again') startStage(G.stage);
+  else if (act === 'nextstage') startStage(G.stage + 1);
+  else if (act === 'resume') { hideOverlay(); G.screen = 'play'; document.body.classList.add('playing'); }
+  else if (act === 'mixed') startMixed();
+  else if (act === 'reset') { SV = freshSave(); saveNow(); progressScreen(); }
+});
+</script>
+<script>
+/* ================================================================ queue == */
+function shuffled(a) {
+  var b = a.slice();
+  for (var i = b.length - 1; i > 0; i--) { var j = (Math.random() * (i + 1)) | 0; var t = b[i]; b[i] = b[j]; b[j] = t; }
+  return b;
+}
+function buildQueue(stageIdx) {
+  var st = STAGES[stageIdx];
+  var q = shuffled(st.items);
+  /* weak rules first, so a shaky rule is what the child meets soonest */
+  q.sort(function (a, b) { return weakness(b.rule) - weakness(a.rule); });
+  return q;
+}
+/* mixed practice draws from every unlocked stage, weighted toward weak rules */
+function buildMixedQueue(n) {
+  var pool = [];
+  for (var s = 0; s < Math.min(SV.unlocked, STAGES.length); s++) {
+    var st = STAGES[s];
+    for (var i = 0; i < st.items.length; i++) {
+      var reps = 1 + Math.round(weakness(st.items[i].rule) * 3);
+      for (var k = 0; k < reps; k++) pool.push(st.items[i]);
+    }
+  }
+  var out = [], seen = [], guard = 0;
+  pool = shuffled(pool);
+  while (out.length < (n || 10) && guard < 4000) {
+    guard++;
+    var pick = pool[(Math.random() * pool.length) | 0];
+    if (!pick) break;
+    if (seen.indexOf(pick) >= 0 && out.length < Math.min(n || 10, pool.length)) continue;
+    seen.push(pick); out.push(pick);
+  }
+  return out;
+}
+function requeueRule(item) {
+  /* the missed item comes straight back, and one more of the same rule with it */
+  var at = Math.min(2, G.queue.length);
+  G.queue.splice(at, 0, item);
+  var st = STAGES[item.stage];
+  if (st) {
+    for (var i = 0; i < st.items.length; i++) {
+      var cand = st.items[i];
+      if (cand !== item && cand.rule === item.rule && G.queue.indexOf(cand) < 0) {
+        G.queue.splice(Math.min(4, G.queue.length), 0, cand);
+        break;
+      }
+    }
+  }
+}
+function ruleCountInQueue(rule) {
+  var n = 0;
+  for (var i = 0; i < G.queue.length; i++) if (G.queue[i].rule === rule) n++;
+  return n;
+}
+
+function startStage(i) {
+  if (!isFinite(i) || i < 0 || i >= STAGES.length) return;
+  if (i + 1 > SV.unlocked) return;
+  initAudio();
+  G.stage = i;
+  G.mixed = false;
+  G.queue = buildQueue(i);
+  G.asked = 0; G.firstRight = 0;
+  hideOverlay();
+  G.screen = 'play';
+  document.body.classList.add('playing');
+  nextItem();
+}
+function startMixed() {
+  initAudio();
+  G.stage = -1; G.mixed = true;
+  G.queue = buildMixedQueue(10);
+  G.asked = 0; G.firstRight = 0;
+  hideOverlay();
+  G.screen = 'play';
+  document.body.classList.add('playing');
+  nextItem();
+}
+function nextItem() {
+  if (!G.queue.length) {
+    if (G.mixed) { G.stage = 0; mixedDoneScreen(); return; }
+    stageDoneScreen(); return;
+  }
+  G.item = G.queue.shift();
+  G.phase = 'answer';
+  G.firstTry = true;
+  G.sel = null;
+  clear(fbEl);
+  render();
+}
+function mixedDoneScreen() {
+  G.screen = 'stagedone';
+  document.body.classList.remove('playing');
+  var pct = G.asked ? Math.round(G.firstRight / G.asked * 100) : 0;
+  sfx.unlock();
+  showOverlay(
+    '<div class="card">' +
+      '<div class="eyebrow">Mixed practice</div>' +
+      '<h2>ROUND FINISHED</h2>' +
+      '<div class="tagline">Right on the first try: <b style="color:var(--accent)">' + G.firstRight + ' of ' + G.asked + '</b> (' + pct + '%).</div>' +
+      '<div class="btnrow">' +
+        '<button class="btn" data-act="mixed">ANOTHER ROUND</button>' +
+        '<button class="btn ghost" data-act="progress">PROGRESS</button>' +
+        '<button class="btn ghost" data-act="menu">LESSONS</button>' +
+      '</div>' +
+    '</div>');
+}
+</script>
+<script>
+/* =============================================================== render == */
+function setHud() {
+  var st = G.mixed ? null : STAGES[G.stage];
+  hudT.textContent = st ? st.name : 'Mixed Practice';
+  var extra = '';
+  if (G.item && G.item.stageId === 'para' && G.sel && G.sel.fixed) {
+    extra = '  ·  found ' + G.sel.fixed.length + '/' + G.item.errors.length;
+  }
+  hudS.textContent = 'Left in this round: ' + (G.queue.length + 1) + '  ·  first-try ' + G.firstRight + '/' + G.asked + extra;
+}
+function feedback(kind, head, lines) {
+  clear(fbEl);
+  var d = el('div', 'fb ' + kind);
+  var h = el('span', 'hd', head);
+  d.appendChild(h);
+  for (var i = 0; i < lines.length; i++) {
+    var p = document.createElement('p');
+    p.innerHTML = lines[i];
+    d.appendChild(p);
+  }
+  fbEl.appendChild(d);
+  G.lastFeedback = d.textContent;
+  try { d.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+}
+function actions(list) {
+  clear(actEl);
+  for (var i = 0; i < list.length; i++) {
+    var b = btn('btn' + (list[i].ghost ? ' ghost' : ''), list[i].label);
+    b.setAttribute('data-do', list[i].act);
+    if (list[i].disabled) b.disabled = true;
+    actEl.appendChild(b);
+  }
+}
+actEl.addEventListener('click', function (e) {
+  var t = e.target, b = (t && t.closest) ? t.closest('[data-do]') : null;
+  if (!b || b.disabled) return;
+  initAudio();
+  var d = b.getAttribute('data-do');
+  if (d === 'check') checkAnswer();
+  else if (d === 'next') nextItem();
+  else if (d === 'clear') { if (G.sel && G.sel.line) { G.sel.line = []; render(); } }
+});
+
+function primaryAction() {
+  var b = actEl.querySelector('[data-do="check"]:not([disabled])') || actEl.querySelector('[data-do="next"]');
+  if (b) b.click();
+}
+
+/* words of a stage-1 item, with the answer key derived from the correct form */
+function capsParts(item) {
+  var raw = item.c.split(/\s+/);
+  var mark = item.c.slice(-1);
+  var words = [], caps = [];
+  for (var i = 0; i < raw.length; i++) {
+    var w = raw[i];
+    if (i === raw.length - 1) w = w.replace(/[.!?]$/, '');
+    caps.push(/^[A-Z]/.test(w));
+    words.push(w.toLowerCase());
+  }
+  return { words: words, caps: caps, mark: mark };
+}
+function capReason(item, i) {
+  var p = capsParts(item);
+  if (i === 0) return CAP_WHY.start;
+  var b = bare(p.words[i]);
+  if (b === 'i') return CAP_WHY.i;
+  var cat = PROPER[b];
+  return cat ? CAP_WHY[cat] : CAP_WHY.start;
+}
+var MARK_FOR = { telling: '.', asking: '?', strong: '!' };
+var MARK_WHY = {
+  telling: 'This sentence is <b>telling</b> you something, so it ends with a period (<b>.</b>).',
+  asking: 'This sentence is <b>asking</b> something, so it ends with a question mark (<b>?</b>).',
+  strong: 'This sentence is said with <b>big feeling</b>, so it ends with an exclamation mark (<b>!</b>).'
+};
+
+function render() {
+  setHud();
+  clear(workEl);
+  var it = G.item;
+  if (!it) return;
+  var sid = it.stageId;
+  if (sid === 'caps') renderCaps(it);
+  else if (sid === 'type') renderType(it);
+  else if (sid === 'build') renderBuild(it);
+  else if (sid === 'comma') renderComma(it);
+  else if (sid === 'apos' || sid === 'homo') renderChoice(it);
+  else if (sid === 'para') renderPara(it);
+}
+
+/* ------------------------------------------------------------- stage 1 -- */
+function renderCaps(it) {
+  var p = capsParts(it);
+  if (!G.sel) G.sel = { caps: [], mark: '' };
+  promptEl.textContent = 'Tap every word that needs a capital letter, then choose the end mark.';
+  var row = el('div', 'tilerow');
+  for (var i = 0; i < p.words.length; i++) {
+    (function (i) {
+      var on = G.sel.caps.indexOf(i) >= 0;
+      var shown = on ? p.words[i].charAt(0).toUpperCase() + p.words[i].slice(1) : p.words[i];
+      var b = btn('wtile' + (on ? ' on' : ''), shown);
+      b.setAttribute('data-w', i);
+      if (G.phase === 'result') {
+        b.disabled = true;
+        b.className = 'wtile ' + (p.caps[i] === on ? (p.caps[i] ? 'ok' : '') : (on ? 'bad' : 'miss'));
+        clear(b);
+        var g = el('span', 'mk', p.caps[i] === on ? (p.caps[i] ? '✓' : '') : (on ? '✕' : '↑'));
+        if (g.textContent) b.appendChild(g);
+        b.appendChild(document.createTextNode(p.caps[i] ? (p.words[i].charAt(0).toUpperCase() + p.words[i].slice(1)) : p.words[i]));
+      } else {
+        b.onclick = function () {
+          initAudio(); sfx.tap();
+          var k = G.sel.caps.indexOf(i);
+          if (k >= 0) G.sel.caps.splice(k, 1); else G.sel.caps.push(i);
+          render();
+        };
+      }
+      row.appendChild(b);
+    })(i);
+  }
+  workEl.appendChild(row);
+
+  var lab = el('div', 'banklabel', 'How does it end?');
+  workEl.appendChild(lab);
+  var marks = el('div', 'opts');
+  ['.', '?', '!'].forEach(function (m) {
+    var b = btn('opt mark' + (G.sel.mark === m ? ' on' : ''), m);
+    b.setAttribute('data-m', m);
+    if (G.phase === 'result') {
+      b.disabled = true;
+      if (m === p.mark) b.className = 'opt mark ok';
+      else if (m === G.sel.mark) b.className = 'opt mark bad';
+    } else {
+      b.onclick = function () { initAudio(); sfx.tap(); G.sel.mark = m; render(); };
+    }
+    marks.appendChild(b);
+  });
+  workEl.appendChild(marks);
+  if (G.phase === 'result') actions([{ label: 'NEXT', act: 'next' }]);
+  else actions([{ label: 'CHECK', act: 'check', disabled: !G.sel.mark }]);
+}
+function checkCaps() {
+  var it = G.item, p = capsParts(it);
+  var missed = [], extra = [];
+  for (var i = 0; i < p.words.length; i++) {
+    var on = G.sel.caps.indexOf(i) >= 0;
+    if (p.caps[i] && !on) missed.push(i);
+    if (!p.caps[i] && on) extra.push(i);
+  }
+  var capsOk = missed.length === 0 && extra.length === 0;
+  var markOk = G.sel.mark === p.mark;
+  var lines = [];
+  for (var m = 0; m < missed.length; m++) {
+    var w = p.words[missed[m]];
+    lines.push('<b>' + esc(w) + '</b> should be <b>' + esc(w.charAt(0).toUpperCase() + w.slice(1)) + '</b>. ' + capReason(it, missed[m]));
+  }
+  for (var x = 0; x < extra.length; x++) {
+    lines.push('<b>' + esc(p.words[extra[x]]) + '</b> stays small here. It is not a name and it is not the first word of the sentence.');
+  }
+  if (!markOk) lines.push(MARK_WHY[it.k]);
+  return { ok: capsOk && markOk, lines: lines, parts: { capitals: capsOk, endmarks: markOk } };
+}
+
+/* ------------------------------------------------------------- stage 2 -- */
+var TYPE_LABEL = { sentence: 'WHOLE SENTENCE', fragment: 'FRAGMENT', runon: 'RUN-ON' };
+var TYPE_WHY = {
+  sentence: 'A <b>whole sentence</b> has a naming part and an action part, and it stands on its own.',
+  fragment: 'A <b>fragment</b> is only a piece. Something is missing, so it cannot stand alone.',
+  runon: 'A <b>run-on</b> is two whole sentences stuck together with nothing to separate them.'
+};
+function renderType(it) {
+  if (!G.sel) G.sel = { pick: '', fix: -1 };
+  var box = el('div', 'sentbox', it.t);
+  workEl.appendChild(box);
+  if (G.phase === 'fix') {
+    promptEl.textContent = 'Right. Now pick the version that fixes it.';
+    var fo = el('div', 'opts');
+    it.fix.opts.forEach(function (o, i) {
+      var b = btn('opt wide' + (G.sel.fix === i ? ' on' : ''), o);
+      b.setAttribute('data-o', i);
+      b.onclick = function () { initAudio(); sfx.tap(); G.sel.fix = i; render(); };
+      fo.appendChild(b);
+    });
+    workEl.appendChild(fo);
+    actions([{ label: 'CHECK', act: 'check', disabled: G.sel.fix < 0 }]);
+    return;
+  }
+  promptEl.textContent = 'Is this a whole sentence, a fragment, or a run-on?';
+  var opts = el('div', 'opts');
+  ['sentence','fragment','runon'].forEach(function (k) {
+    var b = btn('opt' + (G.sel.pick === k ? ' on' : ''), TYPE_LABEL[k]);
+    b.setAttribute('data-t', k);
+    if (G.phase === 'result') {
+      b.disabled = true;
+      if (k === it.type) b.className = 'opt ok';
+      else if (k === G.sel.pick) b.className = 'opt bad';
+    } else {
+      b.onclick = function () { initAudio(); sfx.tap(); G.sel.pick = k; render(); };
+    }
+    opts.appendChild(b);
+  });
+  workEl.appendChild(opts);
+  if (G.phase === 'result') {
+    if (it.fix) {
+      var fixed = el('div', 'sentbox');
+      fixed.style.borderColor = 'rgba(79,211,154,0.6)';
+      fixed.textContent = '✓ ' + it.fix.opts[it.fix.a];
+      workEl.appendChild(fixed);
+    }
+    actions([{ label: 'NEXT', act: 'next' }]);
+  } else {
+    actions([{ label: 'CHECK', act: 'check', disabled: !G.sel.pick }]);
+  }
+}
+
+/* ------------------------------------------------------------- stage 3 -- */
+function displayWord(w, first) {
+  var s = w;
+  if (bare(w) === 'i') s = 'I';
+  else if (PROPER[bare(w)]) s = w.charAt(0).toUpperCase() + w.slice(1);
+  if (first) s = s.charAt(0).toUpperCase() + s.slice(1);
+  return s;
+}
+function normOrder(s) { return String(s).toLowerCase().replace(/[^a-z' ]/g, '').replace(/\s+/g, ' ').trim(); }
+function checkBuild(item, ordering) { return item.valid.indexOf(normOrder(ordering)) >= 0; }
+
+function renderBuild(it) {
+  if (!G.sel) G.sel = { line: [], bank: it.tiles.slice() };
+  promptEl.textContent = 'Tap the words in order to build a sentence. Tap one in the line to send it back.';
+  var line = el('div', 'line');
+  if (!G.sel.line.length) line.appendChild(el('span', 'hint', 'your sentence goes here'));
+  G.sel.line.forEach(function (w, i) {
+    var b = btn('wtile' + (G.phase === 'result' ? ' ok' : ' on'), displayWord(w, i === 0) + (i === G.sel.line.length - 1 && G.sel.line.length === it.tiles.length ? '.' : ''));
+    if (G.phase === 'result') b.disabled = true;
+    else b.onclick = function () { initAudio(); sfx.tap(); G.sel.bank.push(G.sel.line.splice(i, 1)[0]); render(); };
+    line.appendChild(b);
+  });
+  workEl.appendChild(line);
+  var lab = el('div', 'banklabel', 'Word tiles');
+  workEl.appendChild(lab);
+  var bank = el('div', 'tilerow');
+  G.sel.bank.forEach(function (w, i) {
+    var b = btn('wtile', w);
+    if (G.phase === 'result') b.disabled = true;
+    else b.onclick = function () { initAudio(); sfx.tap(); G.sel.line.push(G.sel.bank.splice(i, 1)[0]); render(); };
+    bank.appendChild(b);
+  });
+  if (!G.sel.bank.length) bank.appendChild(el('span', 'hint', ' '));
+  workEl.appendChild(bank);
+  if (G.phase === 'result') actions([{ label: 'NEXT', act: 'next' }]);
+  else actions([
+    { label: 'CHECK', act: 'check', disabled: G.sel.line.length !== it.tiles.length },
+    { label: 'CLEAR', act: 'clear', ghost: true }
+  ]);
+}
+
+/* ------------------------------------------------------------- stage 4 -- */
+var COMMA_WHY = {
+  list: 'When you list three or more things, a comma goes after each one before the last: <b>apples, cheese, and crackers</b>.',
+  intro: 'When a sentence starts with a scene-setting part, a comma goes right after that part, before the main idea.',
+  compound: 'When <b>and</b>, <b>but</b>, <b>or</b> or <b>so</b> joins two whole sentences, a comma goes just before that joining word.'
+};
+function commaWords(it) { return it.w.split(/\s+/); }
+function renderComma(it) {
+  var ws = commaWords(it);
+  if (!G.sel) G.sel = { at: [] };
+  promptEl.textContent = 'Tap the word that a comma should come AFTER. Tap again to take it back.';
+  var row = el('div', 'tilerow');
+  for (var i = 0; i < ws.length; i++) {
+    (function (i) {
+      var on = G.sel.at.indexOf(i) >= 0;
+      var want = it.a.indexOf(i) >= 0;
+      var b = btn('wtile' + (on ? ' on' : ''));
+      b.setAttribute('data-w', i);
+      b.appendChild(document.createTextNode(ws[i]));
+      if (G.phase === 'result') {
+        b.disabled = true;
+        b.className = 'wtile ' + (want === on ? (want ? 'ok' : '') : (on ? 'bad' : 'miss'));
+        clear(b);
+        var g = (want === on) ? (want ? '✓' : '') : (on ? '✕' : '↑');
+        if (g) b.appendChild(el('span', 'mk', g));
+        b.appendChild(document.createTextNode(ws[i]));
+        if (want) b.appendChild(el('span', 'cm', ','));
+      } else {
+        if (on) b.appendChild(el('span', 'cm', ','));
+        b.onclick = function () {
+          initAudio(); sfx.tap();
+          var k = G.sel.at.indexOf(i);
+          if (k >= 0) G.sel.at.splice(k, 1); else G.sel.at.push(i);
+          render();
+        };
+      }
+      row.appendChild(b);
+    })(i);
+  }
+  workEl.appendChild(row);
+  if (G.phase === 'result') {
+    var fixed = el('div', 'sentbox');
+    fixed.style.borderColor = 'rgba(79,211,154,0.6)';
+    var out = '';
+    for (var j = 0; j < ws.length; j++) out += ws[j] + (it.a.indexOf(j) >= 0 ? ',' : '') + (j < ws.length - 1 ? ' ' : '.');
+    fixed.textContent = '✓ ' + out;
+    workEl.appendChild(fixed);
+    actions([{ label: 'NEXT', act: 'next' }]);
+  } else {
+    actions([{ label: 'CHECK', act: 'check' }]);
+  }
+}
+
+/* ---------------------------------------------------------- stages 5+6 -- */
+function blankTokens(t) { return t.split(/\s+/); }
+function renderChoice(it) {
+  if (!G.sel) G.sel = { pick: '' };
+  promptEl.textContent = it.stageId === 'apos'
+    ? 'Which one belongs in the blank?'
+    : 'These words sound the same. Which one belongs here?';
+  var toks = blankTokens(it.t);
+  var row = el('div', 'tilerow');
+  for (var i = 0; i < toks.length; i++) {
+    var tk = toks[i];
+    if (tk.indexOf('___') === 0) {
+      var tail = tk.slice(3);
+      var bl = el('span', 'blank', G.sel.pick || '?');
+      row.appendChild(bl);
+      if (tail) row.appendChild(el('span', 'wtile flat', tail));
+    } else {
+      row.appendChild(el('span', 'wtile flat', tk));
+    }
+  }
+  workEl.appendChild(row);
+  var opts = el('div', 'opts');
+  it.opts.forEach(function (o) {
+    var b = btn('opt' + (G.sel.pick === o ? ' on' : ''), o);
+    b.setAttribute('data-o', o);
+    if (G.phase === 'result') {
+      b.disabled = true;
+      if (o === it.a) b.className = 'opt ok';
+      else if (o === G.sel.pick) b.className = 'opt bad';
+    } else {
+      b.onclick = function () { initAudio(); sfx.tap(); G.sel.pick = o; render(); };
+    }
+    opts.appendChild(b);
+  });
+  workEl.appendChild(opts);
+  if (G.phase === 'result') actions([{ label: 'NEXT', act: 'next' }]);
+  else actions([{ label: 'CHECK', act: 'check', disabled: !G.sel.pick }]);
+}
+function filledSentence(it, word) {
+  return it.t.replace(/___/, word);
+}
+function aposWhy(it) {
+  if (it.kind === 'contraction') {
+    return '<b>' + esc(it.a) + '</b> is short for <b>' + esc(it.expand) + '</b>. The apostrophe stands where the missing letters used to be: "' + esc(filledSentence(it, it.expand)) + '"';
+  }
+  if (String(it.owner).toLowerCase() === 'it') {
+    return 'This one is the trap. <b>its</b> means belonging to it and has <b>no</b> apostrophe. <b>it’s</b> always means <b>it is</b>.';
+  }
+  if (/s$/.test(it.owner)) {
+    return 'More than one ' + esc(it.owner.replace(/s$/, '')) + ' owns them, and <b>' + esc(it.owner) + '</b> already ends in s, so the apostrophe goes on the end: <b>' + esc(it.a) + '</b>.';
+  }
+  return 'It belongs to ' + esc(it.owner) + ', so add an apostrophe and an s: <b>' + esc(it.a) + '</b>.';
+}
+var HOMO_WHY = {
+  their: '<b>their</b> shows who owns something — their backpacks, their dog.',
+  there: '<b>there</b> points to a place, or teams up with is and are: "over there", "there is".',
+  "they're": '<b>they’re</b> is short for <b>they are</b>. If "they are" fits, use they’re.',
+  your: '<b>your</b> shows what belongs to you — your jacket, your shoes.',
+  "you're": '<b>you’re</b> is short for <b>you are</b>. If "you are" fits, use you’re.',
+  to: '<b>to</b> goes in front of an action word or a place — to ride, to school.',
+  too: '<b>too</b> means <b>also</b> or <b>very</b> — me too, too hot.',
+  two: '<b>two</b> is the number <b>2</b>.'
+};
+function homoWhy(it, picked) {
+  var lines = [];
+  var a = it.a.toLowerCase(), p = String(picked).toLowerCase();
+  lines.push('The right word is <b>' + esc(it.a) + '</b>: "' + esc(filledSentence(it, it.a)) + '"');
+  if (HOMO_WHY[a]) lines.push(HOMO_WHY[a]);
+  if (p && p !== a && HOMO_WHY[p]) lines.push('You picked <b>' + esc(picked) + '</b>. ' + HOMO_WHY[p]);
+  return lines;
+}
+
+/* ------------------------------------------------------------- stage 7 -- */
+function paraTokens(it) {
+  var toks = it.clean.split(/\s+/).slice();
+  for (var i = 0; i < it.errors.length; i++) toks[it.errors[i].i] = it.errors[i].wrong;
+  return toks;
+}
+function errorAt(it, i) {
+  for (var k = 0; k < it.errors.length; k++) if (it.errors[k].i === i) return it.errors[k];
+  return null;
+}
+function renderPara(it) {
+  if (!G.sel) G.sel = { toks: paraTokens(it), fixed: [], open: -1 };
+  var found = G.sel.fixed.length, total = it.errors.length;
+  promptEl.innerHTML = 'This story has <b>' + total + '</b> mistakes hiding in it. Tap a word you think is wrong.<br>Found so far: <b>' + found + ' of ' + total + '</b>';
+  var row = el('div', 'tilerow left');
+  for (var i = 0; i < G.sel.toks.length; i++) {
+    (function (i) {
+      var isFixed = G.sel.fixed.indexOf(i) >= 0;
+      var b = btn('wtile' + (isFixed ? ' fixed' : '') + (G.sel.open === i ? ' on' : ''));
+      if (isFixed) b.appendChild(el('span', 'mk', '✓'));
+      b.appendChild(document.createTextNode(G.sel.toks[i]));
+      if (G.phase === 'result' || isFixed) b.disabled = true;
+      else b.onclick = function () { initAudio(); sfx.tap(); G.sel.open = (G.sel.open === i ? -1 : i); render(); openPara(i); };
+      row.appendChild(b);
+    })(i);
+  }
+  workEl.appendChild(row);
+  if (G.sel.open >= 0 && G.phase !== 'result') {
+    var e = errorAt(it, G.sel.open);
+    var lab = el('div', 'banklabel', 'What should this word be?');
+    workEl.appendChild(lab);
+    var opts = el('div', 'opts');
+    var choices = e ? e.opts : [G.sel.toks[G.sel.open], G.sel.toks[G.sel.open].toUpperCase()];
+    if (!e) choices = [G.sel.toks[G.sel.open]];
+    choices.forEach(function (o) {
+      var b = btn('opt', o);
+      b.setAttribute('data-p', o);
+      b.onclick = function () { initAudio(); pickPara(o); };
+      opts.appendChild(b);
+    });
+    workEl.appendChild(opts);
+    /* on a short landscape screen the chooser opens below the fold — bring it up */
+    try { opts.scrollIntoView({ block: 'nearest' }); } catch (e2) {}
+  }
+  actions(G.phase === 'result'
+    ? [{ label: 'NEXT', act: 'next' }]
+    : [{ label: 'FOUND THEM ALL?', act: 'check', disabled: G.sel.fixed.length < it.errors.length }]);
+}
+function openPara(i) {
+  var it = G.item, e = errorAt(it, i);
+  if (!e) {
+    feedback('teach', 'That one is fine', ['<b>' + esc(G.sel.toks[i]) + '</b> is already correct here. Keep looking — nothing bad happens for checking.']);
+    sfx.learn();
+    G.sel.open = -1;
+    render();
+  } else {
+    clear(fbEl);
+  }
+}
+function pickPara(word) {
+  var it = G.item, i = G.sel.open, e = errorAt(it, i);
+  if (!e) return;
+  if (word === e.right) {
+    G.sel.toks[i] = word;
+    if (G.sel.fixed.indexOf(i) < 0) G.sel.fixed.push(i);
+    G.sel.open = -1;
+    sfx.good();
+    recordRule(e.rule, true);
+    feedback('good', 'Fixed it', ['<b>' + esc(e.wrong) + '</b> → <b>' + esc(e.right) + '</b>. ' + e.why]);
+  } else {
+    sfx.learn();
+    recordRule(e.rule, false);
+    G.lastWrongRule = e.rule;
+    feedback('teach', 'Not quite — here is the rule', [e.why, 'Try that word again.']);
+  }
+  render();
+}
+</script>
+<script>
+/* ================================================================ check == */
+function checkAnswer() {
+  var it = G.item;
+  if (!it) return;
+  var sid = it.stageId;
+
+  if (sid === 'caps') {
+    var r = checkCaps();
+    G.asked++;
+    recordRule('capitals', r.parts.capitals);
+    recordRule('endmarks', r.parts.endmarks);
+    if (r.ok) {
+      G.firstRight++;
+      sfx.good();
+      G.phase = 'result'; render();
+      feedback('good', 'Yes — that is it', ['"' + esc(it.c) + '"', MARK_WHY[it.k]]);
+    } else {
+      sfx.learn();
+      if (!r.parts.capitals) { G.lastWrongRule = 'capitals'; requeueRule(it); }
+      else { G.lastWrongRule = 'endmarks'; requeueRule(it); }
+      G.phase = 'result'; render();
+      r.lines.push('The whole thing: "' + esc(it.c) + '"');
+      feedback('teach', 'Let us look at that one', r.lines);
+    }
+    return;
+  }
+
+  if (sid === 'type') {
+    if (G.phase === 'answer') {
+      var ok = G.sel.pick === it.type;
+      G.asked++;
+      recordRule('structure', ok);
+      if (!ok) {
+        sfx.learn(); G.lastWrongRule = 'structure'; requeueRule(it);
+        G.phase = 'result'; render();
+        feedback('teach', 'It is a ' + TYPE_LABEL[it.type].toLowerCase(), [
+          '"' + esc(it.t) + '"', it.why || '', TYPE_WHY[it.type]
+        ]);
+        return;
+      }
+      G.firstRight++;
+      sfx.good();
+      if (it.fix) { G.phase = 'fix'; G.sel.fix = -1; render(); feedback('good', 'Right', ['"' + esc(it.t) + '" — ' + (it.why || TYPE_WHY[it.type])]); return; }
+      G.phase = 'result'; render();
+      feedback('good', 'Right — nothing to fix', [it.why || TYPE_WHY[it.type]]);
+      return;
+    }
+    /* fix phase */
+    var fok = G.sel.fix === it.fix.a;
+    recordRule('structure', fok);
+    if (fok) { sfx.good(); G.phase = 'result'; render(); feedback('good', 'Fixed', ['<b>' + esc(it.fix.opts[it.fix.a]) + '</b> — now it stands on its own.']); }
+    else {
+      sfx.learn(); G.lastWrongRule = 'structure'; requeueRule(it);
+      G.phase = 'result'; render();
+      feedback('teach', 'Here is the fix', [
+        '<b>' + esc(it.fix.opts[it.fix.a]) + '</b>',
+        'The one you picked is still a ' + TYPE_LABEL[classify(it.fix.opts[G.sel.fix])].toLowerCase() + '. ' + TYPE_WHY[it.type]
+      ]);
+    }
+    return;
+  }
+
+  if (sid === 'build') {
+    var built = G.sel.line.join(' ');
+    var bok = checkBuild(it, built);
+    G.asked++;
+    recordRule('building', bok);
+    G.phase = 'result';
+    if (bok) {
+      G.firstRight++; sfx.good(); render();
+      var others = it.valid.filter(function (v) { return v !== normOrder(built); });
+      var l = ['<b>' + esc(displayWord(G.sel.line[0], true) + ' ' + G.sel.line.slice(1).map(function (w) { return displayWord(w, false); }).join(' ')) + '.</b>'];
+      if (others.length) l.push('There is more than one right answer here. This also works: "' + esc(others.map(function (o) { return o.charAt(0).toUpperCase() + o.slice(1) + '.'; }).join('  /  ')) + '"');
+      feedback('good', 'That works', l);
+    } else {
+      sfx.learn(); G.lastWrongRule = 'building'; requeueRule(it);
+      G.sel.line = it.valid[0].split(' ');
+      G.sel.bank = [];
+      render();
+      feedback('teach', 'Nearly — try this order', [
+        'You built: "' + esc(built) + '"',
+        'A sentence needs the naming part and the action in an order we can follow. One that works: <b>' + esc(it.valid[0].charAt(0).toUpperCase() + it.valid[0].slice(1)) + '.</b>',
+        it.valid.length > 1 ? 'These work too: ' + esc(it.valid.slice(1).join('  /  ')) : ''
+      ]);
+    }
+    return;
+  }
+
+  if (sid === 'comma') {
+    var ws = commaWords(it);
+    var got = G.sel.at.slice().sort(function (a, b) { return a - b; });
+    var want = it.a.slice().sort(function (a, b) { return a - b; });
+    var cok = got.length === want.length && got.every(function (v, i) { return v === want[i]; });
+    G.asked++;
+    recordRule('commas', cok);
+    G.phase = 'result'; render();
+    if (cok) { G.firstRight++; sfx.good(); feedback('good', 'Commas in the right spots', [COMMA_WHY[it.r]]); }
+    else {
+      sfx.learn(); G.lastWrongRule = 'commas'; requeueRule(it);
+      var lines = [COMMA_WHY[it.r]];
+      for (var i = 0; i < want.length; i++) lines.push('A comma goes after <b>' + esc(ws[want[i]]) + '</b>.');
+      feedback('teach', 'Here is where they go', lines);
+    }
+    return;
+  }
+
+  if (sid === 'apos') {
+    var aok = G.sel.pick === it.a;
+    G.asked++;
+    recordRule('apostrophes', aok);
+    G.phase = 'result'; render();
+    if (aok) { G.firstRight++; sfx.good(); feedback('good', 'Right', [aposWhy(it)]); }
+    else {
+      sfx.learn(); G.lastWrongRule = 'apostrophes'; requeueRule(it);
+      feedback('teach', 'Here is the rule', [
+        'It should be <b>' + esc(it.a) + '</b>: "' + esc(filledSentence(it, it.a)) + '"',
+        aposWhy(it)
+      ]);
+    }
+    return;
+  }
+
+  if (sid === 'homo') {
+    var hok = G.sel.pick === it.a;
+    G.asked++;
+    recordRule('homophones', hok);
+    G.phase = 'result'; render();
+    if (hok) { G.firstRight++; sfx.good(); feedback('good', 'Right word', homoWhy(it, it.a)); }
+    else {
+      sfx.learn(); G.lastWrongRule = 'homophones'; requeueRule(it);
+      feedback('teach', 'These three trip everybody up', homoWhy(it, G.sel.pick));
+    }
+    return;
+  }
+
+  if (sid === 'para') {
+    G.asked++;
+    var allFound = G.sel.fixed.length >= it.errors.length;
+    if (allFound) { G.firstRight++; sfx.good(); }
+    G.phase = 'result'; render();
+    feedback('good', 'Every mistake found', [
+      'All <b>' + it.errors.length + '</b> of them. Here is the clean version:',
+      '<b>' + esc(it.clean) + '</b>'
+    ]);
+    return;
+  }
+}
+</script>
+<script>
+/* ================================================================ input == */
+window.addEventListener('touchstart', function () { document.body.classList.add('touch'); }, { passive: true, once: true });
+
+document.getElementById('muteBtn').addEventListener('click', function () { initAudio(); setMuted(!muted); });
+document.getElementById('pauseBtn').addEventListener('click', function () { initAudio(); if (G.screen === 'play') pauseScreen(); });
+
+window.addEventListener('keydown', function (e) {
+  var k = e.key;
+  if (k === 'm' || k === 'M') { initAudio(); setMuted(!muted); return; }
+  if (k === 'Escape' || k === 'p' || k === 'P') {
+    if (G.screen === 'play') { initAudio(); pauseScreen(); e.preventDefault(); }
+    else if (G.screen === 'paused') { hideOverlay(); G.screen = 'play'; document.body.classList.add('playing'); }
+    return;
+  }
+  if (G.screen !== 'play') {
+    if (k === 'Enter') {
+      var b = overlay.querySelector('[data-act]:not([disabled])');
+      if (b) b.click();
+    }
+    return;
+  }
+  if (k === 'Enter' || k === ' ') { e.preventDefault(); primaryAction(); return; }
+  if (/^[1-9]$/.test(k)) {
+    var pool = workEl.querySelectorAll('.opt:not([disabled]), .wtile:not([disabled]):not(.flat)');
+    var i = parseInt(k, 10) - 1;
+    if (pool[i]) { pool[i].click(); e.preventDefault(); }
+  }
+});
+
+/* gamepad: dpad moves the highlight, A presses it, Start opens the menu */
+var padSel = -1, padPrev = [];
+function padDown(p, i) {
+  var now = !!(p.buttons[i] && p.buttons[i].pressed);
+  var was = !!padPrev[i];
+  padPrev[i] = now;
+  return now && !was;
+}
+function focusables() {
+  return Array.prototype.slice.call(document.querySelectorAll(
+    G.screen === 'play' ? '#work .opt:not([disabled]), #work .wtile:not([disabled]):not(.flat), #actions .btn:not([disabled])'
+                        : '#overlay [data-act]:not([disabled])'));
+}
+function padMove(d) {
+  var list = focusables();
+  if (!list.length) return;
+  padSel = (padSel + d + list.length) % list.length;
+  try { list[padSel].focus(); } catch (e) {}
+}
+function pollPad() {
+  if (!navigator.getGamepads) return;
+  var ps = navigator.getGamepads(), p = null;
+  for (var i = 0; i < ps.length; i++) if (ps[i]) { p = ps[i]; break; }
+  if (!p) { padSel = -1; return; }
+  var ax = p.axes && p.axes.length > 0 ? p.axes[0] : 0;
+  if (padDown(p, 15) || (ax > 0.6 && !padPrev.axR)) { padMove(1); }
+  if (padDown(p, 14) || (ax < -0.6 && !padPrev.axL)) { padMove(-1); }
+  padPrev.axR = ax > 0.6; padPrev.axL = ax < -0.6;
+  if (padDown(p, 13)) padMove(1);
+  if (padDown(p, 12)) padMove(-1);
+  if (padDown(p, 0)) {
+    initAudio();
+    var list = focusables();
+    if (padSel >= 0 && list[padSel]) list[padSel].click();
+    else if (list.length) list[0].click();
+  }
+  if (padDown(p, 9)) { if (G.screen === 'play') pauseScreen(); else if (G.screen === 'paused') { hideOverlay(); G.screen = 'play'; document.body.classList.add('playing'); } }
+}
+
+/* auto-pause when the tab stops compositing — nothing is timed, but a
+   half-answered question should not sit under a hidden window */
+function softPause() { if (G.screen === 'play') pauseScreen(); }
+window.addEventListener('blur', softPause);
+document.addEventListener('visibilitychange', function () { if (document.hidden) softPause(); });
+
+/* ================================================================= loop == */
+/* Nothing simulates here — the loop only services the gamepad, so the game
+   is fully static between inputs (staticOk in the harness). */
+var lastT = 0;
+function frame(now) {
+  window.requestAnimationFrame(frame);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt < 0) dt = 0;
+  pollPad();
+}
+
+/* ================================================================= boot == */
+setMuted(muted);
+titleScreen();
+window.requestAnimationFrame(frame);
+</script>
+</body>
+</html>

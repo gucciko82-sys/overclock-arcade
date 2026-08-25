@@ -1,0 +1,2031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Deep Run — Cave Flyer</title>
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Deep Run">
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="Thrust-powered cave flyer. Fly deep, fly close, don't touch the rock.">
+<meta name="format-detection" content="telephone=no">
+<style>
+  :root {
+    --hud-fg: #ffffff;
+    --hud-dim: rgba(255,255,255,0.62);
+    --hud-panel: rgba(8,10,24,0.55);
+    --accent: #ffcc4d;
+    --cyan: #7fd8ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #0b0f1e;
+    color: #fff;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas#game { display: block; width: 100%; height: 100%; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+             max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    display: flex; flex-direction: column; justify-content: space-between;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.75);
+  }
+  #hud.dim { opacity: 0.25; }
+  .hud-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .panel {
+    background: var(--hud-panel);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 8px 12px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .label { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--hud-dim); }
+  .value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .value.small { font-size: 14px; font-weight: 600; }
+  .value.accent { color: var(--accent); }
+  .value .of { font-size: 13px; color: var(--hud-dim); font-weight: 600; margin-left: 2px; }
+  #multv { color: var(--cyan); letter-spacing: 0.04em; }
+  #multv.hot { color: var(--accent); }
+
+  .meters { display: flex; flex-direction: column; gap: 7px; min-width: 168px; }
+  .mrow { display: flex; align-items: center; gap: 9px; }
+  .mlab { font-size: 9px; letter-spacing: 0.16em; color: var(--hud-dim); width: 42px; flex: 0 0 auto; }
+  .bar { flex: 1 1 auto; height: 8px; border-radius: 5px; background: rgba(255,255,255,0.10); overflow: hidden; display: block; }
+  .bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #4dffd0, #ffcc4d); }
+  .bar.boost i { background: linear-gradient(90deg, #6aa8ff, #c56bff); }
+  .bar.low i { background: linear-gradient(90deg, #ff6a5c, #ff9a3c); }
+  .bar.cool i { background: linear-gradient(90deg, #4a5570, #6a7590); }
+  .tags { display: flex; gap: 8px; min-height: 12px; }
+  .tag { font-size: 9px; letter-spacing: 0.16em; opacity: 0; }
+  .tag.on { opacity: 1; }
+  #shieldtag { color: var(--cyan); }
+  #fueltag { color: #ff8a6a; }
+
+  #snd {
+    position: absolute; right: max(12px, env(safe-area-inset-right));
+    top: 50%; transform: translateY(-50%);
+    pointer-events: auto; cursor: pointer;
+    font-size: 10px; letter-spacing: 0.14em; padding: 9px 11px;
+  }
+
+  #banner {
+    position: absolute; top: 15%; left: 0; right: 0; text-align: center;
+    font-size: clamp(17px, 4.2vw, 32px); font-weight: 800; letter-spacing: 0.14em;
+    color: var(--accent); opacity: 0; transition: opacity 0.5s ease;
+    padding: 0 16px; text-shadow: 0 0 26px rgba(255,204,77,0.6);
+  }
+  #banner.show { opacity: 1; transition: none; }
+  #banner .sm { display: block; font-size: 11px; letter-spacing: 0.3em; color: var(--hud-dim); margin-top: 5px; }
+
+  /* ---------- Touch controls ---------- */
+  #touch { position: absolute; inset: 0; display: none; pointer-events: none; }
+  body.touch #touch { display: block; }
+  body.touch #hud { padding-bottom: calc(max(16px, env(safe-area-inset-bottom)) + 92px); }
+  .tbtn {
+    position: absolute; bottom: max(18px, env(safe-area-inset-bottom));
+    width: 78px; height: 78px; border-radius: 50%;
+    background: rgba(255,255,255,0.10);
+    border: 2px solid rgba(255,255,255,0.30);
+    color: #fff; font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: auto; touch-action: none;
+  }
+  .tbtn.on { background: rgba(197,107,255,0.35); border-color: #c56bff; }
+  #t-boost { right: max(16px, env(safe-area-inset-right)); }
+  #t-hint {
+    position: absolute; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 26px);
+    left: max(20px, env(safe-area-inset-left));
+    font-size: 10px; letter-spacing: 0.18em; color: var(--hud-dim);
+  }
+
+  /* ---------- Overlay ---------- */
+  #overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(10,14,32,0.72), rgba(4,6,16,0.96));
+    text-align: center;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    pointer-events: auto; overflow-y: auto;
+  }
+  #overlay.hidden { display: none; }
+  .card { max-width: 560px; width: 100%; margin: auto; }
+  .card h1 {
+    margin: 0 0 2px; font-size: clamp(34px, 9vw, 66px); font-weight: 800;
+    letter-spacing: 0.14em; color: var(--accent);
+    text-shadow: 0 0 34px rgba(255,204,77,0.35);
+  }
+  .card h2 { margin: 0 0 14px; font-size: clamp(19px, 4.6vw, 26px); font-weight: 700; letter-spacing: 0.05em; }
+  .card .sub {
+    margin: 0 0 22px; color: var(--hud-dim); letter-spacing: 0.3em;
+    font-size: 11px; text-transform: uppercase;
+  }
+  .btn {
+    display: inline-block; min-height: 48px; padding: 13px 30px; margin: 5px 4px;
+    font-size: 15px; font-weight: 700; letter-spacing: 0.07em; font-family: inherit;
+    background: var(--accent); color: #17130a; border: 0; border-radius: 999px;
+    cursor: pointer; pointer-events: auto;
+  }
+  .btn.ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.32); }
+  .btn:hover { filter: brightness(1.08); }
+
+  .stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin: 0 auto 20px; max-width: 400px;
+  }
+  .stat {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.13);
+    border-radius: 13px; padding: 11px 8px;
+  }
+  .stat .k { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--hud-dim); }
+  .stat .v { font-size: 25px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .stat .v.accent { color: var(--accent); }
+  .stat .v.cyan { color: var(--cyan); }
+
+  .keys {
+    display: grid; grid-template-columns: auto 1fr; gap: 7px 16px; text-align: left;
+    font-size: 13px; margin: 0 auto 22px; max-width: 380px; color: rgba(255,255,255,0.85);
+  }
+  .keys b { color: var(--accent); font-weight: 600; white-space: nowrap; }
+  .legend {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px;
+    margin: 0 auto 20px; font-size: 12px; color: rgba(255,255,255,0.82);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .sw { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  /* landscape phones: the card must fit without burying the LAUNCH button */
+  @media (max-height: 620px) {
+    .keys, .legend { display: none; }
+    .card h1 { font-size: 30px; }
+    .card h2 { margin-bottom: 6px; }
+    .card .sub { margin-bottom: 8px; }
+    .card p { margin: 4px 0 8px; }
+    .stat, .beststat { padding: 6px 8px; }
+  }
+  .note { margin-top: 14px; font-size: 12px; color: var(--hud-dim); min-height: 16px; line-height: 1.5; }
+  .newbest { color: var(--accent); font-weight: 800; letter-spacing: 0.2em; font-size: 12px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div class="hud-row">
+      <div class="panel">
+        <div class="label">Depth</div>
+        <div class="value" id="distv">0<span class="of">m</span></div>
+        <div class="label" style="margin-top:6px">Best</div>
+        <div class="value small accent" id="bestv">0m</div>
+      </div>
+      <div class="panel" style="text-align:right">
+        <div class="label">Score</div>
+        <div class="value" id="scorev">0</div>
+        <div class="value small" id="multv">x1.0</div>
+      </div>
+    </div>
+
+    <div class="hud-row" style="align-items:flex-end">
+      <div class="panel meters">
+        <div class="mrow"><span class="mlab">Fuel</span><span class="bar" id="fuelbar"><i></i></span></div>
+        <div class="mrow"><span class="mlab">Boost</span><span class="bar boost" id="boostbar"><i></i></span></div>
+        <div class="tags">
+          <span class="tag" id="shieldtag">SHIELD</span>
+          <span class="tag" id="fueltag">FUEL LOW</span>
+        </div>
+      </div>
+      <div></div>
+    </div>
+
+    <div class="panel" id="snd">SOUND ON</div>
+    <div id="banner"></div>
+  </div>
+
+  <div id="touch">
+    <div class="tbtn" id="t-boost">BOOST</div>
+    <div id="t-hint">HOLD ANYWHERE TO THRUST</div>
+  </div>
+
+  <div id="overlay"></div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   DEEP RUN — a thrust-powered side-scrolling cave flyer.
+
+   The cave is a queue of vertical "slices" (a ceiling y and a floor y every
+   SLICE world units). Everything — rendering, collision, hazard placement and
+   the background parallax — reads that one array through sampleCave(), so the
+   picture on screen and the thing that kills you are guaranteed to agree.
+
+   The generator is written so that a survivable channel always exists:
+     * the gap between ceiling and floor is never allowed below SAFE_GAP,
+     * the channel centre's slope is capped at a value derived from the ship's
+       maximum climb rate divided by the fastest speed reachable at that depth
+       (boost included), so the centre line is always physically flyable,
+     * spikes ramp in over a length proportional to how far they protrude, so
+       a deep spike is never a sudden wall.
+   selfTestCave() at the bottom actually flies a simulated pilot down 180
+   seconds of freshly generated cave at permanent-boost speed and asserts it
+   never touches rock. It is silent unless something is wrong.
+   ========================================================================= */
+
+/* ==========================================================================
+   START HERE — the knobs worth playing with. Change a number, save, refresh.
+   ========================================================================== */
+
+const LH          = 600;    // logical height of the cave band, in world units
+const SLICE       = 20;     // world units between cave slices
+const MIN_VIEW_W  = 760;    // never show less than this much cave width
+const MIN_VIEW_H  = 640;    // never show less than this much height
+
+const GRAVITY     = 950;    // world units / sec^2, pulling down
+const THRUST      = 2100;   // world units / sec^2, pushing up at full throttle
+const SPOOL       = 7;      // how fast the engine reaches full throttle (per sec)
+const VY_MAX      = 430;    // terminal vertical speed
+const VY_DRAG     = 0.82;   // vertical velocity retained per second
+
+const SPEED_START = 330;    // forward speed at 0 m
+const SPEED_MAX   = 640;    // forward speed once fully deep
+const BOOST_MULT  = 1.85;   // speed multiplier while boosting
+const DEEP_AT     = 2200;   // metres at which difficulty tops out
+
+const M_PER_UNIT  = 1 / 14; // world units -> metres
+
+const GAP_START   = 300;    // ceiling-to-floor gap at the mouth of the cave
+const GAP_DEEP    = 132;    // ...and once you are deep
+const SAFE_GAP    = 84;     // hard floor. The ship's hull is 14 units tall.
+                            // GAP_DEEP has to stay clear of SAFE_GAP: if the
+                            // routine corridor sits on the clamp there is no
+                            // room left for a spike to mean anything, and at
+                            // boost speed the whole deep game becomes a coin
+                            // flip. Spikes are what should reach the clamp.
+
+const NEAR_MISS   = 24;     // clearance below this counts as a near miss
+const NEAR_CLEAR  = 40;     // ...and you must get back past this to score again
+const MULT_MAX    = 6;
+const MULT_HOLD   = 4.5;    // seconds a near-miss chain survives without a top-up
+
+const FUEL_MAX    = 100;
+const FUEL_DRAIN  = 2.5;    // per second, cruising
+const FUEL_BOOST  = 7.5;    // extra per second while boosting
+const FUEL_CELL   = 34;     // refill per fuel cell
+
+const BOOST_MAX   = 100;
+const BOOST_DRAIN = 45;
+const BOOST_REGEN = 15;
+const BOOST_ARM   = 32;     // after running dry, boost re-arms at this level
+
+const MAX_PARTS   = 520;    // particle pool size — hard ceiling, recycled
+const MAX_FLOATS  = 24;
+
+const KEY_BEST = "deepRun_bestDistance_v1";
+const KEY_MUTE = "deepRun_muted_v1";
+
+const ZONES = [
+  "SHALLOW SHAFT", "CRYSTAL SEAM", "THERMAL VENTS", "THE NARROWS",
+  "MINEFIELD", "DRONE PATROL", "GLASS HOLLOW", "BLACK REACH",
+  "THE THROAT", "DEEP RUN"
+];
+
+/* ==========================================================================
+   Small helpers
+   ========================================================================== */
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function pick(arr) { return arr[(Math.random() * arr.length) | 0]; }
+
+function hash1(n) { const s = Math.sin(n * 127.1) * 43758.5453; return s - Math.floor(s); }
+function noise1(x) {
+  const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f);
+  return hash1(i) * (1 - u) + hash1(i + 1) * u;
+}
+function fbm(x) { return noise1(x) * 0.55 + noise1(x * 2.13 + 7.7) * 0.29 + noise1(x * 4.71 + 19.3) * 0.16; }
+
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* private mode */ } }
+};
+
+function speedAt(d) { return lerp(SPEED_START, SPEED_MAX, d); }
+function fmtM(m) { return Math.floor(m).toLocaleString() + "m"; }
+
+/* ==========================================================================
+   Canvas / viewport
+   ========================================================================== */
+
+const stage = document.getElementById("stage");
+const cv = document.getElementById("game");
+const ctx = cv.getContext("2d", { alpha: false });
+
+const view = { w: 0, h: 0, dpr: 1, scale: 1, ww: MIN_VIEW_W, wh: MIN_VIEW_H, bandY: 0 };
+let shipScreenX = 240;
+
+function resize() {
+  const w = Math.max(1, stage.clientWidth);
+  const h = Math.max(1, stage.clientHeight);
+  const dpr = clamp(window.devicePixelRatio || 1, 1, 2.5);
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + "px";
+  cv.style.height = h + "px";
+  view.w = w; view.h = h; view.dpr = dpr;
+  view.scale = Math.min(w / MIN_VIEW_W, h / MIN_VIEW_H);
+  view.ww = w / view.scale;
+  view.wh = h / view.scale;
+  view.bandY = (view.wh - LH) / 2;
+  shipScreenX = Math.min(view.ww * 0.30, 320);
+}
+
+function setScreenTransform() {
+  const s = view.dpr * view.scale;
+  ctx.setTransform(s, 0, 0, s, 0, 0);
+}
+function setWorldTransform() {
+  const s = view.dpr * view.scale;
+  ctx.setTransform(s, 0, 0, s, 0, 0);
+  ctx.translate(-camX + shake.x, view.bandY + shake.y);
+}
+
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", () => setTimeout(resize, 120));
+
+/* ==========================================================================
+   World state
+   ========================================================================== */
+
+let state = "title";           // title | play | paused | dead
+let camX = 0;
+let clock = 0;
+
+const slices = [];             // {x, top, bot, cr}
+const mines = [];
+const gates = [];
+const pickups = [];
+const drones = [];
+
+const parts = new Array(MAX_PARTS);
+for (let i = 0; i < MAX_PARTS; i++) parts[i] = { alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, size: 2, col: "#fff", glow: 0 };
+let partCursor = 0;
+
+const floats = new Array(MAX_FLOATS);
+for (let i = 0; i < MAX_FLOATS; i++) floats[i] = { alive: false, x: 0, y: 0, text: "", life: 0, max: 1, col: "#fff", size: 20 };
+let floatCursor = 0;
+
+const shake = { x: 0, y: 0, t: 0, dur: 1, amp: 0 };
+const rings = [];              // shockwaves: {x, y, r, maxR, life, max, col}
+let slowT = 0;                 // hit-stop timer (death, shield pop)
+
+function addRing(x, y, col, maxR, dur) {
+  rings.push({ x: x, y: y, r: 4, maxR: maxR, life: dur, max: dur, col: col });
+}
+
+const gen = {
+  x: 0, c: LH / 2, cv: 0, target: LH / 2, targetIn: 0,
+  gap: GAP_START, gapBoost: 0, gbTarget: 0, gbHold: 0,
+  featureCd: 30, spike: null, gatePending: 0, dry: false
+};
+
+const ship = {
+  x: 0, y: LH / 2, vy: 0, tl: 0,
+  shield: false, invuln: 0, boosting: false, boostLock: false,
+  fuel: FUEL_MAX, boost: BOOST_MAX, dead: false, deadT: 0
+};
+
+const run = {
+  metres: 0, score: 0, mult: 1, chain: 0, chainT: 0,
+  near: false, nearMin: 999, zone: -1, droneT: 6, newBest: false,
+  nearMisses: 0, gems: 0
+};
+
+let best = Math.max(0, parseFloat(LS.get(KEY_BEST, "0")) || 0);
+let muted = LS.get(KEY_MUTE, "0") === "1";
+
+/* ==========================================================================
+   Cave generation
+   ========================================================================== */
+
+function resetWorld() {
+  slices.length = 0;
+  mines.length = 0;
+  gates.length = 0;
+  pickups.length = 0;
+  drones.length = 0;
+  gen.x = 0; gen.c = LH / 2; gen.cv = 0; gen.target = LH / 2; gen.targetIn = 0;
+  gen.gap = GAP_START; gen.gapBoost = 0; gen.gbTarget = 0; gen.gbHold = 0;
+  gen.featureCd = 34; gen.spike = null; gen.gatePending = 0;
+  for (let i = 0; i < 8; i++) genSlice();   // a flat-ish lead-in
+}
+
+// Spikes ramp in at a capped rate (SPIKE_RATE units of protrusion per slice),
+// so a deep spike is always a long slope rather than a sudden wall. If the
+// requested peak cannot be reached inside `len` slices the spike simply comes
+// out shorter — the cap always wins, which is what keeps the cave flyable.
+const SPIKE_RATE = 3.0;
+
+function startSpike(gap, d) {
+  const peak = gap * rnd(0.30, 0.40);
+  const len = Math.round(clamp(peak / SPIKE_RATE + 8, 10, 40));
+  gen.spike = { i: 0, len: len, peak: peak, prev: 0, dir: Math.random() < 0.5 ? -1 : 1 };
+}
+
+function spawnMine(x, c, gap, d) {
+  if (gap < 150) return;
+  const amp = Math.min(rnd(18, 46), gap * 0.22);
+  mines.push({
+    x: x, base: c + rnd(-1, 1) * (gap * 0.18), amp: amp,
+    phase: Math.random() * 6.2832, rate: rnd(0.7, 1.5), r: 15, t: 0, y: c, spin: Math.random() * 6.2832
+  });
+}
+
+function scheduleGate(x, d) {
+  gen.gbTarget = 120;
+  gen.gbHold = 70;
+  gen.gatePending = x + 30 * SLICE;
+}
+
+function makeGate(x, top, bot) {
+  const gap = bot - top;
+  const apMin = 76;
+  const apRange = Math.max(20, gap - apMin - 26);
+  gates.push({
+    x: x, top: top, bot: bot, cy: (top + bot) / 2,
+    apMin: apMin, apRange: apRange,
+    phase: Math.random() * 6.2832, rate: rnd(1.05, 1.7), t: 0, ap: apMin + apRange
+  });
+}
+
+function spawnPickups(x, c, gap, d, m) {
+  const r = Math.random();
+  if (r < 0.30 || ship.fuel < FUEL_MAX * 0.4) {
+    pickups.push({ x: x, y: c + rnd(-0.2, 0.2) * gap, type: "fuel", r: 13, t: Math.random() * 6.28, dead: false });
+  } else if (r < 0.42 && m > 350 && !ship.shield) {
+    pickups.push({ x: x, y: c + rnd(-0.2, 0.2) * gap, type: "shield", r: 13, t: Math.random() * 6.28, dead: false });
+  } else {
+    // a short arc of gems that follows the corridor, tempting you off-centre
+    const n = 3 + ((Math.random() * 3) | 0);
+    const off = rnd(-0.3, 0.3) * gap;
+    for (let i = 0; i < n; i++) {
+      pickups.push({
+        x: x + i * 34, y: c + off + Math.sin(i * 0.9) * Math.min(26, gap * 0.14),
+        type: "gem", r: 10, t: Math.random() * 6.28, dead: false
+      });
+    }
+  }
+}
+
+function genSlice() {
+  const x = gen.x;
+  const m = x * M_PER_UNIT;
+  const d = clamp(m / DEEP_AT, 0, 1);
+
+  // ---- gap ------------------------------------------------------------
+  gen.gapBoost += clamp(gen.gbTarget - gen.gapBoost, -5, 5);
+  if (gen.gbHold > 0) { gen.gbHold--; if (gen.gbHold === 0) gen.gbTarget = 0; }
+
+  // The "breathing" is a fraction of the gap, not a fixed number of units.
+  // As a fixed ±39 it swamped the deep gap entirely and pinned the corridor
+  // to the SAFE_GAP clamp for kilometres at a time — the clamp is meant to be
+  // a safety net, not the normal width.
+  let gap = lerp(GAP_START, GAP_DEEP, d * d * 0.8 + d * 0.2);
+  gap *= 1 + 0.09 * Math.sin(x * 0.0016) + 0.045 * Math.sin(x * 0.0041 + 1.7);
+  gap += gen.gapBoost;
+  gap = clamp(gap, SAFE_GAP + 6, LH - 70);
+  gen.gap = gap;
+
+  // ---- how steeply the channel is allowed to climb --------------------
+  // Derived from the ship's own numbers: at the fastest speed reachable
+  // here (boost included) the centre line must still be trackable.
+  // 0.70 rather than 1.0 leaves headroom for a spike ramp landing on top of an
+  // already-climbing channel, plus the engine's spool-up lag.
+  const topSpeed = speedAt(d) * BOOST_MULT;
+  const maxSlope = clamp(0.70 * VY_MAX / topSpeed, 0.14, 0.42);
+  const maxCv = maxSlope * SLICE;
+  const maxDCv = 0.012 * SLICE;      // curvature cap — no instant reversals
+
+  if (--gen.targetIn <= 0) {
+    gen.targetIn = 34 + ((Math.random() * 62) | 0);
+    const half = gap / 2 + 34;
+    gen.target = half + Math.random() * Math.max(1, LH - 2 * half);
+  }
+  let want = clamp((gen.target - gen.c) * 0.035, -maxCv, maxCv);
+  gen.cv += clamp(want - gen.cv, -maxDCv, maxDCv);
+  gen.cv = clamp(gen.cv, -maxCv, maxCv);
+  gen.c += gen.cv;
+
+  const lo = gap / 2 + 14, hi = LH - gap / 2 - 14;
+  if (gen.c < lo) { gen.c = lo; if (gen.cv < 0) gen.cv *= -0.35; }
+  if (gen.c > hi) { gen.c = hi; if (gen.cv > 0) gen.cv *= -0.35; }
+
+  let top = gen.c - gap / 2;
+  let bot = gen.c + gap / 2;
+
+  // ---- stalactite / stalagmite ---------------------------------------
+  if (gen.spike) {
+    const sp = gen.spike;
+    const t = sp.len > 1 ? sp.i / (sp.len - 1) : 0;
+    let prof = Math.pow(Math.sin(Math.PI * clamp(t, 0, 1)), 1.5) * sp.peak;
+    prof = clamp(prof, sp.prev - SPIKE_RATE, sp.prev + SPIKE_RATE);
+    sp.prev = prof;
+    if (sp.dir < 0) top += prof; else bot -= prof;
+    sp.i++;
+    if (sp.i >= sp.len) {
+      // walk the tail back down to zero rather than cutting it off
+      if (prof > SPIKE_RATE) { sp.i = sp.len - 1; sp.len += 1; sp.peak = 0; }
+      else gen.spike = null;
+    }
+  }
+
+  // ---- hard invariants ------------------------------------------------
+  if (bot - top < SAFE_GAP) {
+    const mid = (top + bot) / 2;
+    top = mid - SAFE_GAP / 2;
+    bot = mid + SAFE_GAP / 2;
+  }
+  if (top < 6) { const s = 6 - top; top += s; bot += s; }
+  if (bot > LH - 6) { const s = bot - (LH - 6); top -= s; bot -= s; }
+
+  // ---- decoration ------------------------------------------------------
+  let cr = null;
+  if (Math.random() < 0.10) {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    cr = {
+      side: side, dy: rnd(2, 26), size: rnd(5, 16),
+      hue: pick([185, 195, 262, 45, 45, 300])
+    };
+  }
+
+  slices.push({ x: x, top: top, bot: bot, cr: cr });
+  gen.x = x + SLICE;
+
+  // ---- hazards & pickups ----------------------------------------------
+  if (!gen.dry) {
+    if (gen.gatePending && x >= gen.gatePending) {
+      makeGate(x, top, bot);
+      gen.gatePending = 0;
+      gen.gbHold = Math.min(gen.gbHold, 8);
+    }
+    if (--gen.featureCd <= 0 && x > 700) {
+      gen.featureCd = Math.round(lerp(48, 22, d)) + ((Math.random() * 24) | 0);
+      const r = Math.random();
+      if (r < 0.32) startSpike(gap, d);
+      else if (r < 0.52 && m > 260) spawnMine(x, gen.c, gap, d);
+      else if (r < 0.66 && m > 620 && !gen.gatePending && gates.length < 3) scheduleGate(x, d);
+      else spawnPickups(x, gen.c, gap, d, m);
+    }
+  } else {
+    if (--gen.featureCd <= 0 && x > 700) {
+      gen.featureCd = Math.round(lerp(48, 22, d)) + ((Math.random() * 24) | 0);
+      if (Math.random() < 0.45) startSpike(gap, d);
+    }
+  }
+}
+
+function ensureSlices() {
+  const far = camX + view.ww + 500;
+  let guard = 0;
+  while (slices.length === 0 || slices[slices.length - 1].x < far) {
+    genSlice();
+    if (++guard > 4000) break;
+  }
+  const near = camX - 220;
+  while (slices.length > 3 && slices[1].x < near) slices.shift();
+}
+
+function sampleCave(wx) {
+  const n = slices.length;
+  if (n === 0) return { top: 0, bot: LH };
+  const i0 = clamp(Math.floor((wx - slices[0].x) / SLICE), 0, n - 1);
+  const i1 = Math.min(i0 + 1, n - 1);
+  const a = slices[i0], b = slices[i1];
+  const t = (i1 === i0) ? 0 : clamp((wx - a.x) / SLICE, 0, 1);
+  return { top: a.top + (b.top - a.top) * t, bot: a.bot + (b.bot - a.bot) * t };
+}
+
+/* ==========================================================================
+   Flight model — shared by the ship and by the self-test pilot
+   ========================================================================== */
+
+function stepFlight(st, input, dt) {
+  st.tl += clamp(input - st.tl, -dt * SPOOL, dt * SPOOL);
+  st.vy += (GRAVITY - THRUST * st.tl) * dt;
+  st.vy *= Math.pow(VY_DRAG, dt);
+  st.vy = clamp(st.vy, -VY_MAX, VY_MAX);
+  st.y += st.vy * dt;
+}
+
+/* ==========================================================================
+   Audio — oscillators only, no files
+   ========================================================================== */
+
+const audio = {
+  ac: null, master: null, thrustOsc: null, thrustGain: null, thrustFilt: null,
+  noise: null, ready: false
+};
+
+function initAudio() {
+  if (audio.ready) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  try {
+    const ac = new AC();
+    const master = ac.createGain();
+    master.gain.value = muted ? 0 : 0.85;
+    master.connect(ac.destination);
+
+    const osc = ac.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.value = 62;
+    const filt = ac.createBiquadFilter();
+    filt.type = "lowpass";
+    filt.frequency.value = 420;
+    const g = ac.createGain();
+    g.gain.value = 0;
+    osc.connect(filt); filt.connect(g); g.connect(master);
+    osc.start();
+
+    const len = Math.floor(ac.sampleRate * 0.5);
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+
+    audio.ac = ac; audio.master = master;
+    audio.thrustOsc = osc; audio.thrustGain = g; audio.thrustFilt = filt;
+    audio.noise = buf; audio.ready = true;
+  } catch (e) { audio.ready = false; }
+}
+
+function resumeAudio() {
+  initAudio();
+  if (audio.ready && audio.ac.state === "suspended") audio.ac.resume().catch(() => {});
+}
+
+function blip(type, f0, f1, dur, vol) {
+  if (!audio.ready || muted) return;
+  const ac = audio.ac, t = ac.currentTime;
+  const o = ac.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(audio.master);
+  o.start(t); o.stop(t + dur + 0.03);
+}
+
+function noiseBurst(dur, vol, cutoff) {
+  if (!audio.ready || muted) return;
+  const ac = audio.ac, t = ac.currentTime;
+  const src = ac.createBufferSource();
+  src.buffer = audio.noise;
+  const f = ac.createBiquadFilter();
+  f.type = "lowpass";
+  f.frequency.setValueAtTime(cutoff, t);
+  f.frequency.exponentialRampToValueAtTime(180, t + dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f); f.connect(g); g.connect(audio.master);
+  src.start(t); src.stop(t + dur);
+}
+
+const SFX = {
+  near()      { blip("sine", 900, 1420, 0.09, 0.10); },
+  gem()       { blip("triangle", 720, 1080, 0.10, 0.11); },
+  fuel()      { blip("triangle", 480, 900, 0.16, 0.12); blip("sine", 960, 1300, 0.14, 0.06); },
+  shieldGet() { blip("sine", 520, 1180, 0.24, 0.11); },
+  shieldPop() { blip("square", 620, 180, 0.22, 0.13); noiseBurst(0.2, 0.10, 1600); },
+  boost()     { blip("sawtooth", 210, 940, 0.28, 0.09); },
+  milestone() { blip("sine", 620, 620, 0.14, 0.09); setTimeout(() => blip("sine", 930, 930, 0.20, 0.09), 120); },
+  crash()     { noiseBurst(0.55, 0.28, 2600); blip("square", 320, 48, 0.6, 0.13); blip("sawtooth", 150, 30, 0.5, 0.09); },
+  start()     { blip("sine", 380, 760, 0.18, 0.10); setTimeout(() => blip("sine", 760, 1140, 0.22, 0.09), 130); }
+};
+
+function updateThrustSound() {
+  if (!audio.ready) return;
+  const g = audio.thrustGain.gain, f = audio.thrustFilt.frequency, o = audio.thrustOsc.frequency;
+  const on = state === "play" && !ship.dead;
+  const lvl = on ? ship.tl : 0;
+  const target = muted ? 0 : lvl * (ship.boosting ? 0.085 : 0.055);
+  const t = audio.ac.currentTime;
+  g.setTargetAtTime(target, t, 0.05);
+  o.setTargetAtTime(55 + lvl * 42 + (ship.boosting ? 55 : 0), t, 0.08);
+  f.setTargetAtTime(340 + lvl * 900 + (ship.boosting ? 700 : 0), t, 0.08);
+}
+
+function setMuted(v) {
+  muted = v;
+  LS.set(KEY_MUTE, muted ? "1" : "0");
+  sndBtn.textContent = muted ? "MUTED" : "SOUND ON";
+  sndBtn.style.color = muted ? "rgba(255,255,255,0.5)" : "var(--accent)";
+  if (audio.ready) audio.master.gain.setTargetAtTime(muted ? 0 : 0.85, audio.ac.currentTime, 0.03);
+}
+
+/* ==========================================================================
+   Particles & floating text (pooled, never grow)
+   ========================================================================== */
+
+function emit(x, y, vx, vy, life, size, col, glow) {
+  const p = parts[partCursor];
+  partCursor = (partCursor + 1) % MAX_PARTS;
+  p.alive = true; p.x = x; p.y = y; p.vx = vx; p.vy = vy;
+  p.life = life; p.max = life; p.size = size; p.col = col; p.glow = glow || 0;
+}
+
+function addFloat(x, y, text, col, size) {
+  const f = floats[floatCursor];
+  floatCursor = (floatCursor + 1) % MAX_FLOATS;
+  f.alive = true; f.x = x; f.y = y; f.text = text; f.col = col;
+  f.life = 1.1; f.max = 1.1; f.size = size || 20;
+}
+
+function addShake(amp, dur) {
+  if (amp > shake.amp * (1 - shake.t / shake.dur) || shake.t >= shake.dur) {
+    shake.amp = amp; shake.dur = dur; shake.t = 0;
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = 0; i < MAX_PARTS; i++) {
+    const p = parts[i];
+    if (!p.alive) continue;
+    p.life -= dt;
+    if (p.life <= 0) { p.alive = false; continue; }
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vx *= Math.pow(0.6, dt);
+    p.vy *= Math.pow(0.6, dt);
+  }
+  for (let i = 0; i < MAX_FLOATS; i++) {
+    const f = floats[i];
+    if (!f.alive) continue;
+    f.life -= dt;
+    if (f.life <= 0) { f.alive = false; continue; }
+    f.y -= 42 * dt;
+  }
+  if (shake.t < shake.dur) {
+    shake.t += dt;
+    const k = 1 - shake.t / shake.dur;
+    const a = shake.amp * k * k;
+    shake.x = (Math.random() * 2 - 1) * a;
+    shake.y = (Math.random() * 2 - 1) * a;
+  } else { shake.x = 0; shake.y = 0; }
+  for (let ri = rings.length - 1; ri >= 0; ri--) {
+    const rg = rings[ri];
+    rg.life -= dt;
+    if (rg.life <= 0) { rings.splice(ri, 1); continue; }
+    const rk = 1 - rg.life / rg.max;
+    rg.r = 4 + (rg.maxR - 4) * (1 - (1 - rk) * (1 - rk));
+  }
+}
+
+/* ==========================================================================
+   Input
+   ========================================================================== */
+
+const input = { thrust: false, boost: false };
+const keys = Object.create(null);
+const pointers = new Set();
+let padThrust = false, padBoost = false, padStartPrev = false, padAPrev = false, padAEdge = false;
+let isTouch = false;
+
+function markTouch() {
+  if (isTouch) return;
+  isTouch = true;
+  document.body.classList.add("touch");
+}
+if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) markTouch();
+
+window.addEventListener("keydown", (e) => {
+  const c = e.code;
+  if (c === "Space" || c === "KeyW" || c === "ArrowUp" || c === "KeyP" || c === "Escape" ||
+      c === "ArrowDown" || c === "KeyS" || c === "Enter") e.preventDefault();
+  if (keys[c]) return;
+  keys[c] = true;
+  resumeAudio();
+
+  if (c === "KeyM") { setMuted(!muted); return; }
+  if (c === "KeyP" || c === "Escape") { togglePause(); return; }
+  if (c === "KeyR" && (state === "play" || state === "dead" || state === "paused")) { startGame(); return; }
+  if ((c === "Space" || c === "Enter" || c === "KeyW" || c === "ArrowUp")) {
+    if (state === "title" || state === "dead") { startGame(); return; }
+    if (state === "paused" && c === "Enter") { togglePause(); return; }
+  }
+}, { passive: false });
+
+window.addEventListener("keyup", (e) => { keys[e.code] = false; }, { passive: true });
+window.addEventListener("blur", () => {
+  for (const k in keys) keys[k] = false;
+  pointers.clear();
+  if (state === "play") togglePause();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && state === "play") togglePause();
+});
+
+function keyThrust() { return !!(keys["Space"] || keys["KeyW"] || keys["ArrowUp"]); }
+function keyBoost() { return !!(keys["ShiftLeft"] || keys["ShiftRight"]); }
+
+/* --- pointer / touch --- */
+const boostBtn = document.getElementById("t-boost");
+const sndBtn = document.getElementById("snd");
+const touchHint = document.getElementById("t-hint");
+let touchBoost = false;
+
+function onPointerDown(e) {
+  if (e.pointerType === "touch") markTouch();
+  resumeAudio();
+  const t = e.target;
+  if (t === boostBtn || t === sndBtn || (t.closest && t.closest("#overlay"))) return;
+  pointers.add(e.pointerId);
+  if (state === "title" || state === "dead") { startGame(); return; }
+}
+function onPointerUp(e) { pointers.delete(e.pointerId); }
+
+stage.addEventListener("pointerdown", onPointerDown);
+window.addEventListener("pointerup", onPointerUp);
+window.addEventListener("pointercancel", onPointerUp);
+
+boostBtn.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); markTouch(); touchBoost = true; boostBtn.classList.add("on"); });
+const endBoostBtn = (e) => { touchBoost = false; boostBtn.classList.remove("on"); };
+boostBtn.addEventListener("pointerup", endBoostBtn);
+boostBtn.addEventListener("pointercancel", endBoostBtn);
+boostBtn.addEventListener("pointerleave", endBoostBtn);
+
+sndBtn.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); resumeAudio(); setMuted(!muted); });
+
+/* --- gamepad --- */
+function pollPad() {
+  padThrust = false; padBoost = false; padAEdge = false;
+  if (!navigator.getGamepads) return;
+  let pads;
+  try { pads = navigator.getGamepads(); } catch (e) { return; }
+  if (!pads) return;
+  let p = null;
+  for (let i = 0; i < pads.length; i++) { if (pads[i] && pads[i].connected) { p = pads[i]; break; } }
+  if (!p) { padStartPrev = false; padAPrev = false; return; }
+  const b = p.buttons || [];
+  const down = (i) => !!(b[i] && (b[i].pressed || b[i].value > 0.35));
+  const a = down(0);
+  padThrust = a || down(2);
+  padBoost = down(7) || down(5);
+  const st = down(9);
+  if (st && !padStartPrev) togglePause();
+  padStartPrev = st;
+  if (a && !padAPrev) padAEdge = true;
+  padAPrev = a;
+}
+
+function gatherInput() {
+  input.thrust = keyThrust() || pointers.size > 0 || padThrust;
+  input.boost = keyBoost() || touchBoost || pointers.size >= 2 || padBoost;
+}
+
+/* ==========================================================================
+   Overlay screens
+   ========================================================================== */
+
+const overlay = document.getElementById("overlay");
+const banner = document.getElementById("banner");
+const hud = document.getElementById("hud");
+
+const CONTROLS_HTML =
+  '<div class="keys">' +
+  '<b>Space / W / &uarr;</b><span>Thrust (hold)</span>' +
+  '<b>Shift</b><span>Boost &mdash; faster, more score, more fuel</span>' +
+  '<b>P / Esc</b><span>Pause</span>' +
+  '<b>M</b><span>Mute</span>' +
+  '<b>R</b><span>Restart</span>' +
+  '<b>Gamepad</b><span>A to thrust, right trigger to boost</span>' +
+  '<b>Touch</b><span>Hold anywhere to thrust, BOOST button or 2nd finger</span>' +
+  '</div>';
+
+const LEGEND_HTML =
+  '<div class="legend">' +
+  '<span><i class="sw" style="background:#4dffd0"></i>Fuel cell</span>' +
+  '<span><i class="sw" style="background:#7fd8ff"></i>Shield</span>' +
+  '<span><i class="sw" style="background:#ffcc4d"></i>Gem</span>' +
+  '<span><i class="sw" style="background:#ff5a4d"></i>Mine</span>' +
+  '<span><i class="sw" style="background:#ff8a3c"></i>Drone</span>' +
+  '</div>';
+
+function showOverlay(html) {
+  overlay.innerHTML = '<div class="card">' + html + "</div>";
+  overlay.classList.remove("hidden");
+  hud.classList.add("dim");
+}
+function hideOverlay() {
+  overlay.classList.add("hidden");
+  hud.classList.remove("dim");
+}
+
+function showTitle() {
+  state = "title";
+  showOverlay(
+    "<h1>DEEP RUN</h1>" +
+    '<p class="sub">Overclock Arcade</p>' +
+    '<p style="margin:0 0 20px;color:rgba(255,255,255,0.86);line-height:1.6;font-size:14px">' +
+    "Thrust down a collapsing cave. Fly close to the rock for a bigger multiplier &mdash; " +
+    "fly <em>too</em> close and it is over.</p>" +
+    LEGEND_HTML +
+    '<div class="stats" style="grid-template-columns:1fr">' +
+    '<div class="stat"><div class="k">Best depth</div><div class="v accent">' + fmtM(best) + "</div></div>" +
+    "</div>" +
+    CONTROLS_HTML +
+    '<button class="btn" data-act="start">LAUNCH</button>' +
+    '<div class="note">Press a button on a controller to bind it &mdash; browsers hide gamepads until you do.</div>'
+  );
+}
+
+function showPauseScreen() {
+  showOverlay(
+    "<h2>PAUSED</h2>" +
+    '<p class="sub">' + fmtM(run.metres) + " &middot; " + Math.floor(run.score).toLocaleString() + " pts</p>" +
+    CONTROLS_HTML +
+    '<button class="btn" data-act="resume">RESUME</button>' +
+    '<button class="btn ghost" data-act="restart">RESTART</button>' +
+    '<button class="btn ghost" data-act="quit">MAIN MENU</button>'
+  );
+}
+
+function showDeadScreen() {
+  const nb = run.newBest;
+  showOverlay(
+    "<h2>WRECKED</h2>" +
+    (nb ? '<div class="newbest">NEW BEST DEPTH</div>' : '<p class="sub">Run ended</p>') +
+    '<div class="stats">' +
+    '<div class="stat"><div class="k">Depth</div><div class="v accent">' + fmtM(run.metres) + "</div></div>" +
+    '<div class="stat"><div class="k">Best</div><div class="v">' + fmtM(best) + "</div></div>" +
+    '<div class="stat"><div class="k">Score</div><div class="v">' + Math.floor(run.score).toLocaleString() + "</div></div>" +
+    '<div class="stat"><div class="k">Near misses</div><div class="v cyan">' + run.nearMisses + "</div></div>" +
+    "</div>" +
+    '<button class="btn" data-act="start">RUN AGAIN</button>' +
+    '<button class="btn ghost" data-act="quit">MAIN MENU</button>' +
+    '<div class="note">Space or tap to go again.</div>'
+  );
+}
+
+overlay.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act]");
+  if (!b) {
+    // tapping anywhere on the wreck screen goes again, as the note promises
+    if (state === "dead") { resumeAudio(); startGame(); }
+    return;
+  }
+  resumeAudio();
+  const act = b.getAttribute("data-act");
+  if (act === "start" || act === "restart") startGame();
+  else if (act === "resume") togglePause();
+  else if (act === "quit") { resetWorld(); camX = 0; ship.x = 0; showTitle(); }
+});
+
+function togglePause() {
+  if (state === "play") { state = "paused"; showPauseScreen(); }
+  else if (state === "paused") { state = "play"; hideOverlay(); }
+}
+
+function flashBanner(main, sub) {
+  banner.innerHTML = main + (sub ? '<span class="sm">' + sub + "</span>" : "");
+  banner.classList.add("show");
+  clearTimeout(flashBanner._t);
+  flashBanner._t = setTimeout(() => banner.classList.remove("show"), 1500);
+}
+
+/* ==========================================================================
+   Game flow
+   ========================================================================== */
+
+function startGame() {
+  resumeAudio();
+  resetWorld();
+  camX = 0;
+  ship.x = 0; ship.y = LH / 2; ship.vy = 0; ship.tl = 0;
+  ship.shield = false; ship.invuln = 1.0; ship.boosting = false; ship.boostLock = false;
+  ship.fuel = FUEL_MAX; ship.boost = BOOST_MAX; ship.dead = false; ship.deadT = 0;
+  run.metres = 0; run.score = 0; run.mult = 1; run.chain = 0; run.chainT = 0;
+  run.near = false; run.nearMin = 999; run.zone = -1; run.droneT = 8;
+  run.newBest = false; run.nearMisses = 0; run.gems = 0;
+  for (let i = 0; i < MAX_PARTS; i++) parts[i].alive = false;
+  for (let i = 0; i < MAX_FLOATS; i++) floats[i].alive = false;
+  shake.t = shake.dur; shake.x = 0; shake.y = 0;
+  rings.length = 0; slowT = 0;
+  ensureSlices();
+  const s = sampleCave(ship.x);
+  ship.y = (s.top + s.bot) / 2;
+  state = "play";
+  hideOverlay();
+  banner.classList.remove("show");
+  SFX.start();
+  if (touchHint) {
+    clearTimeout(startGame._hintT);
+    startGame._hintT = setTimeout(() => { if (touchHint) touchHint.style.display = "none"; }, 6000);
+  }
+}
+
+function killShip(reason) {
+  slowT = Math.max(slowT, 0.5);
+  if (ship.dead) return;
+  ship.dead = true;
+  ship.deadT = 0;
+  state = "play";           // keep updating so the explosion plays out
+  SFX.crash();
+  addShake(26, 0.9);
+  for (let i = 0; i < 46; i++) {
+    const a = Math.random() * 6.2832, sp = rnd(60, 420);
+    emit(ship.x, ship.y, Math.cos(a) * sp, Math.sin(a) * sp, rnd(0.4, 1.2), rnd(1.5, 5),
+      pick(["#ffcc4d", "#ff8a3c", "#ffffff", "#ff5a4d", "#9fb3d9"]), 12);
+  }
+  addRing(ship.x, ship.y, "#ffcc4d", 150, 0.55);
+  addRing(ship.x, ship.y, "#ffffff", 75, 0.32);
+  if (run.metres > best) { best = run.metres; run.newBest = true; LS.set(KEY_BEST, Math.floor(best)); }
+}
+
+/* ==========================================================================
+   Collision helpers
+   ========================================================================== */
+
+// Hull sample points, relative to the ship centre: {dx, r}
+const HULL = [{ dx: 14, r: 5 }, { dx: 2, r: 7 }, { dx: -11, r: 6 }];
+
+function caveClearance() {
+  let minC = 1e9;
+  for (let i = 0; i < HULL.length; i++) {
+    const h = HULL[i];
+    const s = sampleCave(ship.x + h.dx);
+    const c = Math.min(ship.y - h.r - s.top, s.bot - (ship.y + h.r));
+    if (c < minC) minC = c;
+  }
+  return minC;
+}
+
+function hitsCircle(cx, cy, cr) {
+  for (let i = 0; i < HULL.length; i++) {
+    const h = HULL[i];
+    const dx = (ship.x + h.dx) - cx, dy = ship.y - cy;
+    const rr = cr + h.r;
+    if (dx * dx + dy * dy < rr * rr) return true;
+  }
+  return false;
+}
+
+/* ==========================================================================
+   Update
+   ========================================================================== */
+
+function updatePlay(dt) {
+  const d = clamp(run.metres / DEEP_AT, 0, 1);
+
+  /* ---- boost ---- */
+  let boosting = false;
+  if (!ship.dead) {
+    if (ship.boostLock && ship.boost >= BOOST_ARM) ship.boostLock = false;
+    if (input.boost && !ship.boostLock && ship.boost > 0 && ship.fuel > 0) {
+      boosting = true;
+      ship.boost -= BOOST_DRAIN * dt;
+      if (ship.boost <= 0) { ship.boost = 0; ship.boostLock = true; boosting = false; }
+    } else {
+      ship.boost = Math.min(BOOST_MAX, ship.boost + BOOST_REGEN * dt);
+    }
+  }
+  if (boosting && !ship.boosting) SFX.boost();
+  ship.boosting = boosting;
+
+  /* ---- forward motion ---- */
+  const spd = ship.dead ? 0 : speedAt(d) * (boosting ? BOOST_MULT : 1);
+  ship.x += spd * dt;
+  run.metres = ship.x * M_PER_UNIT;
+
+  /* ---- fuel ---- */
+  if (!ship.dead) {
+    ship.fuel -= (FUEL_DRAIN + (boosting ? FUEL_BOOST : 0)) * dt;
+    if (ship.fuel < 0) ship.fuel = 0;
+  }
+
+  /* ---- flight ---- */
+  const hasFuel = ship.fuel > 0;
+  const thrustIn = (!ship.dead && input.thrust && hasFuel) ? 1 : 0;
+  if (ship.dead) {
+    ship.vy = clamp(ship.vy + GRAVITY * dt * 0.6, -VY_MAX, VY_MAX);
+    ship.y += ship.vy * dt;
+    ship.tl = Math.max(0, ship.tl - dt * 4);
+  } else {
+    stepFlight(ship, thrustIn, dt);
+  }
+
+  /* ---- engine trail ---- */
+  if (!ship.dead && ship.tl > 0.08 && Math.random() < ship.tl * 0.9) {
+    const back = ship.x - 16;
+    emit(back, ship.y + rnd(-3, 3), -spd * 0.22 + rnd(-30, 30), rnd(-40, 40) + ship.vy * 0.2,
+      rnd(0.25, 0.55), rnd(1.6, 3.6),
+      boosting ? "#8fc0ff" : "#ffb04d", 10);
+  }
+
+  ensureSlices();
+  camX = ship.x - shipScreenX;
+
+  if (ship.dead) {
+    ship.deadT += dt;
+    if (ship.deadT > 0.85 && state !== "dead") { state = "dead"; showDeadScreen(); }
+    return;
+  }
+
+  if (ship.invuln > 0) ship.invuln -= dt;
+
+  /* ---- cave collision & near miss ---- */
+  const clear = caveClearance();
+  if (clear < 0) {
+    if (ship.shield) { popShield(); }
+    else if (ship.invuln <= 0) { killShip("rock"); return; }
+  } else {
+    if (clear < NEAR_MISS) {
+      run.near = true;
+      if (clear < run.nearMin) run.nearMin = clear;
+    } else if (run.near && clear > NEAR_CLEAR) {
+      awardNearMiss(run.nearMin);
+      run.near = false; run.nearMin = 999;
+    }
+  }
+
+  /* ---- multiplier decay ---- */
+  if (run.chain > 0) {
+    run.chainT -= dt;
+    if (run.chainT <= 0) { run.chain = Math.max(0, run.chain - 1); run.chainT = MULT_HOLD * 0.6; }
+  }
+  run.mult = clamp(1 + run.chain * 0.2, 1, MULT_MAX);
+
+  /* ---- score ---- */
+  run.score += spd * dt * 0.06 * run.mult * (boosting ? 1.6 : 1);
+
+  /* ---- zone milestones ---- */
+  const z = Math.min(ZONES.length - 1, Math.floor(run.metres / 250));
+  if (z > run.zone) {
+    if (run.zone >= 0) {
+      flashBanner(fmtM(Math.floor(run.metres / 250) * 250), ZONES[z]);
+      SFX.milestone();
+      run.score += 120 * run.mult;
+    }
+    run.zone = z;
+  }
+
+  /* ---- mines ---- */
+  for (let i = mines.length - 1; i >= 0; i--) {
+    const m = mines[i];
+    if (m.x < camX - 120) { mines.splice(i, 1); continue; }
+    m.t += dt; m.spin += dt * 1.4;
+    const cave = sampleCave(m.x);
+    let y = m.base + Math.sin(m.t * m.rate + m.phase) * m.amp;
+    // keep it inside the corridor with room to squeeze past either side
+    // If a spike narrowed the corridor since this mine was placed, park it
+    // against the ceiling instead of centring it — a centred mine in a narrow
+    // corridor is the one arrangement that could seal the cave off.
+    const loY = cave.top + m.r + 34, hiY = cave.bot - m.r - 34;
+    y = (loY <= hiY) ? clamp(y, loY, hiY) : (cave.top + m.r + 2);
+    m.y = y;
+    if (Math.abs(m.x - ship.x) < 60 && hitsCircle(m.x, m.y, m.r)) {
+      if (ship.shield) { popShield(); mines.splice(i, 1); explode(m.x, m.y, "#ff5a4d"); }
+      else if (ship.invuln <= 0) { explode(m.x, m.y, "#ff5a4d"); killShip("mine"); return; }
+    }
+  }
+
+  /* ---- gates ---- */
+  for (let i = gates.length - 1; i >= 0; i--) {
+    const g = gates[i];
+    if (g.x < camX - 120) { gates.splice(i, 1); continue; }
+    g.t += dt;
+    g.ap = g.apMin + g.apRange * (0.5 + 0.5 * Math.sin(g.t * g.rate + g.phase));
+    if (Math.abs(ship.x - g.x) < 40) {
+      const apTop = g.cy - g.ap / 2, apBot = g.cy + g.ap / 2;
+      let hit = false;
+      for (let k = 0; k < HULL.length; k++) {
+        const h = HULL[k];
+        const px = ship.x + h.dx;
+        if (Math.abs(px - g.x) > 13 + h.r) continue;
+        if (ship.y - h.r < apTop || ship.y + h.r > apBot) { hit = true; break; }
+      }
+      if (hit) {
+        if (ship.shield) { popShield(); }
+        else if (ship.invuln <= 0) { killShip("gate"); return; }
+      }
+    }
+  }
+
+  /* ---- drones ---- */
+  if (run.metres > 850) {
+    run.droneT -= dt;
+    if (run.droneT <= 0 && drones.length < 3) {
+      run.droneT = lerp(9, 4.2, d) + rnd(-1, 1.5);
+      spawnDrone(d);
+    }
+  }
+  for (let i = drones.length - 1; i >= 0; i--) {
+    const dr = drones[i];
+    dr.life -= dt;
+    dr.t += dt;
+    if (dr.warn > 0) {
+      dr.warn -= dt;
+      dr.x = camX + view.ww + 30;
+      const c0 = sampleCave(dr.x);
+      dr.y = clamp(dr.y, c0.top + 26, c0.bot - 26);
+      continue;
+    }
+    const chase = dr.life > 0;
+    dr.x += (chase ? spd * 0.72 : spd * 1.55) * dt;
+    const want = clamp((ship.y - dr.y) * 2.2, -150, 150);
+    dr.vy += clamp(want - dr.vy, -260 * dt, 260 * dt);
+    dr.y += dr.vy * dt;
+    const cave = sampleCave(dr.x);
+    dr.y = clamp(dr.y, cave.top + 22, cave.bot - 22);
+    if (Math.random() < 0.5) {
+      emit(dr.x - 10, dr.y, -60 + rnd(-30, 30), rnd(-25, 25), rnd(0.2, 0.45), rnd(1.2, 2.6), "#ff8a3c", 8);
+    }
+    if (dr.x < camX - 140 || dr.x > camX + view.ww + 900) { drones.splice(i, 1); continue; }
+    if (chase && hitsCircle(dr.x, dr.y, 15)) {
+      if (ship.shield) { popShield(); explode(dr.x, dr.y, "#ff8a3c"); drones.splice(i, 1); }
+      else if (ship.invuln <= 0) { explode(dr.x, dr.y, "#ff8a3c"); killShip("drone"); return; }
+    }
+  }
+
+  /* ---- pickups ---- */
+  for (let i = pickups.length - 1; i >= 0; i--) {
+    const p = pickups[i];
+    if (p.x < camX - 120) { pickups.splice(i, 1); continue; }
+    p.t += dt;
+    if (Math.abs(p.x - ship.x) > 60) continue;
+    if (!hitsCircle(p.x, p.y, p.r)) continue;
+    collect(p);
+    pickups.splice(i, 1);
+  }
+}
+
+function spawnDrone(d) {
+  const x = camX + view.ww + 30;
+  const c = sampleCave(x);
+  drones.push({
+    x: x, y: clamp(ship.y + rnd(-90, 90), c.top + 26, c.bot - 26),
+    vy: 0, t: 0, life: rnd(8, 12), warn: 1.0
+  });
+}
+
+function explode(x, y, col) {
+  for (let i = 0; i < 20; i++) {
+    const a = Math.random() * 6.2832, sp = rnd(50, 260);
+    emit(x, y, Math.cos(a) * sp, Math.sin(a) * sp, rnd(0.25, 0.7), rnd(1.5, 4), Math.random() < 0.4 ? "#ffffff" : col, 10);
+  }
+  addRing(x, y, col, 120, 0.45);
+  addRing(x, y, "#ffffff", 60, 0.28);
+  addShake(12, 0.35);
+}
+
+function popShield() {
+  ship.shield = false;
+  ship.invuln = 1.15;
+  SFX.shieldPop();
+  addRing(ship.x, ship.y, "#7fd8ff", 100, 0.4);
+  slowT = Math.max(slowT, 0.18);
+  addShake(16, 0.5);
+  for (let i = 0; i < 26; i++) {
+    const a = Math.random() * 6.2832, sp = rnd(80, 300);
+    emit(ship.x, ship.y, Math.cos(a) * sp, Math.sin(a) * sp, rnd(0.3, 0.7), rnd(1.5, 3.5), "#7fd8ff", 12);
+  }
+  addFloat(ship.x, ship.y - 34, "SHIELD DOWN", "#7fd8ff", 18);
+}
+
+function collect(p) {
+  if (p.type === "fuel") {
+    ship.fuel = Math.min(FUEL_MAX, ship.fuel + FUEL_CELL);
+    run.score += 40 * run.mult;
+    SFX.fuel();
+    addFloat(p.x, p.y - 26, "+FUEL", "#4dffd0", 18);
+    for (let i = 0; i < 12; i++) { const a = Math.random() * 6.2832; emit(p.x, p.y, Math.cos(a) * rnd(40, 160), Math.sin(a) * rnd(40, 160), rnd(0.25, 0.5), 2.4, "#4dffd0", 10); }
+  } else if (p.type === "shield") {
+    ship.shield = true;
+    run.score += 60 * run.mult;
+    SFX.shieldGet();
+    addFloat(p.x, p.y - 26, "SHIELD UP", "#7fd8ff", 18);
+    for (let i = 0; i < 14; i++) { const a = Math.random() * 6.2832; emit(p.x, p.y, Math.cos(a) * rnd(40, 170), Math.sin(a) * rnd(40, 170), rnd(0.25, 0.5), 2.4, "#7fd8ff", 10); }
+  } else {
+    run.gems++;
+    run.score += 25 * run.mult;
+    SFX.gem();
+    for (let i = 0; i < 8; i++) { const a = Math.random() * 6.2832; emit(p.x, p.y, Math.cos(a) * rnd(30, 120), Math.sin(a) * rnd(30, 120), rnd(0.2, 0.4), 2.0, "#ffcc4d", 9); }
+  }
+}
+
+function awardNearMiss(closest) {
+  run.nearMisses++;
+  run.chain = Math.min(run.chain + 1, Math.round((MULT_MAX - 1) / 0.2));
+  run.chainT = MULT_HOLD;
+  const tight = closest < 9;
+  const bonus = (tight ? 90 : 45) * run.mult;
+  run.score += bonus;
+  SFX.near();
+  if (tight) addRing(ship.x, ship.y, "#ffcc4d", 60, 0.3);
+  addShake(tight ? 9 : 5, 0.24);
+  addFloat(ship.x + 26, ship.y - 30, (tight ? "THREADED  x" : "NEAR MISS  x") + run.mult.toFixed(1),
+    tight ? "#ffcc4d" : "#7fd8ff", tight ? 22 : 18);
+  for (let i = 0; i < (tight ? 14 : 8); i++) {
+    emit(ship.x + rnd(-14, 14), ship.y + rnd(-10, 10), rnd(-120, 40), rnd(-90, 90), rnd(0.2, 0.45), 2.2,
+      tight ? "#ffcc4d" : "#7fd8ff", 10);
+  }
+}
+
+function updateTitle(dt) {
+  ship.x += 200 * dt;
+  ensureSlices();
+  camX = ship.x - shipScreenX;
+}
+
+/* ==========================================================================
+   Rendering
+   ========================================================================== */
+
+function drawBackdrop() {
+  setScreenTransform();
+  const g = ctx.createLinearGradient(0, 0, 0, view.wh);
+  g.addColorStop(0, "#070a16");
+  g.addColorStop(0.5, "#0b0f1e");
+  g.addColorStop(1, "#06080f");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, view.ww, view.wh);
+
+  // drifting nebulae behind the cave — deep colour under the rock layers
+  const NEB = [
+    { x: 0.25 + Math.sin(clock * 0.05) * 0.05, y: 0.3, r: 0.6, col: "58,72,168" },
+    { x: 0.8 + Math.cos(clock * 0.045) * 0.04, y: 0.6, r: 0.52, col: "118,52,150" },
+    { x: 0.55 + Math.sin(clock * 0.03 + 2) * 0.07, y: 0.15, r: 0.45, col: "32,96,140" }
+  ];
+  for (let i = 0; i < NEB.length; i++) {
+    const n = NEB[i];
+    const nr = n.r * view.ww;
+    const ng = ctx.createRadialGradient(n.x * view.ww, n.y * view.wh, 0, n.x * view.ww, n.y * view.wh, nr);
+    ng.addColorStop(0, "rgba(" + n.col + ",0.14)");
+    ng.addColorStop(1, "rgba(" + n.col + ",0)");
+    ctx.fillStyle = ng;
+    ctx.fillRect(n.x * view.ww - nr, n.y * view.wh - nr, nr * 2, nr * 2);
+  }
+}
+
+function drawDust() {
+  setScreenTransform();
+  ctx.globalAlpha = 1;
+  const span = view.ww + 200;
+  for (let i = 0; i < 46; i++) {
+    const h = hash1(i * 3.7);
+    const sp = 12 + h * 26;
+    let x = (h * 4000 + clock * sp) % span - 100;
+    if (x < -100) x += span;
+    const y = ((hash1(i * 9.1) * view.wh) + Math.sin(clock * 0.4 + i) * 14 + view.wh) % view.wh;
+    const r = 0.7 + hash1(i * 5.3) * 1.6;
+    ctx.fillStyle = i % 5 === 0 ? "rgba(255,204,77,0.35)" : "rgba(127,216,255,0.22)";
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, 6.2832);
+    ctx.fill();
+  }
+}
+
+// Nested cave outlines drawn *inside* the corridor, each set further in and
+// darker, with their own noise parallax rate. Painted far-to-near so the
+// nearer fill covers the outer part of the further one.
+function drawParallax() {
+  setScreenTransform();
+  const layers = [
+    { k: 3, col: "#05070f", rate: 0.30 },
+    { k: 2, col: "#0a1026", rate: 0.52 },
+    { k: 1, col: "#111a3c", rate: 0.76 }
+  ];
+  const step = 18;
+  for (let li = 0; li < layers.length; li++) {
+    const L = layers[li];
+    const ox = camX * L.rate;
+    ctx.fillStyle = L.col;
+    // ceiling side
+    ctx.beginPath();
+    ctx.moveTo(-20, -20);
+    for (let sx = -20; sx <= view.ww + 30; sx += step) {
+      const c = sampleCave(camX + sx);
+      const gap = c.bot - c.top;
+      const n = fbm((ox + sx) * 0.0021 + L.k * 13.7);
+      const off = gap * (0.06 + 0.085 * L.k) + n * gap * 0.06;
+      ctx.lineTo(sx, view.bandY + c.top + off);
+    }
+    ctx.lineTo(view.ww + 30, -20);
+    ctx.closePath();
+    ctx.fill();
+    // floor side
+    ctx.beginPath();
+    ctx.moveTo(-20, view.wh + 20);
+    for (let sx = -20; sx <= view.ww + 30; sx += step) {
+      const c = sampleCave(camX + sx);
+      const gap = c.bot - c.top;
+      const n = fbm((ox + sx) * 0.0021 + L.k * 31.3 + 100);
+      const off = gap * (0.06 + 0.085 * L.k) + n * gap * 0.06;
+      ctx.lineTo(sx, view.bandY + c.bot - off);
+    }
+    ctx.lineTo(view.ww + 30, view.wh + 20);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+// Built once per frame as a Path2D and reused for the fill and both strokes —
+// walking the cave three times per edge was the most expensive thing on screen.
+function caveEdgePath(which) {
+  const over = view.bandY + 120;
+  const step = 14;
+  const p = new Path2D();
+  if (which === "top") {
+    p.moveTo(camX - 30, -over);
+    for (let sx = -30; sx <= view.ww + 40; sx += step) {
+      p.lineTo(camX + sx, sampleCave(camX + sx).top);
+    }
+    p.lineTo(camX + view.ww + 40, -over);
+  } else {
+    p.moveTo(camX - 30, LH + over);
+    for (let sx = -30; sx <= view.ww + 40; sx += step) {
+      p.lineTo(camX + sx, sampleCave(camX + sx).bot);
+    }
+    p.lineTo(camX + view.ww + 40, LH + over);
+  }
+  p.closePath();
+  return p;
+}
+
+function drawRock() {
+  setWorldTransform();
+  const over = view.bandY + 120;
+  const pTop = caveEdgePath("top");
+  const pBot = caveEdgePath("bot");
+
+  const gTop = ctx.createLinearGradient(0, -over, 0, LH * 0.5);
+  gTop.addColorStop(0, "#080c1c");
+  gTop.addColorStop(0.7, "#16204a");
+  gTop.addColorStop(1, "#23306a");
+  const gBot = ctx.createLinearGradient(0, LH * 0.5, 0, LH + over);
+  gBot.addColorStop(0, "#23306a");
+  gBot.addColorStop(0.3, "#16204a");
+  gBot.addColorStop(1, "#080c1c");
+
+  ctx.fillStyle = gTop; ctx.fill(pTop);
+  ctx.fillStyle = gBot; ctx.fill(pBot);
+
+  // glowing rim
+  ctx.strokeStyle = "rgba(255,204,77,0.85)";
+  ctx.lineWidth = 2.2;
+  ctx.shadowColor = "#ffcc4d";
+  ctx.shadowBlur = 16;
+  ctx.stroke(pTop);
+  ctx.stroke(pBot);
+  ctx.shadowBlur = 0;
+
+  ctx.strokeStyle = "rgba(127,216,255,0.30)";
+  ctx.lineWidth = 0.9;
+  ctx.stroke(pTop);
+  ctx.stroke(pBot);
+}
+
+function drawCrystals() {
+  setWorldTransform();
+  const x0 = camX - 40, x1 = camX + view.ww + 40;
+  for (let i = 0; i < slices.length; i++) {
+    const s = slices[i];
+    if (!s.cr || s.x < x0 || s.x > x1) continue;
+    const cr = s.cr;
+    const y = cr.side < 0 ? s.top + cr.dy : s.bot - cr.dy;
+    const pulse = 0.65 + 0.35 * Math.sin(clock * 1.6 + s.x * 0.01);
+    const col = "hsl(" + cr.hue + ",90%,66%)";
+    ctx.fillStyle = col;
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 18 * pulse;
+    ctx.globalAlpha = 0.55 + 0.35 * pulse;
+    ctx.beginPath();
+    ctx.moveTo(s.x, y + cr.side * cr.size);
+    ctx.lineTo(s.x - cr.size * 0.42, y - cr.side * cr.size * 0.35);
+    ctx.lineTo(s.x + cr.size * 0.42, y - cr.side * cr.size * 0.35);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+}
+
+function drawPickups() {
+  setWorldTransform();
+  const x0 = camX - 40, x1 = camX + view.ww + 60;
+  for (let i = 0; i < pickups.length; i++) {
+    const p = pickups[i];
+    if (p.x < x0 || p.x > x1) continue;
+    const bob = Math.sin(p.t * 2.2) * 4;
+    const y = p.y + bob;
+    const spin = p.t * 1.7;
+    let col = "#ffcc4d";
+    if (p.type === "fuel") col = "#4dffd0";
+    else if (p.type === "shield") col = "#7fd8ff";
+
+    ctx.save();
+    ctx.translate(p.x, y);
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 20;
+    ctx.strokeStyle = col;
+    ctx.fillStyle = col;
+
+    if (p.type === "gem") {
+      ctx.rotate(spin);
+      ctx.globalAlpha = 0.95;
+      ctx.beginPath();
+      ctx.moveTo(0, -p.r); ctx.lineTo(p.r * 0.7, 0); ctx.lineTo(0, p.r); ctx.lineTo(-p.r * 0.7, 0);
+      ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.moveTo(0, -p.r * 0.55); ctx.lineTo(p.r * 0.32, 0); ctx.lineTo(0, p.r * 0.3); ctx.lineTo(-p.r * 0.32, 0);
+      ctx.closePath(); ctx.fill();
+    } else if (p.type === "fuel") {
+      ctx.globalAlpha = 0.22; ctx.beginPath(); ctx.arc(0, 0, p.r + 5, 0, 6.2832); ctx.fill();
+      ctx.globalAlpha = 1; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-6.5, -10, 13, 20, 3) : ctx.rect(-6.5, -10, 13, 20);
+      ctx.stroke();
+      ctx.fillStyle = col; ctx.globalAlpha = 0.85;
+      ctx.fillRect(-3.5, -6 + Math.sin(p.t * 3) * 1.2, 7, 12);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#0b0f1e";
+      ctx.fillRect(-2, -2.5, 4, 5);
+    } else {
+      ctx.globalAlpha = 0.22; ctx.beginPath(); ctx.arc(0, 0, p.r + 6, 0, 6.2832); ctx.fill();
+      ctx.globalAlpha = 1; ctx.lineWidth = 2.4;
+      ctx.rotate(Math.sin(p.t) * 0.25);
+      ctx.beginPath();
+      ctx.moveTo(0, -12); ctx.lineTo(9, -6); ctx.lineTo(9, 4); ctx.lineTo(0, 12); ctx.lineTo(-9, 4); ctx.lineTo(-9, -6);
+      ctx.closePath(); ctx.stroke();
+      ctx.globalAlpha = 0.35; ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+}
+
+function drawMines() {
+  setWorldTransform();
+  const x0 = camX - 40, x1 = camX + view.ww + 60;
+  for (let i = 0; i < mines.length; i++) {
+    const m = mines[i];
+    if (m.x < x0 || m.x > x1) continue;
+    const pulse = 0.6 + 0.4 * Math.sin(m.t * 5);
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(m.spin);
+    ctx.shadowColor = "#ff5a4d";
+    ctx.shadowBlur = 14 + 12 * pulse;
+    ctx.strokeStyle = "#ff5a4d";
+    ctx.lineWidth = 2.4;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * 6.2832;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * (m.r - 3), Math.sin(a) * (m.r - 3));
+      ctx.lineTo(Math.cos(a) * (m.r + 6), Math.sin(a) * (m.r + 6));
+      ctx.stroke();
+    }
+    const gg = ctx.createRadialGradient(0, 0, 1, 0, 0, m.r);
+    gg.addColorStop(0, "#5a1a18");
+    gg.addColorStop(1, "#1a0d14");
+    ctx.fillStyle = gg;
+    ctx.beginPath(); ctx.arc(0, 0, m.r - 2, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = "rgba(255,90,77," + (0.35 + 0.55 * pulse).toFixed(3) + ")";
+    ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, 6.2832); ctx.fill();
+    ctx.restore();
+  }
+  ctx.shadowBlur = 0;
+}
+
+function drawGates() {
+  setWorldTransform();
+  const x0 = camX - 60, x1 = camX + view.ww + 80;
+  for (let i = 0; i < gates.length; i++) {
+    const g = gates[i];
+    if (g.x < x0 || g.x > x1) continue;
+    const apTop = g.cy - g.ap / 2, apBot = g.cy + g.ap / 2;
+    const tight = g.ap < g.apMin + 26;
+    const col = tight ? "#ff8a3c" : "#ffcc4d";
+    ctx.save();
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 16;
+    const panels = [[g.top - 30, apTop], [apBot, g.bot + 30]];
+    for (let k = 0; k < 2; k++) {
+      const y0 = panels[k][0], y1 = panels[k][1];
+      if (y1 - y0 <= 0) continue;
+      const grad = ctx.createLinearGradient(g.x - 13, 0, g.x + 13, 0);
+      grad.addColorStop(0, "#1b2246");
+      grad.addColorStop(0.5, "#3a4780");
+      grad.addColorStop(1, "#1b2246");
+      ctx.fillStyle = grad;
+      ctx.fillRect(g.x - 13, y0, 26, y1 - y0);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(g.x - 13, y0, 26, y1 - y0);
+      // hazard stripes
+      ctx.save();
+      ctx.beginPath(); ctx.rect(g.x - 13, y0, 26, y1 - y0); ctx.clip();
+      ctx.strokeStyle = "rgba(255,204,77,0.22)";
+      ctx.lineWidth = 5;
+      for (let s = y0 - 26; s < y1 + 26; s += 16) {
+        ctx.beginPath(); ctx.moveTo(g.x - 16, s); ctx.lineTo(g.x + 16, s + 20); ctx.stroke();
+      }
+      ctx.restore();
+      // glowing lip on the aperture side
+      ctx.fillStyle = col;
+      const lipY = (k === 0) ? y1 - 4 : y0;
+      ctx.fillRect(g.x - 14, lipY, 28, 4);
+    }
+    ctx.restore();
+    ctx.shadowBlur = 0;
+  }
+}
+
+function drawDrones() {
+  setWorldTransform();
+  for (let i = 0; i < drones.length; i++) {
+    const dr = drones[i];
+    if (dr.warn > 0) {
+      const a = 0.35 + 0.55 * Math.abs(Math.sin(dr.t * 9));
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.fillStyle = "#ff8a3c";
+      ctx.shadowColor = "#ff8a3c";
+      ctx.shadowBlur = 22;
+      const bx = camX + view.ww - 26;
+      ctx.beginPath();
+      ctx.moveTo(bx + 14, dr.y); ctx.lineTo(bx - 8, dr.y - 13); ctx.lineTo(bx - 8, dr.y + 13);
+      ctx.closePath(); ctx.fill();
+      ctx.font = "700 13px 'Segoe UI', system-ui, sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText("DRONE", bx - 16, dr.y + 4);
+      ctx.restore();
+      ctx.shadowBlur = 0;
+      continue;
+    }
+    ctx.save();
+    ctx.translate(dr.x, dr.y);
+    const spin = dr.t * 3.4;
+    ctx.shadowColor = "#ff8a3c";
+    ctx.shadowBlur = 18;
+    // rotating ring
+    ctx.strokeStyle = "rgba(255,138,60,0.75)";
+    ctx.lineWidth = 2;
+    for (let k = 0; k < 3; k++) {
+      const a0 = spin + k * 2.094;
+      ctx.beginPath();
+      ctx.arc(0, 0, 19, a0, a0 + 1.15);
+      ctx.stroke();
+    }
+    // body
+    ctx.beginPath();
+    for (let k = 0; k < 6; k++) {
+      const a = spin * 0.3 + k * 1.0472;
+      const px = Math.cos(a) * 12, py = Math.sin(a) * 12;
+      if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    const gg = ctx.createRadialGradient(0, 0, 1, 0, 0, 13);
+    gg.addColorStop(0, "#5c3a20");
+    gg.addColorStop(1, "#1a1220");
+    ctx.fillStyle = gg;
+    ctx.fill();
+    ctx.strokeStyle = "#ff8a3c";
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    // eye tracking the ship
+    const ang = Math.atan2(ship.y - dr.y, ship.x - dr.x);
+    ctx.fillStyle = "#ffe08a";
+    ctx.beginPath();
+    ctx.arc(Math.cos(ang) * 4, Math.sin(ang) * 4, 4.2, 0, 6.2832);
+    ctx.fill();
+    ctx.restore();
+    ctx.shadowBlur = 0;
+  }
+}
+
+function drawParticles() {
+  setWorldTransform();
+  for (let i = 0; i < MAX_PARTS; i++) {
+    const p = parts[i];
+    if (!p.alive) continue;
+    const k = p.life / p.max;
+    ctx.globalAlpha = clamp(k, 0, 1);
+    ctx.fillStyle = p.col;
+    if (p.glow) { ctx.shadowColor = p.col; ctx.shadowBlur = p.glow; }
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (0.4 + k * 0.6), 0, 6.2832);
+    ctx.fill();
+    if (p.glow) ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawRings() {
+  if (!rings.length) return;
+  setWorldTransform();
+  for (let i = 0; i < rings.length; i++) {
+    const rg = rings[i];
+    const a = clamp(rg.life / rg.max, 0, 1);
+    ctx.globalAlpha = a * 0.8;
+    ctx.strokeStyle = rg.col;
+    ctx.lineWidth = 1.5 + 3 * a;
+    ctx.shadowColor = rg.col;
+    ctx.shadowBlur = 16;
+    ctx.beginPath();
+    ctx.arc(rg.x, rg.y, rg.r, 0, 6.2832);
+    ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+}
+
+function drawFloats() {
+  setWorldTransform();
+  ctx.textAlign = "center";
+  for (let i = 0; i < MAX_FLOATS; i++) {
+    const f = floats[i];
+    if (!f.alive) continue;
+    const k = f.life / f.max;
+    ctx.globalAlpha = clamp(k * 1.4, 0, 1);
+    ctx.font = "800 " + f.size + "px 'Segoe UI', system-ui, sans-serif";
+    ctx.fillStyle = f.col;
+    ctx.shadowColor = f.col;
+    ctx.shadowBlur = 16;
+    ctx.fillText(f.text, f.x, f.y);
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = "left";
+}
+
+function drawShip() {
+  setWorldTransform();
+  const s = ship;
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  ctx.rotate(clamp(s.vy / 900, -0.55, 0.55));
+  const blink = s.invuln > 0 && (((s.invuln * 14) | 0) % 2 === 0);
+  ctx.globalAlpha = blink ? 0.4 : 1;
+
+  const f = s.tl;
+  if (f > 0.05) {
+    const len = 15 + f * 28 + Math.random() * 9 + (s.boosting ? 20 : 0);
+    const g = ctx.createLinearGradient(-15, 0, -15 - len, 0);
+    g.addColorStop(0, s.boosting ? "rgba(200,228,255,0.95)" : "rgba(255,224,150,0.95)");
+    g.addColorStop(0.45, s.boosting ? "rgba(100,160,255,0.55)" : "rgba(255,140,60,0.55)");
+    g.addColorStop(1, "rgba(255,60,0,0)");
+    ctx.fillStyle = g;
+    ctx.shadowColor = s.boosting ? "#7fb0ff" : "#ffb04d";
+    ctx.shadowBlur = 26;
+    ctx.beginPath();
+    ctx.moveTo(-14, -6.5); ctx.lineTo(-14 - len, 0); ctx.lineTo(-14, 6.5);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.fillStyle = "#2b3a63";
+  ctx.beginPath(); ctx.moveTo(-2, -6); ctx.lineTo(-13, -17); ctx.lineTo(-18, -14); ctx.lineTo(-10, -5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-2, 6); ctx.lineTo(-13, 17); ctx.lineTo(-18, 14); ctx.lineTo(-10, 5); ctx.closePath(); ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(21, 0); ctx.lineTo(7, -7); ctx.lineTo(-9, -9); ctx.lineTo(-15, -5);
+  ctx.lineTo(-15, 5); ctx.lineTo(-9, 9); ctx.lineTo(7, 7);
+  ctx.closePath();
+  const hg = ctx.createLinearGradient(0, -10, 0, 10);
+  hg.addColorStop(0, "#f2f6ff");
+  hg.addColorStop(0.5, "#9fb3d9");
+  hg.addColorStop(1, "#41527a");
+  ctx.fillStyle = hg;
+  ctx.shadowColor = s.shield ? "#7fd8ff" : "#ffcc4d";
+  ctx.shadowBlur = 15;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(11,15,30,0.85)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = "#ffcc4d";
+  ctx.shadowColor = "#ffcc4d";
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.ellipse(5, -0.5, 5.5, 3.2, 0, 0, 6.2832);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  if (s.shield) {
+    const pulse = 0.65 + 0.35 * Math.sin(clock * 5);
+    ctx.strokeStyle = "rgba(127,216,255," + (0.5 + 0.4 * pulse).toFixed(3) + ")";
+    ctx.lineWidth = 1.8;
+    ctx.shadowColor = "#7fd8ff";
+    ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 27, 18, 0, 0, 6.2832);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+function drawVignette() {
+  setScreenTransform();
+  const g = ctx.createRadialGradient(view.ww * 0.5, view.wh * 0.5, view.wh * 0.28,
+                                     view.ww * 0.5, view.wh * 0.5, view.wh * 0.85);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, view.ww, view.wh);
+
+  if (state === "play" && !ship.dead && ship.fuel < 22) {
+    const a = 0.10 + 0.14 * Math.abs(Math.sin(clock * 4));
+    ctx.fillStyle = "rgba(255,90,60," + a.toFixed(3) + ")";
+    ctx.fillRect(0, 0, view.ww, view.wh);
+  }
+  if (state === "play" && ship.boosting) {
+    ctx.strokeStyle = "rgba(140,180,255,0.35)";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, view.ww - 4, view.wh - 4);
+  }
+}
+
+function render() {
+  drawBackdrop();
+  drawParallax();
+  drawDust();
+  drawRock();
+  drawCrystals();
+  drawGates();
+  drawPickups();
+  drawMines();
+  drawDrones();
+  drawParticles();
+  drawRings();
+  if (state !== "title") drawShip();
+  drawFloats();
+  drawVignette();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+/* ==========================================================================
+   HUD
+   ========================================================================== */
+
+const el = {
+  dist: document.getElementById("distv"),
+  best: document.getElementById("bestv"),
+  score: document.getElementById("scorev"),
+  mult: document.getElementById("multv"),
+  fuel: document.getElementById("fuelbar"),
+  boost: document.getElementById("boostbar"),
+  shieldTag: document.getElementById("shieldtag"),
+  fuelTag: document.getElementById("fueltag")
+};
+const fuelFill = el.fuel.firstElementChild;
+const boostFill = el.boost.firstElementChild;
+const last = { dist: -1, best: -1, score: -1, mult: -1, shield: null, low: null, lock: null };
+
+function updateHUD() {
+  const dm = Math.floor(run.metres);
+  if (dm !== last.dist) { el.dist.innerHTML = dm.toLocaleString() + '<span class="of">m</span>'; last.dist = dm; }
+  const bm = Math.floor(best);
+  if (bm !== last.best) { el.best.textContent = fmtM(bm); last.best = bm; }
+  const sc = Math.floor(run.score);
+  if (sc !== last.score) { el.score.textContent = sc.toLocaleString(); last.score = sc; }
+  const mv = Math.round(run.mult * 10);
+  if (mv !== last.mult) {
+    el.mult.textContent = "x" + (mv / 10).toFixed(1);
+    el.mult.classList.toggle("hot", run.mult >= 2.5);
+    last.mult = mv;
+  }
+  fuelFill.style.width = (ship.fuel / FUEL_MAX * 100).toFixed(1) + "%";
+  boostFill.style.width = (ship.boost / BOOST_MAX * 100).toFixed(1) + "%";
+  const low = ship.fuel < 25;
+  if (low !== last.low) { el.fuel.classList.toggle("low", low); el.fuelTag.classList.toggle("on", low); last.low = low; }
+  if (ship.boostLock !== last.lock) { el.boost.classList.toggle("cool", ship.boostLock); last.lock = ship.boostLock; }
+  if (ship.shield !== last.shield) { el.shieldTag.classList.toggle("on", ship.shield); last.shield = ship.shield; }
+}
+
+/* ==========================================================================
+   Main loop — fixed-step physics so refresh rate cannot change the game
+   ========================================================================== */
+
+const STEP = 1 / 120;
+let acc = 0;
+let prevT = 0;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (!prevT) prevT = now;
+  let dt = (now - prevT) / 1000;
+  prevT = now;
+  if (!(dt > 0)) dt = 0;
+  if (dt > 0.25) dt = 0.25;
+
+  pollPad();
+  if (padAEdge && (state === "title" || state === "dead")) startGame();
+  gatherInput();
+
+  /* hit-stop: deaths and shield pops play out at third speed */
+  if (slowT > 0) { slowT = Math.max(0, slowT - dt); dt *= 0.35; }
+
+  if (state === "paused") {
+    updateThrustSound();
+    render();
+    return;
+  }
+
+  acc += dt;
+  let steps = 0;
+  while (acc >= STEP && steps < 12) {
+    acc -= STEP;
+    steps++;
+    clock += STEP;
+    if (state === "title") updateTitle(STEP);
+    else updatePlay(STEP);
+    updateParticles(STEP);
+  }
+  if (steps >= 12) acc = 0;
+
+  updateThrustSound();
+  updateHUD();
+  render();
+}
+
+/* ==========================================================================
+   Self-test: fly a simulated pilot down freshly generated cave and confirm
+   the channel is actually flyable. Silent unless it fails.
+   ========================================================================== */
+
+function selfTestCave() {
+  gen.dry = true;
+  resetWorld();
+  let x = 40;
+  const pilot = { y: (slices[0].top + slices[0].bot) / 2, vy: 0, tl: 0 };
+  let fails = 0, minClear = 1e9;
+  const step = 1 / 240;
+  const iters = 240 * 180;                     // 180 simulated seconds
+  for (let n = 0; n < iters; n++) {
+    let guard = 0;
+    while (slices[slices.length - 1].x < x + 2200 && guard++ < 200) genSlice();
+    while (slices.length > 4 && slices[1].x < x - 200) slices.shift();
+
+    const d = clamp(x * M_PER_UNIT / DEEP_AT, 0, 1);
+    const spd = speedAt(d) * BOOST_MULT;       // worst case: permanently boosting
+    const ahead = sampleCave(x + spd * 0.30);
+    const tgt = (ahead.top + ahead.bot) / 2;
+    const want = clamp((tgt - pilot.y) * 3.2, -VY_MAX * 0.85, VY_MAX * 0.85);
+    stepFlight(pilot, pilot.vy > want ? 1 : 0, step);
+    x += spd * step;
+
+    const here = sampleCave(x);
+    const c = Math.min(pilot.y - 7 - here.top, here.bot - (pilot.y + 7));
+    if (c < minClear) minClear = c;
+    if (c < 0) fails++;
+  }
+  gen.dry = false;
+  resetWorld();
+  if (fails > 0) {
+    console.warn("Deep Run: cave passability self-test failed —",
+      fails, "contacts over", Math.round(x * M_PER_UNIT), "m; worst clearance", minClear.toFixed(1));
+  }
+  return { fails: fails, minClear: minClear, metres: x * M_PER_UNIT };
+}
+
+/* ==========================================================================
+   Boot
+   ========================================================================== */
+
+resize();
+setMuted(muted);
+selfTestCave();
+resetWorld();
+camX = 0;
+ship.x = 0;
+ensureSlices();
+showTitle();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

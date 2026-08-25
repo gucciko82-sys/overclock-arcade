@@ -1,0 +1,2294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Overclock</title>
+
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Overclock">
+<meta name="theme-color" content="#0b0f1e">
+<meta name="description" content="Games built in-house. Running hotter than rated.">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    background: radial-gradient(ellipse at 50% 0%, #1d2450 0%, #0b0f1e 60%);
+    color: #fff; font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    padding: clamp(20px, 5vw, 56px) clamp(16px, 4vw, 40px);
+  }
+  header { max-width: 960px; margin: 0 auto clamp(18px, 4vw, 32px); }
+  h1 {
+    margin: 0 0 6px; font-size: clamp(28px, 7vw, 48px); font-weight: 800;
+    letter-spacing: 0.10em; color: #ffcc4d;
+  }
+  .sub { margin: 0; color: rgba(255,255,255,0.55); font-size: 12px;
+         letter-spacing: 0.26em; text-transform: uppercase; }
+  .stats { margin: 10px 0 0; font-size: 12px; color: rgba(255,255,255,0.45); letter-spacing: 0.06em; }
+  .stats b { color: #ffcc4d; font-weight: 700; }
+
+  .chips {
+    max-width: 960px; margin: 0 auto clamp(16px, 3vw, 24px);
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .chip {
+    font: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 12px 16px; border-radius: 999px; cursor: pointer; min-height: 40px;
+    background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.14);
+  }
+  .chip:hover { border-color: rgba(255,204,77,0.6); }
+  .chip.on { background: rgba(255,204,77,0.16); color: #ffcc4d; border-color: #ffcc4d; }
+
+  .grid {
+    max-width: 960px; margin: 0 auto;
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  }
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px; overflow: hidden;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .card:hover, .card:focus-visible {
+    transform: translateY(-3px);
+    border-color: #ffcc4d;
+    background: rgba(255,204,77,0.08);
+    outline: none;
+  }
+  .card.hidden { display: none; }
+  .cover { position: relative; aspect-ratio: 21 / 9; background: #0a0e1c; }
+  .cover canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .new {
+    position: absolute; top: 10px; right: 10px;
+    font-size: 9px; font-weight: 800; letter-spacing: 0.18em;
+    color: #0b0f1e; background: #ffcc4d;
+    padding: 4px 8px; border-radius: 999px;
+  }
+  .body { padding: 14px 16px 16px; }
+  .card h2 { margin: 0 0 5px; font-size: 18px; font-weight: 700; }
+  .card p  { margin: 0 0 12px; font-size: 12.5px; line-height: 1.5; color: rgba(255,255,255,0.66); }
+  .meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .tag {
+    display: inline-block; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,204,77,0.16); color: #ffcc4d; white-space: nowrap;
+  }
+  .best { font-size: 11.5px; color: rgba(255,255,255,0.55); text-align: right; }
+  .best b { color: #fff; font-weight: 700; }
+  .best.unplayed { color: rgba(255,255,255,0.32); }
+
+  footer {
+    max-width: 960px; margin: clamp(28px, 6vw, 52px) auto 0;
+    font-size: 12px; color: rgba(255,255,255,0.42); line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>OVERCLOCK</h1>
+    <p class="sub">Running hotter than rated</p>
+    <p class="stats" id="stats"></p>
+  </header>
+
+  <div class="chips" id="chips"></div>
+  <div class="grid" id="grid"></div>
+
+  <footer>
+    Keyboard, or a controller over Bluetooth or USB. Touch controls appear automatically on phones and tablets.
+    <br>
+    <strong style="color:#ffcc4d">On a phone:</strong> tap Share, then <strong>Add to Home Screen</strong> — it installs
+    with its own icon and plays full screen, no app store needed.
+  </footer>
+
+<script>
+"use strict";
+/* =========================================================================
+   OVERCLOCK library hub. Every cover is drawn procedurally into its card's
+   canvas at load — no image files, same rule as the games themselves.
+   Best-score readers are defensive: each game owns its save format, the hub
+   only peeks, and a missing or unreadable save just reads as "Unplayed".
+   ========================================================================= */
+
+var TAU = Math.PI * 2;
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+function fmtInt(n) { return Math.round(n).toLocaleString('en-US'); }
+function fmtLap(s) {
+  var m = Math.floor(s / 60), r = s - m * 60;
+  return m + ':' + (r < 10 ? '0' : '') + r.toFixed(2);
+}
+
+/* one entry per game: cover painter + best-score reader */
+var GAMES = [
+  {
+    id: 'voidrunner', name: 'Voidrunner', cat: 'action', tag: '3D Flight',
+    desc: 'True 3D. Thread a neon canyon that curves in every axis — skim the walls, fly the gold rings, outshoot the interceptors.',
+    best: function () { var v = parseFloat(lsGet('voidrunner.bestDistance')); return v > 0 ? ['Best', fmtInt(v) + ' m'] : null; },
+    cover: function (x, w, h) {
+      x.strokeStyle = 'rgba(125,226,255,0.55)'; x.lineWidth = 1;
+      var cx = w * 0.5, cy = h * 0.46;
+      for (var i = 0; i < 7; i++) {
+        var k = 1 - i / 7, rw = w * 0.9 * k, rh = h * 0.85 * k;
+        x.globalAlpha = 0.25 + k * 0.5;
+        x.strokeRect(cx - rw / 2 + Math.sin(i * 1.2) * w * 0.04, cy - rh / 2 + Math.cos(i * 0.9) * h * 0.05, rw, rh);
+      }
+      x.globalAlpha = 1;
+      x.strokeStyle = 'rgba(255,204,77,0.9)'; x.lineWidth = 2;
+      x.beginPath(); x.arc(cx + w * 0.1, cy, h * 0.16, 0, 7); x.stroke();
+      x.fillStyle = '#eaf6ff';
+      x.beginPath(); x.moveTo(cx, cy + h * 0.22); x.lineTo(cx - w * 0.035, cy + h * 0.34); x.lineTo(cx + w * 0.035, cy + h * 0.34); x.closePath(); x.fill();
+    }
+  },
+  {
+    id: 'apex_run', name: 'Apex Run', cat: 'racing', tag: 'Racing',
+    desc: 'Pseudo-3D arcade racer. Three circuits, seven rivals over three laps, and a championship across all of them.',
+    best: function () {
+      var best = null;
+      for (var i = 0; i < 6; i++) { var v = parseFloat(lsGet('apexRunBest_' + i)); if (v > 0 && (best === null || v < best)) best = v; }
+      return best ? ['Best lap', fmtLap(best)] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#3a2350'); g.addColorStop(0.55, '#b4513a'); g.addColorStop(0.62, '#1c2233'); g.addColorStop(1, '#242c42');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#ffd98a'; x.beginPath(); x.arc(w * 0.5, h * 0.55, h * 0.16, 0, 7); x.fill();
+      x.fillStyle = '#2b3450';
+      x.beginPath(); x.moveTo(0, h * 0.62); x.lineTo(w * 0.36, h * 0.62); x.lineTo(w * 0.5, h * 0.62); x.lineTo(w * 0.14, h * 0.62);
+      x.closePath(); x.fill();
+      x.fillStyle = '#39415e';
+      x.beginPath(); x.moveTo(w * 0.42, h); x.lineTo(w * 0.5, h * 0.6); x.lineTo(w * 0.58, h); x.closePath(); x.fill();
+      x.strokeStyle = 'rgba(255,255,255,0.8)'; x.lineWidth = 2; x.setLineDash([6, 7]);
+      x.beginPath(); x.moveTo(w * 0.5, h * 0.62); x.lineTo(w * 0.5, h); x.stroke(); x.setLineDash([]);
+      x.fillStyle = '#f0413f';
+      x.fillRect(w * 0.46, h * 0.74, w * 0.08, h * 0.16);
+      x.fillStyle = '#40507a'; x.fillRect(w * 0.475, h * 0.76, w * 0.05, h * 0.05);
+    }
+  },
+  {
+    id: 'starfall', name: 'Starfall', cat: 'shooter', tag: 'Shooter',
+    desc: 'Twin-stick vector shooter. Five enemy types, escalating waves, and a multi-phase Warden boss every fifth wave.',
+    best: function () { var v = parseFloat(lsGet('starfall_highscore_v1')); return v > 0 ? ['High score', fmtInt(v)] : null; },
+    cover: function (x, w, h) {
+      for (var i = 0; i < 26; i++) { x.fillStyle = 'rgba(255,255,255,' + (0.15 + Math.random() * 0.4) + ')'; x.fillRect(Math.random() * w, Math.random() * h, 1.4, 1.4); }
+      x.shadowBlur = 10;
+      x.shadowColor = '#7de2ff'; x.strokeStyle = '#7de2ff'; x.lineWidth = 2;
+      x.save(); x.translate(w * 0.34, h * 0.55); x.rotate(-0.5);
+      x.beginPath(); x.moveTo(12, 0); x.lineTo(-9, 8); x.lineTo(-4, 0); x.lineTo(-9, -8); x.closePath(); x.stroke(); x.restore();
+      x.shadowColor = '#ff5f9e'; x.strokeStyle = '#ff5f9e';
+      x.strokeRect(w * 0.66, h * 0.3, 14, 14);
+      x.shadowColor = '#8effc1'; x.strokeStyle = '#8effc1';
+      x.beginPath(); x.arc(w * 0.78, h * 0.66, 8, 0, 7); x.stroke();
+      x.shadowBlur = 0;
+      x.fillStyle = '#ffcc4d';
+      x.fillRect(w * 0.46, h * 0.49, 8, 2.6); x.fillRect(w * 0.55, h * 0.44, 8, 2.6);
+    }
+  },
+  {
+    id: 'neon_breaker', name: 'Neon Breaker', cat: 'action', tag: 'Arcade',
+    desc: 'Brick breaker with teeth. Fourteen levels, armoured and explosive bricks, and five power-ups including lasers.',
+    best: function () { var v = parseFloat(lsGet('neonBreaker_highScore_v1')); return v > 0 ? ['High score', fmtInt(v)] : null; },
+    cover: function (x, w, h) {
+      var cols = ['#4dd7ff', '#ff5fd0', '#8effc1', '#ffb04d'];
+      for (var r = 0; r < 4; r++) for (var c = 0; c < 9; c++) {
+        x.fillStyle = cols[r]; x.globalAlpha = 0.9;
+        x.beginPath(); x.roundRect(w * 0.08 + c * w * 0.094, h * 0.12 + r * h * 0.13, w * 0.08, h * 0.09, 3); x.fill();
+      }
+      x.globalAlpha = 1;
+      x.fillStyle = '#ffcc4d';
+      x.beginPath(); x.roundRect(w * 0.42, h * 0.84, w * 0.16, h * 0.06, 4); x.fill();
+      x.beginPath(); x.arc(w * 0.56, h * 0.72, 4, 0, 7); x.fill();
+      x.strokeStyle = 'rgba(255,204,77,0.35)'; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(w * 0.62, h * 0.5); x.lineTo(w * 0.56, h * 0.72); x.stroke();
+    }
+  },
+  {
+    id: 'gridlock', name: 'Gridlock', cat: 'puzzle', tag: 'Puzzle',
+    desc: 'Falling blocks, done properly. Hold piece, ghost piece, wall kicks and a seven-bag shuffle so it plays fair.',
+    best: function () { var s = lsJSON('overclock.gridlock.v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      var cell = h / 9, ox = w * 0.32;
+      function block(cx, cy, col) { x.fillStyle = col; x.beginPath(); x.roundRect(ox + cx * cell, h - (cy + 1) * cell, cell * 0.92, cell * 0.92, 2); x.fill(); }
+      var stack = [[0,0,'#4dd7ff'],[1,0,'#4dd7ff'],[2,0,'#ffb04d'],[3,0,'#8effc1'],[4,0,'#8effc1'],[5,0,'#ff5fd0'],[0,1,'#ffb04d'],[1,1,'#c9a2ff'],[3,1,'#ff5fd0'],[4,1,'#4dd7ff'],[0,2,'#8effc1'],[1,2,'#ffcc4d']];
+      for (var i = 0; i < stack.length; i++) block(stack[i][0], stack[i][1], stack[i][2]);
+      block(3, 6, '#ffcc4d'); block(4, 6, '#ffcc4d'); block(3, 7, '#ffcc4d'); block(2, 6, '#ffcc4d');
+      x.globalAlpha = 0.22;
+      block(3, 2, '#ffcc4d'); block(4, 2, '#ffcc4d'); block(3, 3, '#ffcc4d'); block(2, 2, '#ffcc4d');
+      x.globalAlpha = 1;
+      x.strokeStyle = 'rgba(255,255,255,0.14)'; x.lineWidth = 1;
+      x.strokeRect(ox - 2, 0, cell * 6 + 4, h);
+    }
+  },
+  {
+    id: 'deep_run', name: 'Deep Run', cat: 'action', tag: 'Survival',
+    desc: 'Thrust down a collapsing cave. Fly close to the rock for a bigger multiplier — fly too close and it is over.',
+    best: function () { var v = parseFloat(lsGet('deepRun_bestDistance_v1')); return v > 0 ? ['Best depth', fmtInt(v) + ' m'] : null; },
+    cover: function (x, w, h) {
+      x.fillStyle = '#141b30';
+      x.beginPath(); x.moveTo(0, 0); x.lineTo(w, 0); x.lineTo(w, h * 0.22); x.quadraticCurveTo(w * 0.6, h * 0.42, w * 0.3, h * 0.3); x.quadraticCurveTo(w * 0.1, h * 0.24, 0, h * 0.34); x.closePath(); x.fill();
+      x.beginPath(); x.moveTo(0, h); x.lineTo(w, h); x.lineTo(w, h * 0.72); x.quadraticCurveTo(w * 0.55, h * 0.6, w * 0.32, h * 0.76); x.quadraticCurveTo(w * 0.12, h * 0.86, 0, h * 0.72); x.closePath(); x.fill();
+      x.strokeStyle = 'rgba(255,204,77,0.5)'; x.lineWidth = 1.5;
+      x.beginPath(); x.moveTo(0, h * 0.34); x.quadraticCurveTo(w * 0.1, h * 0.24, w * 0.3, h * 0.3); x.stroke();
+      x.beginPath(); x.moveTo(0, h * 0.72); x.quadraticCurveTo(w * 0.12, h * 0.86, w * 0.32, h * 0.76); x.stroke();
+      x.save(); x.translate(w * 0.44, h * 0.5); x.rotate(0.12);
+      x.fillStyle = '#eaf6ff'; x.beginPath(); x.moveTo(14, 0); x.lineTo(-10, 7); x.lineTo(-10, -7); x.closePath(); x.fill();
+      x.fillStyle = 'rgba(125,226,255,0.8)'; x.beginPath(); x.moveTo(-10, 3); x.lineTo(-20, 0); x.lineTo(-10, -3); x.closePath(); x.fill();
+      x.restore();
+    }
+  },
+  {
+    id: 'gravity_grip', name: 'Gravity Grip', cat: 'action', tag: 'Physics',
+    desc: 'Two wheels and real suspension. Lean back off the kickers, drop the nose before you land, keep the tank off empty.',
+    best: function () { var s = lsJSON('gravityGrip_v1'); return s && s.dist > 0 ? ['Best', fmtInt(s.dist) + ' m'] : null; },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#101527'); g.addColorStop(1, '#1b2340');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#ffd98a'; x.globalAlpha = 0.7; x.beginPath(); x.arc(w * 0.82, h * 0.22, h * 0.1, 0, 7); x.fill(); x.globalAlpha = 1;
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 2.5;
+      x.beginPath(); x.moveTo(0, h * 0.82);
+      x.quadraticCurveTo(w * 0.25, h * 0.66, w * 0.45, h * 0.78);
+      x.quadraticCurveTo(w * 0.66, h * 0.9, w, h * 0.66); x.stroke();
+      x.save(); x.translate(w * 0.4, h * 0.6); x.rotate(-0.2);
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 2;
+      x.beginPath(); x.arc(-10, 8, 6, 0, 7); x.stroke();
+      x.beginPath(); x.arc(10, 8, 6, 0, 7); x.stroke();
+      x.beginPath(); x.moveTo(-10, 8); x.lineTo(-2, 0); x.lineTo(8, 2); x.lineTo(10, 8); x.stroke();
+      x.fillStyle = '#eaf6ff'; x.beginPath(); x.arc(0, -6, 3.4, 0, 7); x.fill();
+      x.restore();
+    }
+  },
+  {
+    id: 'firewall', name: 'Firewall', cat: 'strategy', tag: 'Strategy',
+    desc: 'Tower defence on a circuit board. Five towers, three tiers, a choice of specialisation each — and a shielded ROOTKIT every fifth wave.',
+    best: function () {
+      var s = lsJSON('firewall_best_v1'); if (!s) return null;
+      var top = 0;
+      for (var k in s) { var v = s[k]; var n = typeof v === 'number' ? v : (v && typeof v.wave === 'number' ? v.wave : 0); if (n > top) top = n; }
+      return top > 0 ? ['Best', 'Wave ' + top] : null;
+    },
+    cover: function (x, w, h) {
+      x.strokeStyle = 'rgba(125,226,255,0.14)'; x.lineWidth = 1;
+      for (var gx = 0; gx < w; gx += 18) { x.beginPath(); x.moveTo(gx, 0); x.lineTo(gx, h); x.stroke(); }
+      for (var gy = 0; gy < h; gy += 18) { x.beginPath(); x.moveTo(0, gy); x.lineTo(w, gy); x.stroke(); }
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 5; x.shadowColor = '#ffcc4d'; x.shadowBlur = 8;
+      x.beginPath(); x.moveTo(0, h * 0.3); x.lineTo(w * 0.3, h * 0.3); x.lineTo(w * 0.3, h * 0.72); x.lineTo(w * 0.66, h * 0.72); x.lineTo(w * 0.66, h * 0.4); x.lineTo(w, h * 0.4); x.stroke();
+      x.shadowBlur = 8;
+      x.shadowColor = '#7de2ff'; x.strokeStyle = '#7de2ff'; x.lineWidth = 2;
+      x.save(); x.translate(w * 0.45, h * 0.5); x.rotate(0.79); x.strokeRect(-6, -6, 12, 12); x.restore();
+      x.save(); x.translate(w * 0.2, h * 0.52); x.rotate(0.79); x.strokeRect(-6, -6, 12, 12); x.restore();
+      x.shadowBlur = 0;
+      x.fillStyle = '#ff7d7d';
+      x.beginPath(); x.arc(w * 0.12, h * 0.3, 4, 0, 7); x.fill();
+      x.beginPath(); x.arc(w * 0.3, h * 0.5, 4, 0, 7); x.fill();
+    }
+  },
+  {
+    id: 'flyway', name: 'Flyway', cat: 'outdoors', tag: 'Light Gun',
+    desc: 'Duck season, after dark. Five shells a flush, ten birds a round — and a dog who surfaces holding your kill, or laughing at you.',
+    best: function () { var s = lsJSON('flyway_v1'); return s && s.score > 0 ? ['High score', fmtInt(s.score)] : null; },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#241a3f'); g.addColorStop(0.7, '#3d2a55'); g.addColorStop(1, '#141126');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#f5edc8'; x.beginPath(); x.arc(w * 0.78, h * 0.28, h * 0.14, 0, 7); x.fill();
+      x.fillStyle = '#191430';
+      x.beginPath(); x.moveTo(0, h); x.lineTo(0, h * 0.72); x.quadraticCurveTo(w * 0.3, h * 0.6, w * 0.55, h * 0.74); x.quadraticCurveTo(w * 0.8, h * 0.86, w, h * 0.7); x.lineTo(w, h); x.closePath(); x.fill();
+      x.strokeStyle = '#191430'; x.lineWidth = 2;
+      for (var i = 0; i < 8; i++) { var rx = w * (0.05 + i * 0.045); x.beginPath(); x.moveTo(rx, h); x.lineTo(rx, h * (0.66 + (i % 3) * 0.05)); x.stroke(); }
+      x.save(); x.translate(w * 0.42, h * 0.34); x.shadowColor = '#ff5f9e'; x.shadowBlur = 9; x.strokeStyle = '#ff5f9e'; x.lineWidth = 2;
+      x.beginPath(); x.ellipse(0, 0, 11, 6.5, -0.15, 0, 7); x.stroke();
+      x.beginPath(); x.moveTo(-3, -4); x.quadraticCurveTo(2, -14, 5, -5); x.stroke();
+      x.beginPath(); x.arc(9, -2.4, 3.2, 0, 7); x.stroke();
+      x.restore(); x.shadowBlur = 0;
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 1.6;
+      x.beginPath(); x.arc(w * 0.6, h * 0.56, 9, 0, 7); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.6 - 13, h * 0.56); x.lineTo(w * 0.6 + 13, h * 0.56); x.moveTo(w * 0.6, h * 0.56 - 13); x.lineTo(w * 0.6, h * 0.56 + 13); x.stroke();
+    }
+  },
+  {
+    id: 'downlink', name: 'Downlink', cat: 'shooter', tag: 'Missile Defence', isNew: true,
+    desc: 'Hostile packets dropping out of the sky-net. Three uplink batteries, six server nodes — lead your shots, the bloom does the killing.',
+    best: function () { var s = lsJSON('downlink_v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      var gy = h * 0.82;
+      /* incoming trails */
+      x.strokeStyle = 'rgba(255,95,95,0.6)'; x.lineWidth = 1.6;
+      var tr = [[0.2, 0, 0.34, 0.52], [0.52, 0, 0.42, 0.4], [0.86, 0, 0.66, 0.5]];
+      for (var i = 0; i < tr.length; i++) {
+        x.beginPath(); x.moveTo(w * tr[i][0], h * tr[i][1]); x.lineTo(w * tr[i][2], h * tr[i][3]); x.stroke();
+        x.fillStyle = '#ff5f5f'; x.shadowColor = '#ff5f5f'; x.shadowBlur = 7;
+        x.beginPath(); x.arc(w * tr[i][2], h * tr[i][3], 2.6, 0, TAU); x.fill();
+        x.shadowBlur = 0;
+      }
+      /* interceptor + bloom */
+      x.strokeStyle = 'rgba(125,226,255,0.6)'; x.lineWidth = 1.4;
+      x.beginPath(); x.moveTo(w * 0.5, gy); x.lineTo(w * 0.6, h * 0.34); x.stroke();
+      var g2 = x.createRadialGradient(w * 0.66, h * 0.3, 0, w * 0.66, h * 0.3, h * 0.2);
+      g2.addColorStop(0, 'rgba(255,236,170,0.95)'); g2.addColorStop(0.6, 'rgba(255,204,77,0.5)'); g2.addColorStop(1, 'rgba(255,204,77,0)');
+      x.fillStyle = g2;
+      x.beginPath(); x.arc(w * 0.66, h * 0.3, h * 0.2, 0, TAU); x.fill();
+      /* ground, racks, battery */
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 2; x.shadowColor = '#2d63b8'; x.shadowBlur = 5;
+      x.beginPath(); x.moveTo(0, gy); x.lineTo(w, gy); x.stroke(); x.shadowBlur = 0;
+      x.strokeStyle = '#7de2ff'; x.lineWidth = 1.4; x.fillStyle = '#12305e';
+      var nx = [0.16, 0.3, 0.72, 0.86];
+      for (var n = 0; n < nx.length; n++) {
+        x.fillRect(w * nx[n] - 8, gy - 11, 16, 11);
+        x.strokeRect(w * nx[n] - 8, gy - 11, 16, 11);
+      }
+      x.fillStyle = 'rgba(255,204,77,0.25)'; x.strokeStyle = '#ffcc4d';
+      x.beginPath(); x.moveTo(w * 0.5 - 12, gy); x.lineTo(w * 0.5 - 5, gy - 10); x.lineTo(w * 0.5 + 5, gy - 10); x.lineTo(w * 0.5 + 12, gy);
+      x.closePath(); x.fill(); x.stroke();
+    }
+  },
+  {
+    id: 'deadlock', name: 'Deadlock', cat: 'action', tag: 'Fighting', isNew: true,
+    desc: 'Two rival processes, one core. Best of three, blocking, meter specials — and if you take the match, FINISH THEM.',
+    best: function () {
+      var s = lsJSON('deadlock_v1');
+      return s && s.streak > 0 ? ['Best streak', fmtInt(s.streak)] : (s && s.wins > 0 ? ['CPU wins', fmtInt(s.wins)] : null);
+    },
+    cover: function (x, w, h) {
+      var gy = h * 0.86;
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 2; x.shadowColor = '#2d63b8'; x.shadowBlur = 5;
+      x.beginPath(); x.moveTo(0, gy); x.lineTo(w, gy); x.stroke(); x.shadowBlur = 0;
+      /* health bars */
+      x.fillStyle = '#7de2ff'; x.fillRect(w * 0.06, h * 0.1, w * 0.32, 5);
+      x.fillStyle = '#ffb04d'; x.fillRect(w * 0.62, h * 0.1, w * 0.24, 5);
+      x.strokeStyle = 'rgba(255,255,255,0.3)'; x.lineWidth = 1;
+      x.strokeRect(w * 0.06, h * 0.1, w * 0.32, 5); x.strokeRect(w * 0.54, h * 0.1, w * 0.32, 5);
+      /* two fighters squaring off */
+      function bod(cx, col, face, punch) {
+        x.shadowColor = col; x.shadowBlur = 10;
+        x.strokeStyle = col; x.lineCap = 'round';
+        x.lineWidth = 5;
+        x.beginPath(); x.moveTo(cx, gy - h * 0.34); x.lineTo(cx - face * 4, gy - h * 0.16); x.stroke();
+        x.lineWidth = 3.6;
+        x.beginPath(); x.moveTo(cx - face * 4, gy - h * 0.16); x.lineTo(cx + face * 8, gy); x.stroke();
+        x.beginPath(); x.moveTo(cx - face * 4, gy - h * 0.16); x.lineTo(cx - face * 10, gy); x.stroke();
+        x.beginPath(); x.moveTo(cx, gy - h * 0.31);
+        if (punch) x.lineTo(cx + face * 18, gy - h * 0.31);
+        else { x.lineTo(cx + face * 8, gy - h * 0.24); }
+        x.stroke();
+        x.fillStyle = col;
+        x.beginPath(); x.arc(cx + face * 2, gy - h * 0.42, 6, 0, TAU); x.fill();
+        x.shadowBlur = 0;
+        x.fillStyle = '#0b0f1e'; x.fillRect(cx + face * 2 - 3 + face * 2, gy - h * 0.44, 6, 3);
+      }
+      bod(w * 0.42, '#7de2ff', 1, true);
+      bod(w * 0.6, '#ffb04d', -1, false);
+      /* hit spark between them */
+      x.fillStyle = '#ffe9a8'; x.shadowColor = '#ffe9a8'; x.shadowBlur = 10;
+      for (var i = 0; i < 6; i++) {
+        var a = i / 6 * TAU;
+        x.fillRect(w * 0.53 + Math.cos(a) * 8 - 1.5, h * 0.55 + Math.sin(a) * 8 - 1.5, 3, 3);
+      }
+      x.shadowBlur = 0;
+      x.fillStyle = '#ff4d4d';
+      x.font = '800 10px "Segoe UI", sans-serif'; x.textAlign = 'center';
+      x.fillText('FINISH THEM', w * 0.5, h * 0.3);
+    }
+  },
+  {
+    id: 'defrag', name: 'Defrag', cat: 'puzzle', tag: 'Match 3', isNew: true,
+    desc: 'The disk is fragmented. Line up three sectors to clear them, chain cascades, forge scanline bolts and colour purges.',
+    best: function () { var s = lsJSON('defrag_v1'); return s && s.best > 0 ? ['Best', fmtInt(s.best)] : null; },
+    cover: function (x, w, h) {
+      var cols = ['#7de2ff', '#ff5f9e', '#ffcc4d', '#8effc1', '#c9a2ff', '#ff9d4d'];
+      var cs = h * 0.16;
+      for (var r = 0; r < 4; r++) {
+        for (var c = 0; c < 8; c++) {
+          var t = (r * 3 + c * 5 + (r > 1 && c === 3 ? 1 : 0)) % 6;
+          if (r === 2 && c >= 2 && c <= 4) t = 1;   // a made match
+          var cx2 = w * 0.14 + c * cs * 1.15, cy2 = h * 0.2 + r * cs * 1.15;
+          x.fillStyle = cols[t];
+          x.shadowColor = cols[t]; x.shadowBlur = (r === 2 && c >= 2 && c <= 4) ? 12 : 4;
+          x.beginPath();
+          if (t % 3 === 0) x.arc(cx2, cy2, cs * 0.42, 0, TAU);
+          else if (t % 3 === 1) x.roundRect(cx2 - cs * 0.4, cy2 - cs * 0.4, cs * 0.8, cs * 0.8, 3);
+          else { x.moveTo(cx2, cy2 - cs * 0.45); x.lineTo(cx2 + cs * 0.45, cy2 + cs * 0.35); x.lineTo(cx2 - cs * 0.45, cy2 + cs * 0.35); x.closePath(); }
+          x.fill();
+        }
+      }
+      x.shadowBlur = 0;
+    }
+  },
+  {
+    id: 'airtime', name: 'Airtime', cat: 'racing', tag: 'Motocross', isNew: true,
+    desc: 'Dirtbike tricks where the jumps are the point. Throw backflips off the doubles, land square, keep the combo alive.',
+    best: function () {
+      var s = lsJSON('airtime_v1'); if (!s || !s.bests) return null;
+      var top = 0; for (var k in s.bests) if (s.bests[k] > top) top = s.bests[k];
+      return top > 0 ? ['Best run', fmtInt(top)] : null;
+    },
+    cover: function (x, w, h) {
+      var g2 = x.createLinearGradient(0, 0, 0, h); g2.addColorStop(0, '#131a38'); g2.addColorStop(1, '#3d2a55');
+      x.fillStyle = g2; x.fillRect(0, 0, w, h);
+      /* terrain with a double */
+      x.strokeStyle = '#7de2ff'; x.lineWidth = 2.5; x.shadowColor = '#7de2ff'; x.shadowBlur = 6;
+      x.fillStyle = '#241a14';
+      x.beginPath();
+      x.moveTo(0, h * 0.78);
+      x.lineTo(w * 0.2, h * 0.78); x.lineTo(w * 0.34, h * 0.5); x.lineTo(w * 0.36, h * 0.82);
+      x.lineTo(w * 0.62, h * 0.82); x.lineTo(w * 0.74, h * 0.56); x.lineTo(w * 0.86, h * 0.8); x.lineTo(w, h * 0.8);
+      x.lineTo(w, h); x.lineTo(0, h); x.closePath();
+      x.fill(); x.stroke();
+      x.shadowBlur = 0;
+      /* bike mid-backflip */
+      x.save();
+      x.translate(w * 0.5, h * 0.3); x.rotate(-2.4);
+      x.strokeStyle = '#dfe9ff'; x.lineWidth = 2;
+      x.beginPath(); x.arc(-10, 5, 6, 0, TAU); x.stroke();
+      x.beginPath(); x.arc(10, 5, 6, 0, TAU); x.stroke();
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 2.5; x.lineCap = 'round';
+      x.shadowColor = '#ffcc4d'; x.shadowBlur = 8;
+      x.beginPath(); x.moveTo(-10, 5); x.lineTo(-2, -1); x.lineTo(5, -1); x.lineTo(10, 5); x.stroke();
+      x.shadowBlur = 0;
+      x.strokeStyle = '#eaf2ff'; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(-4, -4); x.lineTo(0, -10); x.lineTo(7, -5); x.stroke();
+      x.fillStyle = '#ff5f9e';
+      x.beginPath(); x.arc(0, -13, 3.4, 0, TAU); x.fill();
+      x.restore();
+      x.fillStyle = '#ff5f9e';
+      x.font = '800 9px "Segoe UI", sans-serif'; x.textAlign = 'center';
+      x.fillText('BACKFLIP +700', w * 0.5, h * 0.12);
+    }
+  },
+  {
+    id: 'tilt', name: 'Tilt', cat: 'action', tag: 'Pinball', isNew: true,
+    desc: 'Three neon tables — BOOT SECTOR, HEATSINK, MOTHERLODE. Multiball on every one, and a nudge that will lock your flippers if you lean on it.',
+    best: function () {
+      var s = lsJSON('tilt_v1'); if (!s || !s.highs) return null;
+      var top = 0; for (var k in s.highs) if (s.highs[k] > top) top = s.highs[k];
+      return top > 0 ? ['High score', fmtInt(top)] : null;
+    },
+    cover: function (x, w, h) {
+      /* mini table */
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 2.5; x.shadowColor = '#2d63b8'; x.shadowBlur = 6;
+      x.beginPath();
+      x.moveTo(w * 0.3, h * 0.95); x.lineTo(w * 0.3, h * 0.42);
+      x.arc(w * 0.5, h * 0.42, w * 0.2, Math.PI, 0);
+      x.lineTo(w * 0.7, h * 0.95);
+      x.stroke(); x.shadowBlur = 0;
+      /* bumpers */
+      var bs = [[0.44, 0.3], [0.56, 0.3], [0.5, 0.45]];
+      for (var i = 0; i < 3; i++) {
+        x.strokeStyle = '#7de2ff'; x.lineWidth = 2; x.shadowColor = '#7de2ff'; x.shadowBlur = 8;
+        x.beginPath(); x.arc(w * bs[i][0], h * bs[i][1], h * 0.06, 0, TAU); x.stroke();
+        x.shadowBlur = 0;
+      }
+      /* flippers */
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 6; x.lineCap = 'round';
+      x.shadowColor = '#ffcc4d'; x.shadowBlur = 8;
+      x.beginPath(); x.moveTo(w * 0.42, h * 0.82); x.lineTo(w * 0.475, h * 0.88); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.58, h * 0.82); x.lineTo(w * 0.525, h * 0.88); x.stroke();
+      x.shadowBlur = 0;
+      /* ball mid-flight + trail */
+      x.fillStyle = '#eaf6ff'; x.shadowColor = '#eaf6ff'; x.shadowBlur = 10;
+      x.beginPath(); x.arc(w * 0.55, h * 0.62, 5, 0, TAU); x.fill();
+      x.shadowBlur = 0;
+      x.fillStyle = '#ff4d4d';
+      x.font = '800 11px "Segoe UI", sans-serif'; x.textAlign = 'center';
+      x.fillText('T I L T', w * 0.5, h * 0.14);
+      /* side flair: the other two table colors */
+      x.fillStyle = '#ff9d4d'; x.fillRect(w * 0.12, h * 0.3, 4, h * 0.4);
+      x.fillStyle = '#8effc1'; x.fillRect(w * 0.86, h * 0.3, 4, h * 0.4);
+    }
+  },
+  {
+    id: 'solitaire', name: 'Solitaire', cat: 'puzzle', tag: 'Cards', isNew: true,
+    desc: 'Klondike on neon felt. Tap a card and it goes somewhere sensible, drag it if you disagree — unlimited undo and an auto-finish.',
+    best: function () { var s = lsJSON('solitaire_v1'); return s && s.wins > 0 ? ['Wins', fmtInt(s.wins)] : null; },
+    cover: function (x, w, h) {
+      function card(cx, cy, rot, face, red, txt) {
+        x.save(); x.translate(cx, cy); x.rotate(rot);
+        x.beginPath(); x.roundRect(-16, -22, 32, 44, 4);
+        if (face) {
+          x.fillStyle = '#eef3ff'; x.fill();
+          x.strokeStyle = 'rgba(20,30,60,0.5)'; x.lineWidth = 1; x.stroke();
+          x.fillStyle = red ? '#d8384f' : '#1b2340';
+          x.font = '800 12px "Segoe UI", sans-serif'; x.textAlign = 'left';
+          x.fillText(txt, -12, -8);
+          x.font = '600 16px "Segoe UI", sans-serif'; x.textAlign = 'center';
+          x.fillText(red ? '♥' : '♠', 0, 14);
+        } else {
+          x.fillStyle = '#182a55'; x.fill();
+          x.strokeStyle = 'rgba(125,226,255,0.5)'; x.lineWidth = 1.2; x.stroke();
+          x.strokeStyle = 'rgba(125,226,255,0.25)';
+          x.beginPath(); x.roundRect(-12, -18, 24, 36, 3); x.stroke();
+        }
+        x.restore();
+      }
+      card(w * 0.18, h * 0.5, -0.14, false);
+      card(w * 0.34, h * 0.52, -0.05, true, true, 'Q');
+      card(w * 0.5, h * 0.5, 0.03, true, false, 'K');
+      card(w * 0.66, h * 0.52, 0.1, true, true, 'A');
+      card(w * 0.82, h * 0.5, 0.18, false);
+      x.fillStyle = 'rgba(255,204,77,0.8)';
+      x.font = '800 9px "Segoe UI", sans-serif'; x.textAlign = 'center';
+      x.fillText('K L O N D I K E', w * 0.5, h * 0.13);
+    }
+  },
+  {
+    id: 'overdrive', name: 'Overdrive', cat: 'racing', tag: 'Taxi', isNew: true,
+    desc: 'A gold cab in a neon city. Riders wave you down, every delivery buys back clock, and CRAZY dropoffs pay tips. Built for Amber.',
+    best: function () { var s = lsJSON('overdrive_v1'); return s && s.best > 0 ? ['Best shift', '$' + fmtInt(s.best)] : null; },
+    cover: function (x, w, h) {
+      /* night blocks */
+      var blocks = [[0.05, 0.12, 0.24, 0.3], [0.05, 0.58, 0.24, 0.3], [0.44, 0.12, 0.22, 0.3], [0.44, 0.58, 0.22, 0.3], [0.8, 0.12, 0.16, 0.76]];
+      for (var i = 0; i < blocks.length; i++) {
+        var bb = blocks[i];
+        x.fillStyle = '#2b4074';
+        x.fillRect(w * bb[0], h * bb[1], w * bb[2], h * bb[3]);
+        x.strokeStyle = 'rgba(125,226,255,0.3)'; x.lineWidth = 1;
+        x.strokeRect(w * bb[0], h * bb[1], w * bb[2], h * bb[3]);
+        for (var wi = 0; wi < 5; wi++) {
+          x.fillStyle = wi % 3 ? 'rgba(125,226,255,0.4)' : 'rgba(255,204,77,0.7)';
+          x.fillRect(w * bb[0] + 5 + (wi * 37 % (w * bb[2] - 10)), h * bb[1] + 5 + (wi * 23 % (h * bb[3] - 10)), 3, 3);
+        }
+      }
+      /* roads */
+      x.strokeStyle = 'rgba(255,204,77,0.3)'; x.lineWidth = 1.5; x.setLineDash([5, 6]);
+      x.beginPath(); x.moveTo(0, h * 0.5); x.lineTo(w, h * 0.5); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.36, 0); x.lineTo(w * 0.36, h); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.73, 0); x.lineTo(w * 0.73, h); x.stroke();
+      x.setLineDash([]);
+      /* beacon */
+      x.strokeStyle = 'rgba(255,204,77,0.8)'; x.lineWidth = 2;
+      x.beginPath(); x.arc(w * 0.73, h * 0.26, h * 0.09, 0, TAU); x.stroke();
+      /* rider */
+      x.shadowColor = '#8effc1'; x.shadowBlur = 8;
+      x.fillStyle = '#8effc1';
+      x.beginPath(); x.arc(w * 0.15, h * 0.47, 2.6, 0, TAU); x.fill();
+      x.fillRect(w * 0.15 - 2, h * 0.47 + 2, 4, 7);
+      x.shadowBlur = 0;
+      /* the cab, mid drift */
+      x.save();
+      x.translate(w * 0.5, h * 0.5); x.rotate(-0.28);
+      x.shadowColor = '#ffcc4d'; x.shadowBlur = 12;
+      x.fillStyle = '#ffcc4d';
+      x.beginPath(); x.roundRect(-16, -8, 32, 16, 4); x.fill();
+      x.shadowBlur = 0;
+      x.fillStyle = '#0b0f1e';
+      for (var c2 = 0; c2 < 4; c2++) x.fillRect(-14 + c2 * 8, (c2 % 2 ? -1 : 2) * 3, 4, 3);
+      x.fillStyle = 'rgba(11,15,30,0.7)'; x.fillRect(-4, -5, 10, 10);
+      x.restore();
+      /* skid trail */
+      x.strokeStyle = 'rgba(0,0,0,0.55)'; x.lineWidth = 2.4;
+      x.beginPath(); x.moveTo(w * 0.36, h * 0.72); x.quadraticCurveTo(w * 0.42, h * 0.6, w * 0.47, h * 0.55); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.39, h * 0.74); x.quadraticCurveTo(w * 0.45, h * 0.62, w * 0.5, h * 0.57); x.stroke();
+    }
+  },
+  {
+    id: 'airlock', name: 'Airlock', cat: 'sports', tag: '2P Air Hockey', isNew: true,
+    desc: 'One puck, two mallets, first to seven. Play the CPU — or grab a friend: two fingers, one screen, true multitouch.',
+    best: function () { var s = lsJSON('airlock_v1'); return s && s.wins > 0 ? ['CPU wins', fmtInt(s.wins)] : null; },
+    cover: function (x, w, h) {
+      /* table on its side */
+      x.fillStyle = '#0d1428';
+      x.beginPath(); x.roundRect(w * 0.07, h * 0.1, w * 0.86, h * 0.8, 10); x.fill();
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 3; x.shadowColor = '#2d63b8'; x.shadowBlur = 6;
+      x.beginPath(); x.roundRect(w * 0.07, h * 0.1, w * 0.86, h * 0.8, 10); x.stroke();
+      x.shadowBlur = 0;
+      x.strokeStyle = 'rgba(255,204,77,0.4)'; x.lineWidth = 1.5; x.setLineDash([5, 5]);
+      x.beginPath(); x.moveTo(w * 0.5, h * 0.1); x.lineTo(w * 0.5, h * 0.9); x.stroke();
+      x.setLineDash([]);
+      x.beginPath(); x.arc(w * 0.5, h * 0.5, h * 0.14, 0, TAU); x.stroke();
+      /* goals */
+      x.strokeStyle = '#7de2ff'; x.lineWidth = 4; x.shadowColor = '#7de2ff'; x.shadowBlur = 8;
+      x.beginPath(); x.moveTo(w * 0.07, h * 0.34); x.lineTo(w * 0.07, h * 0.66); x.stroke();
+      x.strokeStyle = '#ffb04d'; x.shadowColor = '#ffb04d';
+      x.beginPath(); x.moveTo(w * 0.93, h * 0.34); x.lineTo(w * 0.93, h * 0.66); x.stroke();
+      x.shadowBlur = 0;
+      /* mallets + puck with trail */
+      function mallet(mx, my, col) {
+        x.shadowColor = col; x.shadowBlur = 10;
+        x.fillStyle = col;
+        x.beginPath(); x.arc(mx, my, h * 0.1, 0, TAU); x.fill();
+        x.shadowBlur = 0;
+        x.fillStyle = 'rgba(11,15,30,0.55)';
+        x.beginPath(); x.arc(mx, my, h * 0.06, 0, TAU); x.fill();
+        x.fillStyle = col;
+        x.beginPath(); x.arc(mx, my, h * 0.026, 0, TAU); x.fill();
+      }
+      mallet(w * 0.2, h * 0.42, '#7de2ff');
+      mallet(w * 0.8, h * 0.6, '#ffb04d');
+      for (var i = 0; i < 5; i++) {
+        x.globalAlpha = i / 5 * 0.4;
+        x.fillStyle = '#ffcc4d';
+        x.beginPath(); x.arc(w * (0.38 + i * 0.05), h * (0.62 - i * 0.045), h * 0.05 * (i / 5), 0, TAU); x.fill();
+      }
+      x.globalAlpha = 1;
+      x.shadowColor = '#ffcc4d'; x.shadowBlur = 12;
+      x.fillStyle = '#ffcc4d';
+      x.beginPath(); x.arc(w * 0.62, h * 0.4, h * 0.055, 0, TAU); x.fill();
+      x.shadowBlur = 0;
+    }
+  },
+  {
+    id: 'overflow', name: 'Overflow', cat: 'puzzle', tag: 'Snake', isNew: true,
+    desc: 'You are a buffer. Every packet appends to you. Write past the fence — or into yourself — and it is exactly what it sounds like.',
+    best: function () { var s = lsJSON('overflow_v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 2.5; x.shadowColor = '#2d63b8'; x.shadowBlur = 6;
+      x.strokeRect(w * 0.07, h * 0.12, w * 0.86, h * 0.76);
+      x.shadowBlur = 0;
+      var seg = [[0.2, 0.66], [0.2, 0.5], [0.2, 0.34], [0.28, 0.34], [0.36, 0.34], [0.44, 0.34], [0.44, 0.5], [0.52, 0.5], [0.6, 0.5]];
+      for (var i = 0; i < seg.length; i++) {
+        var k = 1 - i / seg.length;
+        x.fillStyle = 'rgba(125,226,255,' + (0.35 + k * 0.6) + ')';
+        if (i === seg.length - 1) { x.shadowColor = '#7de2ff'; x.shadowBlur = 10; x.fillStyle = '#eaf6ff'; }
+        x.beginPath(); x.roundRect(w * seg[i][0] - 8, h * seg[i][1] - 8, 16, 16, 4); x.fill();
+      }
+      x.shadowBlur = 0;
+      x.fillStyle = '#0b0f1e';
+      x.beginPath(); x.arc(w * 0.6 + 3, h * 0.5 - 3, 1.8, 0, TAU); x.fill();
+      x.beginPath(); x.arc(w * 0.6 + 3, h * 0.5 + 3, 1.8, 0, TAU); x.fill();
+      x.shadowColor = '#ffcc4d'; x.shadowBlur = 9;
+      x.fillStyle = '#ffcc4d';
+      x.beginPath(); x.roundRect(w * 0.78 - 8, h * 0.5 - 8, 16, 16, 4); x.fill();
+      x.shadowBlur = 0;
+      x.fillStyle = '#0b0f1e';
+      x.font = '800 11px "Segoe UI", sans-serif'; x.textAlign = 'center';
+      x.fillText('1', w * 0.78, h * 0.5 + 4);
+    }
+  },
+  {
+    id: 'kilobyte', name: 'Kilobyte', cat: 'action', tag: 'Maze Chase', isNew: true,
+    desc: 'A hungry little process loose on a motherboard. Eat every bit, dodge four daemons with four different brains — root access turns the tables.',
+    best: function () { var s = lsJSON('kilobyte_v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      x.strokeStyle = '#2d63b8'; x.lineWidth = 3; x.shadowColor = '#2d63b8'; x.shadowBlur = 6;
+      x.strokeRect(w * 0.06, h * 0.1, w * 0.88, h * 0.8);
+      x.beginPath(); x.moveTo(w * 0.3, h * 0.1); x.lineTo(w * 0.3, h * 0.45); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.52, h * 0.9); x.lineTo(w * 0.52, h * 0.55); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.72, h * 0.1); x.lineTo(w * 0.72, h * 0.4); x.stroke();
+      x.shadowBlur = 0;
+      x.fillStyle = '#ffcc4d';
+      for (var i = 0; i < 7; i++) x.fillRect(w * (0.14 + i * 0.075), h * 0.68, 3, 3);
+      for (var j = 0; j < 4; j++) x.fillRect(w * 0.62, h * (0.2 + j * 0.14), 3, 3);
+      x.shadowColor = '#7de2ff'; x.shadowBlur = 10;
+      x.fillStyle = '#7de2ff';
+      x.beginPath(); x.moveTo(w * 0.4, h * 0.69);
+      x.arc(w * 0.4, h * 0.69, h * 0.11, 0.5, TAU - 0.5); x.closePath(); x.fill();
+      x.shadowColor = '#ff5f5f'; x.fillStyle = '#ff5f5f';
+      var gx2 = w * 0.82, gy2 = h * 0.66, gr = h * 0.1;
+      x.beginPath(); x.arc(gx2, gy2 - gr * 0.1, gr, Math.PI, 0);
+      x.lineTo(gx2 + gr, gy2 + gr * 0.8);
+      for (var s6 = 2; s6 >= -2; s6--) x.lineTo(gx2 + (s6 / 2.5) * gr, gy2 + gr * (s6 % 2 ? 0.62 : 0.8));
+      x.closePath(); x.fill();
+      x.shadowBlur = 0;
+      x.fillStyle = '#fff';
+      x.beginPath(); x.arc(gx2 - gr * 0.35, gy2 - gr * 0.15, gr * 0.22, 0, TAU); x.fill();
+      x.beginPath(); x.arc(gx2 + gr * 0.35, gy2 - gr * 0.15, gr * 0.22, 0, TAU); x.fill();
+    }
+  },
+  {
+    id: 'ember', name: 'Ember', cat: 'action', tag: 'Platformer', isNew: true,
+    desc: 'A small flame against a big dark. Twenty-two levels of run, jump and dash — coyote time and all, so every death is your own.',
+    best: function () {
+      var s = lsJSON('overclock.ember.v1'); if (!s) return null;
+      var lvl = typeof s.max === 'number' ? s.max : 0;
+      return lvl > 0 ? ['Reached', 'Level ' + Math.min(lvl + 1, 22) + '/22'] : null;
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#151b33';
+      x.beginPath(); x.moveTo(0, h); x.lineTo(0, h * 0.55); x.lineTo(w * 0.2, h * 0.3); x.lineTo(w * 0.38, h * 0.62); x.lineTo(w * 0.56, h * 0.2); x.lineTo(w * 0.76, h * 0.6); x.lineTo(w, h * 0.42); x.lineTo(w, h); x.closePath(); x.fill();
+      x.fillStyle = '#1d2542'; x.beginPath(); x.roundRect(w * 0.36, h * 0.66, w * 0.2, h * 0.07, 3); x.fill();
+      for (var i = 0; i < 12; i++) { x.fillStyle = 'rgba(255,204,77,' + (0.2 + Math.random() * 0.4) + ')'; x.fillRect(Math.random() * w, Math.random() * h * 0.8, 1.6, 1.6); }
+      x.shadowColor = '#ffb04d'; x.shadowBlur = 12;
+      x.fillStyle = '#ffb04d'; x.beginPath(); x.roundRect(w * 0.44 - 5, h * 0.52, 10, 12, 3); x.fill();
+      x.fillStyle = '#ffe9a8';
+      x.beginPath(); x.moveTo(w * 0.44, h * 0.34); x.quadraticCurveTo(w * 0.44 + 7, h * 0.42, w * 0.44, h * 0.5); x.quadraticCurveTo(w * 0.44 - 7, h * 0.42, w * 0.44, h * 0.34); x.fill();
+      x.shadowBlur = 0;
+      x.fillStyle = '#0b0f1e'; x.fillRect(w * 0.44 - 3, h * 0.55, 2.4, 2.4); x.fillRect(w * 0.44 + 1, h * 0.55, 2.4, 2.4);
+    }
+  },
+  {
+    id: 'null_sector', name: 'Null Sector', cat: 'action', tag: 'Roguelike', isNew: true,
+    desc: 'Real-time roguelike inside a corrupted machine. Six floors, a boss on every one, and 28 stacking upgrades that actually stack.',
+    best: function () {
+      var v = parseInt(lsGet('null_sector_best_v1'), 10);
+      if (!(v > 0)) return null;
+      return v > 6 ? ['Best', 'CLEARED'] : ['Best', 'Floor ' + v + '/6'];
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = 'rgba(28,63,102,0.5)'; x.fillRect(w * 0.08, h * 0.1, w * 0.84, h * 0.8);
+      x.strokeStyle = '#2c5c8f'; x.lineWidth = 5; x.strokeRect(w * 0.08, h * 0.1, w * 0.84, h * 0.8);
+      x.strokeStyle = 'rgba(255,255,255,0.06)'; x.lineWidth = 1;
+      for (var i = 1; i < 6; i++) { x.beginPath(); x.moveTo(w * 0.08 + i * w * 0.14, h * 0.1); x.lineTo(w * 0.08 + i * w * 0.14, h * 0.9); x.stroke(); }
+      x.shadowBlur = 10;
+      x.shadowColor = '#ff7d7d'; x.fillStyle = '#ff7d7d';
+      x.save(); x.translate(w * 0.66, h * 0.46);
+      x.beginPath(); for (var s6 = 0; s6 < 8; s6++) { var a6 = s6 / 8 * 7 + 0.4, rr = s6 % 2 ? 11 : 15; x[s6 ? 'lineTo' : 'moveTo'](Math.cos(a6) * rr, Math.sin(a6) * rr); } x.closePath(); x.fill();
+      x.restore();
+      x.shadowColor = '#7de2ff'; x.fillStyle = '#eaf6ff';
+      x.save(); x.translate(w * 0.3, h * 0.56); x.rotate(0.5);
+      x.beginPath(); x.moveTo(11, 0); x.lineTo(-7, 7); x.lineTo(-3.5, 0); x.lineTo(-7, -7); x.closePath(); x.fill();
+      x.restore(); x.shadowBlur = 0;
+      x.fillStyle = '#ff5f9e';
+      for (var hh = 0; hh < 3; hh++) { x.beginPath(); x.arc(w * 0.14 + hh * 11, h * 0.18, 3.2, 0, 7); x.fill(); }
+    }
+  },
+  {
+    id: 'botnet', name: 'Botnet', cat: 'shooter', tag: 'Fixed Shooter', isNew: true,
+    desc: 'The swarm found your machine. Squads swoop into a breathing formation, then peel off in dive runs — divers are worth double.',
+    best: function () { var s = lsJSON('botnet_v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      /* the formation */
+      x.shadowBlur = 8;
+      var c;
+      x.shadowColor = '#ffcc4d'; x.strokeStyle = '#ffcc4d'; x.lineWidth = 1.6;
+      for (c = 0; c < 2; c++) {
+        x.save(); x.translate(w * (0.4 + c * 0.2), h * 0.16);
+        x.beginPath(); x.moveTo(0, -7); x.lineTo(6, -2); x.lineTo(4, 5); x.lineTo(-4, 5); x.lineTo(-6, -2); x.closePath(); x.stroke();
+        x.restore();
+      }
+      x.shadowColor = '#ff5f9e'; x.strokeStyle = '#ff5f9e';
+      for (c = 0; c < 4; c++) {
+        x.save(); x.translate(w * (0.26 + c * 0.16), h * 0.32);
+        x.beginPath(); x.moveTo(-6, -4); x.lineTo(6, -4); x.lineTo(7, 0); x.lineTo(4, 5); x.lineTo(-4, 5); x.lineTo(-7, 0); x.closePath(); x.stroke();
+        x.restore();
+      }
+      x.shadowColor = '#8effc1'; x.strokeStyle = '#8effc1';
+      for (c = 0; c < 5; c++) {
+        x.save(); x.translate(w * (0.18 + c * 0.16), h * 0.47);
+        x.beginPath(); x.ellipse(0, 0, 6, 3.6, 0, 0, 7); x.stroke();
+        x.restore();
+      }
+      /* one diver peeling off with a thruster */
+      x.shadowColor = '#7de2ff'; x.strokeStyle = '#7de2ff';
+      x.save(); x.translate(w * 0.24, h * 0.66); x.rotate(0.4);
+      x.beginPath(); x.ellipse(0, 0, 6, 3.6, 0, 0, 7); x.stroke();
+      x.fillStyle = 'rgba(255,204,77,0.7)';
+      x.beginPath(); x.moveTo(-2, -4); x.lineTo(0, -10); x.lineTo(2, -4); x.closePath(); x.fill();
+      x.restore();
+      /* the ship, returning fire */
+      x.shadowColor = '#7de2ff'; x.strokeStyle = '#7de2ff'; x.lineWidth = 1.8;
+      x.save(); x.translate(w * 0.6, h * 0.82);
+      x.beginPath(); x.moveTo(0, -9); x.lineTo(7, 5); x.lineTo(0, 2); x.lineTo(-7, 5); x.closePath(); x.stroke();
+      x.restore();
+      x.shadowBlur = 0;
+      x.fillStyle = '#eaf6ff';
+      x.fillRect(w * 0.6 - 1.2, h * 0.6, 2.4, 12);
+      x.fillRect(w * 0.6 - 1.2, h * 0.68, 2.4, 8);
+    }
+  },
+  {
+    id: 'quadcore', name: 'Quadcore', cat: 'racing', tag: 'ATV Racing', isNew: true,
+    desc: 'Four quads, three laps, one muddy night trail. Headlights, ramps, nitro, and rivals that never quite let you relax.',
+    best: function () {
+      var s = lsJSON('quadcore_v1');
+      if (!s || !s.best) return null;
+      var t = null;
+      for (var k in s.best) if (s.best[k] > 0 && (t === null || s.best[k] < t)) t = s.best[k];
+      if (!t) return null;
+      var m = Math.floor(t / 60), sec = t - m * 60;
+      return ['Best', m + ':' + (sec < 10 ? '0' : '') + sec.toFixed(1)];
+    },
+    cover: function (x, w, h) {
+      /* night trail sweeping through trees */
+      x.strokeStyle = '#332a18'; x.lineWidth = 22; x.lineCap = 'round';
+      x.beginPath(); x.moveTo(-6, h * 0.85); x.quadraticCurveTo(w * 0.42, h * 0.28, w + 6, h * 0.6); x.stroke();
+      x.strokeStyle = 'rgba(255,204,77,0.25)'; x.lineWidth = 1.4;
+      x.setLineDash([5, 4]);
+      x.beginPath(); x.moveTo(-6, h * 0.85); x.quadraticCurveTo(w * 0.42, h * 0.28, w + 6, h * 0.6); x.stroke();
+      x.setLineDash([]);
+      x.fillStyle = '#0e2418';
+      var TR = [[0.1, 0.2, 9], [0.3, 0.75, 11], [0.62, 0.16, 8], [0.85, 0.85, 10], [0.72, 0.34, 7]];
+      for (var i2 = 0; i2 < TR.length; i2++) {
+        x.beginPath(); x.arc(w * TR[i2][0], h * TR[i2][1], TR[i2][2], 0, 7); x.fill();
+      }
+      /* headlight cone + quad */
+      x.save();
+      x.translate(w * 0.42, h * 0.47); x.rotate(0.5);
+      var hg = x.createLinearGradient(0, 0, 34, 0);
+      hg.addColorStop(0, 'rgba(255,240,190,0.4)'); hg.addColorStop(1, 'rgba(255,240,190,0)');
+      x.fillStyle = hg;
+      x.beginPath(); x.moveTo(4, 0); x.lineTo(36, -12); x.lineTo(36, 12); x.closePath(); x.fill();
+      x.fillStyle = '#14181f';
+      x.fillRect(-9, -8, 5, 4); x.fillRect(-9, 4, 5, 4);
+      x.fillRect(4, -8, 5, 4); x.fillRect(4, 4, 5, 4);
+      x.shadowColor = '#ffcc4d'; x.shadowBlur = 8;
+      x.fillStyle = '#ffcc4d';
+      x.beginPath(); x.moveTo(8, 0); x.lineTo(4, -5); x.lineTo(-7, -4); x.lineTo(-7, 4); x.lineTo(4, 5); x.closePath(); x.fill();
+      x.shadowBlur = 0;
+      x.fillStyle = '#eaf2ff'; x.beginPath(); x.arc(0, 0, 2.2, 0, 7); x.fill();
+      x.restore();
+      /* fireflies */
+      x.fillStyle = 'rgba(220,255,150,0.8)';
+      x.fillRect(w * 0.2, h * 0.4, 2, 2); x.fillRect(w * 0.78, h * 0.6, 2, 2); x.fillRect(w * 0.6, h * 0.78, 2, 2);
+    }
+  },
+  {
+    id: 'prom', name: 'Prom', cat: 'kids', tag: 'Dress-Up', isNew: true,
+    desc: 'The Princess of the ROM kingdom has a ball tonight. Gowns, hair, crowns and slippers — then the waltz, the fireworks and the adoring court.',
+    best: function () { var s = lsJSON('prom_v1'); return s && s.debuts > 0 ? ['Royal debuts', fmtInt(s.debuts)] : null; },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#241238'); g.addColorStop(1, '#341a4a');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      for (var st = 0; st < 16; st++) {
+        x.fillStyle = 'rgba(255,240,255,' + (0.3 + (st % 3) * 0.2) + ')';
+        x.fillRect((st * 37 + 11) % w, (st * 23 + 5) % (h * 0.5), 1.6, 1.6);
+      }
+      /* the princess: gown, bodice, head, crown */
+      var cx = w * 0.5;
+      x.fillStyle = '#ff9ed2';
+      x.beginPath();
+      x.moveTo(cx - 4, h * 0.52);
+      x.bezierCurveTo(cx - 20, h * 0.72, cx - 24, h * 0.9, cx - 24, h * 0.9);
+      x.lineTo(cx + 24, h * 0.9);
+      x.bezierCurveTo(cx + 24, h * 0.9, cx + 20, h * 0.72, cx + 4, h * 0.52);
+      x.closePath(); x.fill();
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(cx - 23, h * 0.885); x.lineTo(cx + 23, h * 0.885); x.stroke();
+      x.fillStyle = '#e88bbf';
+      x.fillRect(cx - 4, h * 0.42, 8, h * 0.11);
+      x.fillStyle = '#ffe0c2';
+      x.beginPath(); x.arc(cx, h * 0.34, 8, 0, 7); x.fill();
+      x.fillStyle = '#a05c22';
+      x.beginPath(); x.arc(cx, h * 0.315, 8.4, Math.PI * 1.05, Math.PI * 1.95); x.fill();
+      x.fillStyle = '#ffcc4d';
+      x.beginPath();
+      x.moveTo(cx - 6, h * 0.245); x.lineTo(cx - 6, h * 0.2); x.lineTo(cx - 3, h * 0.225);
+      x.lineTo(cx, h * 0.19); x.lineTo(cx + 3, h * 0.225); x.lineTo(cx + 6, h * 0.2); x.lineTo(cx + 6, h * 0.245);
+      x.closePath(); x.fill();
+      /* sparkles + hearts */
+      x.fillStyle = '#fff';
+      x.fillRect(cx - 14, h * 0.62, 2, 2); x.fillRect(cx + 10, h * 0.72, 2, 2); x.fillRect(cx + 2, h * 0.66, 2, 2);
+      x.fillStyle = '#ff7ab5';
+      x.font = '10px sans-serif'; x.textAlign = 'center';
+      x.fillText('♥', w * 0.2, h * 0.35); x.fillText('♥', w * 0.82, h * 0.5);
+    }
+  },
+  {
+    id: 'scope', name: 'Scope', cat: 'outdoors', tag: 'Hunting', isNew: true,
+    desc: 'Opening day in the pines. Deer and turkey drift into the dawn meadow — five tags, one sunrise, and a scope that only holds as steady as your breath.',
+    best: function () { var s = lsJSON('scope_v1'); return s && s.high > 0 ? ['Best morning', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      /* dawn sky into meadow, no neon here */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#3c4a5e'); g.addColorStop(0.45, '#8a7458'); g.addColorStop(0.55, '#3c4432'); g.addColorStop(1, '#2c3424');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.fillStyle = 'rgba(244,222,160,0.5)';
+      x.beginPath(); x.arc(w * 0.7, h * 0.44, 7, 0, 7); x.fill();
+      /* treeline */
+      x.fillStyle = '#242e24';
+      for (var i2 = 0; i2 < 9; i2++) {
+        var tx = w * (i2 + 0.5) / 9;
+        x.beginPath();
+        x.moveTo(tx - 7, h * 0.52); x.lineTo(tx, h * 0.3); x.lineTo(tx + 7, h * 0.52);
+        x.closePath(); x.fill();
+      }
+      /* buck silhouette in the meadow */
+      x.fillStyle = '#4a3a28';
+      x.beginPath(); x.ellipse(w * 0.36, h * 0.72, 13, 6, 0, 0, 7); x.fill();
+      x.fillRect(w * 0.36 - 10, h * 0.72, 2, 9); x.fillRect(w * 0.36 + 8, h * 0.72, 2, 9);
+      x.beginPath(); x.moveTo(w * 0.36 + 11, h * 0.72 - 4); x.lineTo(w * 0.36 + 17, h * 0.6); x.lineTo(w * 0.36 + 20, h * 0.62); x.closePath(); x.fill();
+      x.strokeStyle = '#bfae8c'; x.lineWidth = 1;
+      x.beginPath(); x.moveTo(w * 0.36 + 16, h * 0.6); x.lineTo(w * 0.36 + 13, h * 0.53);
+      x.moveTo(w * 0.36 + 17, h * 0.6); x.lineTo(w * 0.36 + 20, h * 0.53); x.stroke();
+      /* the scope ring */
+      x.strokeStyle = '#0c0e0c'; x.lineWidth = 3.4;
+      x.beginPath(); x.arc(w * 0.62, h * 0.62, h * 0.26, 0, 7); x.stroke();
+      x.strokeStyle = 'rgba(12,14,12,0.85)'; x.lineWidth = 1.4;
+      x.beginPath();
+      x.moveTo(w * 0.62 - h * 0.26, h * 0.62); x.lineTo(w * 0.62 + h * 0.26, h * 0.62);
+      x.moveTo(w * 0.62, h * 0.62 - h * 0.26); x.lineTo(w * 0.62, h * 0.62 + h * 0.26);
+      x.stroke();
+    }
+  },
+  {
+    id: 'cast', name: 'Cast', cat: 'outdoors', tag: 'Fishing', isNew: true,
+    desc: 'One evening on the pond. Bluegill, crappie, bass and cats, each at their own depth — one button, a bobber, and a drag the big ones will test.',
+    best: function () { var s = lsJSON('cast_v1'); return s && s.high > 0 ? ['Best evening', s.high.toFixed(1) + ' lb'] : null; },
+    cover: function (x, w, h) {
+      /* sunset over water */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#7480a0'); g.addColorStop(0.3, '#d69660'); g.addColorStop(0.42, '#3a4234'); g.addColorStop(1, '#1c241e');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.fillStyle = 'rgba(246,214,150,0.85)';
+      x.beginPath(); x.arc(w * 0.68, h * 0.32, 7, 0, 7); x.fill();
+      /* far treeline */
+      x.fillStyle = '#2a3226';
+      for (var i2 = 0; i2 < 8; i2++) {
+        var tx = w * (i2 + 0.5) / 8;
+        x.beginPath();
+        x.moveTo(tx - 8, h * 0.4); x.lineTo(tx, h * 0.24); x.lineTo(tx + 8, h * 0.4);
+        x.closePath(); x.fill();
+      }
+      /* glitter path */
+      x.fillStyle = 'rgba(244,206,140,0.4)';
+      for (var gl = 0; gl < 6; gl++) x.fillRect(w * 0.66 - gl, h * 0.44 + gl * 5, 8 + gl * 2, 1.6);
+      /* line + bobber + fish below */
+      x.strokeStyle = 'rgba(240,230,210,0.5)'; x.lineWidth = 1;
+      x.beginPath(); x.moveTo(w * 0.06, h * 0.18); x.lineTo(w * 0.46, h * 0.42); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.46, h * 0.44); x.lineTo(w * 0.46, h * 0.62); x.stroke();
+      x.fillStyle = '#ded5c2';
+      x.beginPath(); x.arc(w * 0.46, h * 0.42, 4, 0, 7); x.fill();
+      x.fillStyle = '#c94f38';
+      x.beginPath(); x.arc(w * 0.46, h * 0.42, 4, Math.PI, 0); x.fill();
+      /* the bass eyeing it */
+      x.fillStyle = '#46583a';
+      x.save(); x.translate(w * 0.58, h * 0.72); x.scale(-1, 1);
+      x.beginPath(); x.ellipse(0, 0, 15, 6, 0, 0, 7); x.fill();
+      x.beginPath(); x.moveTo(-13, 0); x.lineTo(-20, -5); x.lineTo(-20, 5); x.closePath(); x.fill();
+      x.fillStyle = '#b8c9a0';
+      x.beginPath(); x.ellipse(1, 2, 11, 3, 0, 0, 7); x.fill();
+      x.fillStyle = '#141814';
+      x.beginPath(); x.arc(10, -1.4, 1.4, 0, 7); x.fill();
+      x.restore();
+    }
+  },
+  {
+    id: 'smash', name: 'Smash', cat: 'racing', tag: 'Monster Truck', isNew: true,
+    desc: 'Freestyle night at the fairgrounds. Crush the junk cars, fly the ramps, throw backflips, keep the shiny side up — the crowd is watching.',
+    best: function () { var s = lsJSON('smash_v1'); return s && s.high > 0 ? ['Best freestyle', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      /* stadium night */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#14161c'); g.addColorStop(0.5, '#2e3038'); g.addColorStop(0.62, '#5a4834'); g.addColorStop(1, '#3c3022');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* crowd rows */
+      for (var r2 = 0; r2 < 3; r2++) {
+        x.fillStyle = ['#8a7a6a', '#6a7a8a', '#7a6a7a'][r2];
+        for (var cx2 = 4 + r2 * 3; cx2 < w; cx2 += 11) x.fillRect(cx2, h * (0.2 + r2 * 0.1), 2.4, 2.4);
+      }
+      /* flattened car + fresh car */
+      x.fillStyle = '#3a5a7a';
+      x.fillRect(w * 0.52, h * 0.82, 26, 5);
+      x.fillStyle = '#7a3a34';
+      x.beginPath();
+      x.moveTo(w * 0.72, h * 0.87); x.lineTo(w * 0.73, h * 0.76); x.lineTo(w * 0.8, h * 0.73);
+      x.lineTo(w * 0.86, h * 0.76); x.lineTo(w * 0.87, h * 0.87);
+      x.closePath(); x.fill();
+      /* the truck mid-air, nose up */
+      x.save();
+      x.translate(w * 0.36, h * 0.5); x.rotate(-0.45);
+      x.fillStyle = '#1c1e24';
+      x.beginPath(); x.arc(-14, 8, 9, 0, 7); x.fill();
+      x.beginPath(); x.arc(14, 8, 9, 0, 7); x.fill();
+      x.fillStyle = '#2e323a';
+      x.beginPath(); x.arc(-14, 8, 4, 0, 7); x.fill();
+      x.beginPath(); x.arc(14, 8, 4, 0, 7); x.fill();
+      x.fillStyle = '#8a2c26';
+      x.beginPath();
+      x.moveTo(-20, -2); x.lineTo(-19, -8); x.lineTo(2, -9); x.lineTo(5, -15); x.lineTo(14, -15);
+      x.lineTo(17, -8); x.lineTo(20, -7); x.lineTo(20, -2);
+      x.closePath(); x.fill();
+      x.fillStyle = '#e8b84a';
+      x.beginPath();
+      x.moveTo(-20, -2);
+      for (var fl = 0; fl <= 4; fl++) x.lineTo(-20 + 10 * fl, fl % 2 ? -5 : -2);
+      x.closePath(); x.fill();
+      x.restore();
+      /* floodlight glows */
+      x.fillStyle = 'rgba(240,230,200,0.85)';
+      x.fillRect(w * 0.16, h * 0.08, 12, 4); x.fillRect(w * 0.7, h * 0.08, 12, 4);
+    }
+  },
+  {
+    id: 'patch', name: 'Patch', cat: 'kids', tag: 'Gardening', isNew: true,
+    desc: 'Twelve plots of warm dirt and five crops that grow while you watch. Till, plant, water, harvest, sell. Nothing dies here — thirsty plants just wait for you.',
+    best: function () {
+      var s = lsJSON('patch_v1');
+      if (!s) return null;
+      var n = s.totalHarvested || s.total || 0;
+      return n > 0 ? ['Harvested', fmtInt(n)] : null;
+    },
+    cover: function (x, w, h) {
+      /* cottage-garden sky */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#8fc0e0'); g.addColorStop(0.55, '#bcd9e4'); g.addColorStop(0.56, '#7ba055'); g.addColorStop(1, '#5e8442');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.fillStyle = 'rgba(250,238,180,0.95)';
+      x.beginPath(); x.arc(w * 0.2, h * 0.2, 9, 0, 7); x.fill();
+      x.fillStyle = 'rgba(255,255,255,0.85)';
+      x.beginPath(); x.ellipse(w * 0.62, h * 0.16, 15, 6, 0, 0, 7); x.fill();
+      x.beginPath(); x.ellipse(w * 0.74, h * 0.19, 11, 5, 0, 0, 7); x.fill();
+      /* picket fence */
+      x.fillStyle = '#c9a97e';
+      for (var f = 0; f < 14; f++) x.fillRect(w * f / 14 + 3, h * 0.45, 5, h * 0.11);
+      x.fillRect(0, h * 0.49, w, 3);
+      /* three soil beds */
+      for (var r2 = 0; r2 < 2; r2++) {
+        for (var c2 = 0; c2 < 3; c2++) {
+          var bx = w * (0.08 + c2 * 0.3), by = h * (0.62 + r2 * 0.18);
+          x.fillStyle = '#6b4a30';
+          x.fillRect(bx, by, w * 0.24, h * 0.14);
+          x.fillStyle = 'rgba(40,26,16,0.3)';
+          x.fillRect(bx + 3, by + 4, w * 0.18, 2);
+        }
+      }
+      /* a ripe carrot, a tomato bush, a sunflower */
+      x.strokeStyle = '#3f7a34'; x.lineWidth = 1.6;
+      x.beginPath(); x.moveTo(w * 0.2, h * 0.66); x.lineTo(w * 0.17, h * 0.58);
+      x.moveTo(w * 0.2, h * 0.66); x.lineTo(w * 0.23, h * 0.58); x.stroke();
+      x.fillStyle = '#d9762e';
+      x.beginPath(); x.ellipse(w * 0.2, h * 0.68, 4, 5, 0, 0, 7); x.fill();
+      x.strokeStyle = '#3f7a34'; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(w * 0.5, h * 0.7); x.lineTo(w * 0.5, h * 0.56); x.stroke();
+      x.fillStyle = '#c9403a';
+      x.beginPath(); x.arc(w * 0.47, h * 0.62, 3, 0, 7); x.fill();
+      x.beginPath(); x.arc(w * 0.53, h * 0.65, 3, 0, 7); x.fill();
+      x.strokeStyle = '#3f7a34'; x.lineWidth = 2.2;
+      x.beginPath(); x.moveTo(w * 0.8, h * 0.7); x.lineTo(w * 0.8, h * 0.44); x.stroke();
+      x.fillStyle = '#e8c34a';
+      for (var pt = 0; pt < 8; pt++) {
+        var pa = pt / 8 * 7;
+        x.beginPath(); x.ellipse(w * 0.8 + Math.cos(pa) * 7, h * 0.42 + Math.sin(pa) * 7, 3.4, 2.2, pa, 0, 7); x.fill();
+      }
+      x.fillStyle = '#6b4a2a';
+      x.beginPath(); x.arc(w * 0.8, h * 0.42, 4, 0, 7); x.fill();
+    }
+  },
+  {
+    id: 'chip', name: 'Chip', cat: 'sports', tag: 'Mini Golf', isNew: true,
+    desc: 'Nine holes of putt-putt: doglegs, bunkers, island greens and a moat. Hold to charge, release to strike — and hot balls lip out.',
+    best: function () { var s = lsJSON('chip_v1'); if (!s || !s.best) return null; var d = s.best - 28; return ['Best round', s.best + (d === 0 ? ' (E)' : d > 0 ? ' (+' + d + ')' : ' (' + d + ')')]; },
+    cover: function (x, w, h) {
+      /* rough surround */
+      x.fillStyle = '#3f5230'; x.fillRect(0, 0, w, h);
+      /* wooden rail */
+      x.fillStyle = '#9c7b52'; x.fillRect(w * 0.06, h * 0.12, w * 0.88, h * 0.76);
+      x.fillStyle = '#7d6141';
+      for (var r2 = 0; r2 < 9; r2++) x.fillRect(w * 0.06 + r2 * w * 0.098, h * 0.12, 2, h * 0.76);
+      /* the green, mowed in stripes */
+      var gx = w * 0.1, gy = h * 0.18, gw = w * 0.8, gh = h * 0.64;
+      for (var s2 = 0; s2 < 8; s2++) {
+        x.fillStyle = s2 % 2 ? '#6f9c4e' : '#7fae59';
+        x.fillRect(gx + s2 * gw / 8, gy, gw / 8 + 1, gh);
+      }
+      /* bunker */
+      x.fillStyle = '#d8c48c';
+      x.beginPath(); x.ellipse(gx + gw * 0.68, gy + gh * 0.72, w * 0.1, h * 0.08, 0.3, 0, 7); x.fill();
+      /* cup + flag, flag upright */
+      var cx = gx + gw * 0.28, cy = gy + gh * 0.46;
+      x.fillStyle = 'rgba(20,30,16,0.35)';
+      x.beginPath(); x.ellipse(cx, cy, 9, 8, 0, 0, 7); x.fill();
+      x.fillStyle = '#14180f';
+      x.beginPath(); x.ellipse(cx, cy, 6.5, 5.5, 0, 0, 7); x.fill();
+      x.strokeStyle = '#f2f0e6'; x.lineWidth = 1.6;
+      x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx, cy - h * 0.24); x.stroke();
+      x.fillStyle = '#c9463c';
+      x.beginPath();
+      x.moveTo(cx, cy - h * 0.24); x.lineTo(cx + w * 0.13, cy - h * 0.2); x.lineTo(cx, cy - h * 0.16);
+      x.closePath(); x.fill();
+      /* ball + aim dots */
+      var bx = gx + gw * 0.82, by = gy + gh * 0.46;
+      x.fillStyle = 'rgba(255,255,255,0.5)';
+      for (var d2 = 1; d2 <= 5; d2++) x.fillRect(bx - d2 * 11, by - 1, 2.4, 2.4);
+      x.fillStyle = 'rgba(20,30,16,0.3)';
+      x.beginPath(); x.ellipse(bx + 1.5, by + 2, 5, 4, 0, 0, 7); x.fill();
+      x.fillStyle = '#f6f6f0';
+      x.beginPath(); x.arc(bx, by, 5, 0, 7); x.fill();
+    }
+  },
+  {
+    id: 'pitch', name: 'Pitch', cat: 'sports', tag: 'Home Run Derby', isNew: true,
+    desc: 'Golden hour at the ballpark. Fastballs, sliders, changeups and curves — ten outs, one button, and a wall at 375 feet.',
+    best: function () { var s = lsJSON('pitch_v1'); return s && s.hr > 0 ? ['Best round', s.hr + ' HR · ' + s.longest + ' ft'] : null; },
+    cover: function (x, w, h) {
+      /* golden-hour sky */
+      x.fillStyle = '#4a6484'; x.fillRect(0, 0, w, h);
+      var g2 = x.createLinearGradient(0, 0, 0, h * 0.62);
+      g2.addColorStop(0, '#41597a'); g2.addColorStop(0.6, '#c99a63'); g2.addColorStop(1, '#e8c98a');
+      x.fillStyle = g2; x.fillRect(0, 0, w, h * 0.62);
+      x.fillStyle = 'rgba(255,240,200,0.95)';
+      x.beginPath(); x.arc(w * 0.17, h * 0.3, 8, 0, 7); x.fill();
+      /* light towers */
+      x.strokeStyle = '#2e3138'; x.lineWidth = 1.6;
+      for (var t2 = 0; t2 < 3; t2++) {
+        var tx = w * (0.3 + t2 * 0.28);
+        x.beginPath(); x.moveTo(tx, h * 0.62); x.lineTo(tx, h * 0.4); x.stroke();
+        x.fillStyle = '#dfe2e6'; x.fillRect(tx - 6, h * 0.37, 12, 4);
+      }
+      /* crowd band */
+      x.fillStyle = '#6d6a68'; x.fillRect(0, h * 0.62, w, h * 0.12);
+      for (var c3 = 0; c3 < 60; c3++) {
+        x.fillStyle = ['rgba(230,210,180,0.5)', 'rgba(200,170,150,0.45)', 'rgba(180,190,210,0.4)'][c3 % 3];
+        x.fillRect((c3 * 37) % w, h * 0.63 + (c3 % 4) * 3, 2.6, 2.6);
+      }
+      /* outfield wall + yellow line */
+      x.fillStyle = '#2f5233'; x.fillRect(0, h * 0.74, w, h * 0.08);
+      x.fillStyle = '#e8c34a'; x.fillRect(0, h * 0.74, w, 2);
+      /* mowed outfield */
+      for (var s3 = 0; s3 < 7; s3++) {
+        x.fillStyle = s3 % 2 ? '#4e7b3f' : '#5a8a48';
+        x.fillRect(w * s3 / 7, h * 0.82, w / 7 + 1, h * 0.18);
+      }
+      /* batter silhouette + ball with trail */
+      x.fillStyle = '#22262c';
+      x.save(); x.translate(w * 0.24, h * 0.9);
+      x.beginPath(); x.arc(0, -15, 3.4, 0, 7); x.fill();
+      x.fillRect(-3, -12, 6, 10);
+      x.fillRect(-3, -2, 2.6, 6); x.fillRect(1.4, -2, 2.6, 6);
+      x.strokeStyle = '#b98a4a'; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(2, -11); x.lineTo(12, -19); x.stroke();
+      x.restore();
+      x.strokeStyle = 'rgba(255,255,255,0.5)'; x.lineWidth = 1.4;
+      x.beginPath(); x.moveTo(w * 0.32, h * 0.83); x.quadraticCurveTo(w * 0.55, h * 0.5, w * 0.78, h * 0.56); x.stroke();
+      x.fillStyle = '#f8f8f4';
+      x.beginPath(); x.arc(w * 0.78, h * 0.56, 3.4, 0, 7); x.fill();
+    }
+  },
+  {
+    id: 'cache', name: 'Cache', cat: 'kids', tag: 'Memory', isNew: true,
+    desc: 'Cache memory, and a memory game. Turn two cards, keep the pair, clear the board — three sizes, twelve symbols, and no way to lose.',
+    best: function () {
+      var s = lsJSON('cache_v1');
+      if (!s) return null;
+      var n = s.normal && s.normal.moves;
+      return n > 0 ? ['Normal best', n + ' moves'] : null;
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      x.strokeStyle = 'rgba(120,150,220,0.09)'; x.lineWidth = 1;
+      for (var g3 = 0; g3 < w; g3 += 16) { x.beginPath(); x.moveTo(g3, 0); x.lineTo(g3, h); x.stroke(); }
+      /* six cards: four face-down, two matched face-up */
+      var cw = w * 0.2, ch = h * 0.3;
+      function card(cx, cy, up, draw, col) {
+        x.fillStyle = up ? 'rgba(30,42,78,0.95)' : '#16204a';
+        x.strokeStyle = up ? col : 'rgba(120,150,220,0.35)';
+        x.lineWidth = up ? 2 : 1.2;
+        x.beginPath(); x.roundRect(cx - cw / 2, cy - ch / 2, cw, ch, 6); x.fill(); x.stroke();
+        if (up) { x.save(); x.translate(cx, cy); x.strokeStyle = col; x.lineWidth = 2.2; x.shadowColor = col; x.shadowBlur = 8; draw(x); x.restore(); }
+        else {
+          x.strokeStyle = 'rgba(120,150,220,0.28)'; x.lineWidth = 1;
+          x.beginPath(); x.moveTo(cx - cw * 0.2, cy - ch * 0.15); x.lineTo(cx + cw * 0.1, cy - ch * 0.15); x.lineTo(cx + cw * 0.1, cy + ch * 0.2); x.stroke();
+        }
+      }
+      /* gold star pair, matched */
+      function star(g) { g.beginPath(); for (var i2 = 0; i2 < 10; i2++) { var a2 = i2 / 10 * 7 - 1.57, rr = i2 % 2 ? 4 : 9; g[i2 ? 'lineTo' : 'moveTo'](Math.cos(a2) * rr, Math.sin(a2) * rr); } g.closePath(); g.stroke(); }
+      function bolt(g) { g.beginPath(); g.moveTo(3, -9); g.lineTo(-4, 1); g.lineTo(1, 1); g.lineTo(-3, 9); g.lineTo(5, -1); g.lineTo(0, -1); g.closePath(); g.stroke(); }
+      card(w * 0.22, h * 0.3, true, star, '#e8b84a');
+      card(w * 0.5, h * 0.3, false);
+      card(w * 0.78, h * 0.3, true, star, '#e8b84a');
+      card(w * 0.22, h * 0.72, false);
+      card(w * 0.5, h * 0.72, true, bolt, '#7de2ff');
+      card(w * 0.78, h * 0.72, false);
+    }
+  },
+  {
+    id: 'parse', name: 'Parse', cat: 'puzzle', tag: 'Word Game', isNew: true,
+    desc: 'Parsing a string, and puzzling out a word. Five letters, six guesses — gold for right-and-in-place, blue for right-but-wrong-slot.',
+    best: function () {
+      var s = lsJSON('parse_v1');
+      if (!s || !s.played) return null;
+      return ['Streak', (s.streak || 0) + ' · best ' + (s.best || 0)];
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      var word = ['P', 'A', 'R', 'S', 'E'];
+      var st = ['absent', 'present', 'exact', 'absent', 'exact'];
+      var tw = w * 0.16, th = tw, x0 = w * 0.5 - (tw * 5 + 8 * 4) / 2;
+      for (var i3 = 0; i3 < 5; i3++) {
+        var tx = x0 + i3 * (tw + 8), ty = h * 0.34;
+        if (st[i3] === 'exact') { x.fillStyle = '#e8b84a'; x.strokeStyle = '#f5d98a'; x.lineWidth = 2.4; }
+        else if (st[i3] === 'present') { x.fillStyle = '#3d7fd0'; x.strokeStyle = '#8ec2ff'; x.lineWidth = 2.4; }
+        else { x.fillStyle = '#26304e'; x.strokeStyle = 'rgba(140,165,215,0.3)'; x.lineWidth = 1.2; }
+        x.beginPath(); x.roundRect(tx, ty, tw, th, 5); x.fill();
+        if (st[i3] === 'present') { x.save(); x.setLineDash([4, 3]); x.stroke(); x.restore(); } else x.stroke();
+        /* shape markers so colour is redundant */
+        if (st[i3] === 'exact') { x.fillStyle = 'rgba(255,255,255,0.55)'; x.beginPath(); x.moveTo(tx + tw - 7, ty); x.lineTo(tx + tw, ty); x.lineTo(tx + tw, ty + 7); x.closePath(); x.fill(); }
+        if (st[i3] === 'present') { x.fillStyle = 'rgba(255,255,255,0.7)'; x.beginPath(); x.arc(tx + tw - 5, ty + 5, 2.2, 0, 7); x.fill(); }
+        x.fillStyle = st[i3] === 'absent' ? 'rgba(220,230,250,0.75)' : '#0d1430';
+        x.font = '800 ' + Math.round(tw * 0.6) + 'px "Segoe UI", sans-serif';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(word[i3], tx + tw / 2, ty + th / 2 + 1);
+      }
+      /* empty rows below */
+      x.strokeStyle = 'rgba(140,165,215,0.22)'; x.lineWidth = 1.2;
+      for (var r3 = 0; r3 < 2; r3++) for (var c4 = 0; c4 < 5; c4++) {
+        x.beginPath(); x.roundRect(x0 + c4 * (tw + 8), h * 0.34 + (r3 + 1) * (th + 7), tw, th, 5); x.stroke();
+      }
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'spare', name: 'Spare', cat: 'sports', tag: 'Bowling', isNew: true,
+    desc: 'A spare part, and a bowling spare. Ten frames down honey maple: lock your stance, your power and your hook, then watch the pins carry.',
+    best: function () { var s = lsJSON('spare_v1'); return s && s.best > 0 ? ['Best game', fmtInt(s.best)] : null; },
+    cover: function (x, w, h) {
+      x.fillStyle = '#171208'; x.fillRect(0, 0, w, h);
+      /* lane in perspective */
+      x.fillStyle = '#c9944e';
+      x.beginPath();
+      x.moveTo(w * 0.5 - w * 0.1, h * 0.22); x.lineTo(w * 0.5 + w * 0.1, h * 0.22);
+      x.lineTo(w * 0.5 + w * 0.42, h); x.lineTo(w * 0.5 - w * 0.42, h);
+      x.closePath(); x.fill();
+      /* boards */
+      x.strokeStyle = 'rgba(90,60,26,0.35)'; x.lineWidth = 1;
+      for (var bd = -4; bd <= 4; bd++) {
+        x.beginPath();
+        x.moveTo(w * 0.5 + bd * w * 0.024, h * 0.22);
+        x.lineTo(w * 0.5 + bd * w * 0.1, h);
+        x.stroke();
+      }
+      /* gutters */
+      x.fillStyle = '#20170c';
+      x.beginPath(); x.moveTo(w * 0.5 - w * 0.1, h * 0.22); x.lineTo(w * 0.5 - w * 0.42, h); x.lineTo(w * 0.5 - w * 0.55, h); x.lineTo(w * 0.5 - w * 0.14, h * 0.22); x.closePath(); x.fill();
+      x.beginPath(); x.moveTo(w * 0.5 + w * 0.1, h * 0.22); x.lineTo(w * 0.5 + w * 0.42, h); x.lineTo(w * 0.5 + w * 0.55, h); x.lineTo(w * 0.5 + w * 0.14, h * 0.22); x.closePath(); x.fill();
+      /* arrows */
+      x.fillStyle = 'rgba(120,80,34,0.75)';
+      for (var ar = -3; ar <= 3; ar++) {
+        var axp = w * 0.5 + ar * w * 0.035, ayp = h * 0.55 + Math.abs(ar) * h * 0.03;
+        x.beginPath(); x.moveTo(axp, ayp - 7); x.lineTo(axp + 4, ayp + 4); x.lineTo(axp - 4, ayp + 4); x.closePath(); x.fill();
+      }
+      /* pins */
+      var rows = [[0], [-1, 1], [-2, 0, 2], [-3, -1, 1, 3]];
+      for (var r4 = 0; r4 < rows.length; r4++) {
+        for (var pi = 0; pi < rows[r4].length; pi++) {
+          var px2 = w * 0.5 + rows[r4][pi] * w * 0.022, py2 = h * 0.2 - r4 * h * 0.012 + h * 0.02;
+          x.fillStyle = '#f4efe2';
+          x.beginPath(); x.ellipse(px2, py2, 3.6, 7, 0, 0, 7); x.fill();
+          x.fillStyle = '#c0392b';
+          x.fillRect(px2 - 2.6, py2 - 2, 5.2, 1.6);
+        }
+      }
+      /* the ball */
+      var bg2 = x.createRadialGradient(w * 0.44, h * 0.76, 2, w * 0.46, h * 0.8, 22);
+      bg2.addColorStop(0, '#9c3b4a'); bg2.addColorStop(1, '#5d1f2c');
+      x.fillStyle = bg2;
+      x.beginPath(); x.arc(w * 0.46, h * 0.8, 17, 0, 7); x.fill();
+      x.fillStyle = 'rgba(20,10,12,0.8)';
+      x.beginPath(); x.arc(w * 0.44, h * 0.75, 2.4, 0, 7); x.fill();
+      x.beginPath(); x.arc(w * 0.5, h * 0.76, 2.4, 0, 7); x.fill();
+    }
+  },
+  {
+    id: 'grind', name: 'Grind', cat: 'sports', tag: 'Skateboarding', isNew: true,
+    desc: 'Grinding a CPU, and grinding a rail. Ollie, kickflip, spin and lock into a 50-50 — chain it all into one long line, and do not bail.',
+    best: function () { var s = lsJSON('grind_v1'); return s && s.best > 0 ? ['Best run', fmtInt(s.best)] : null; },
+    cover: function (x, w, h) {
+      /* dusk sky over a concrete park */
+      var sg = x.createLinearGradient(0, 0, 0, h * 0.62);
+      sg.addColorStop(0, '#41537a'); sg.addColorStop(1, '#d99a63');
+      x.fillStyle = sg; x.fillRect(0, 0, w, h * 0.62);
+      x.fillStyle = '#3a4436';
+      for (var hl = 0; hl < 5; hl++) {
+        x.beginPath(); x.arc(w * (0.1 + hl * 0.22), h * 0.62, w * 0.13, Math.PI, 0); x.fill();
+      }
+      /* chain-link fence */
+      x.strokeStyle = 'rgba(190,200,210,0.28)'; x.lineWidth = 1;
+      for (var fx2 = 0; fx2 < w; fx2 += 7) { x.beginPath(); x.moveTo(fx2, h * 0.44); x.lineTo(fx2 + 7, h * 0.62); x.stroke(); }
+      /* concrete */
+      x.fillStyle = '#9a9a94'; x.fillRect(0, h * 0.62, w, h * 0.38);
+      x.fillStyle = 'rgba(60,60,58,0.25)';
+      for (var sp2 = 0; sp2 < 40; sp2++) x.fillRect((sp2 * 53) % w, h * 0.64 + (sp2 * 31) % (h * 0.34), 2, 2);
+      x.strokeStyle = 'rgba(70,70,68,0.4)'; x.lineWidth = 1.4;
+      x.beginPath(); x.moveTo(0, h * 0.78); x.lineTo(w, h * 0.78); x.stroke();
+      /* the rail */
+      x.strokeStyle = '#b9bec6'; x.lineWidth = 3.4;
+      x.beginPath(); x.moveTo(w * 0.12, h * 0.8); x.lineTo(w * 0.88, h * 0.8); x.stroke();
+      x.strokeStyle = '#6c7078'; x.lineWidth = 2.6;
+      x.beginPath(); x.moveTo(w * 0.2, h * 0.8); x.lineTo(w * 0.2, h * 0.93);
+      x.moveTo(w * 0.8, h * 0.8); x.lineTo(w * 0.8, h * 0.93); x.stroke();
+      /* skater locked into a grind */
+      x.save(); x.translate(w * 0.5, h * 0.8);
+      x.fillStyle = '#2b2f36';
+      x.beginPath(); x.roundRect(-17, -4, 34, 4, 2); x.fill();      /* deck */
+      x.fillStyle = '#d9a03c';
+      x.beginPath(); x.arc(-11, 1, 2.4, 0, 7); x.fill();
+      x.beginPath(); x.arc(11, 1, 2.4, 0, 7); x.fill();
+      x.fillStyle = '#3f5f8f'; x.fillRect(-5, -17, 10, 13);        /* legs/torso */
+      x.fillStyle = '#c9542f'; x.fillRect(-6, -27, 12, 11);        /* shirt */
+      x.fillStyle = '#e8c9a0';
+      x.beginPath(); x.arc(0, -32, 5, 0, 7); x.fill();             /* head */
+      x.strokeStyle = '#c9542f'; x.lineWidth = 3; x.lineCap = 'round';
+      x.beginPath(); x.moveTo(-5, -24); x.lineTo(-15, -30);
+      x.moveTo(5, -24); x.lineTo(14, -19); x.stroke();
+      x.restore();
+      /* sparks off the rail */
+      x.fillStyle = '#ffd98a';
+      for (var sk2 = 0; sk2 < 7; sk2++) x.fillRect(w * 0.5 + 14 + sk2 * 5, h * 0.8 + (sk2 % 3) * 3 - 2, 2.4, 1.6);
+    }
+  },
+  {
+    id: 'sweep', name: 'Sweep', cat: 'puzzle', tag: 'Minesweeper', isNew: true,
+    desc: 'Minesweeper the good way: the first click is always safe, and every board is generated so pure logic can finish it — no coin-flip guesses.',
+    best: function () { var s = lsJSON('sweep_v1'); if (!s) return null; var t = s.beginner; return t > 0 ? ['Beginner', t + 's'] : null; },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      var c = Math.min(w, h) / 7;
+      for (var r = 0; r < 5; r++) for (var q = 0; q < 6; q++) {
+        var bx = w * 0.08 + q * c, by = h * 0.14 + r * c;
+        var open = (r + q) % 3 !== 0;
+        x.fillStyle = open ? '#131c3f' : '#1e2a55';
+        x.fillRect(bx, by, c - 2, c - 2);
+        x.strokeStyle = open ? 'rgba(120,150,220,0.18)' : 'rgba(150,180,240,0.35)';
+        x.lineWidth = 1; x.strokeRect(bx + 0.5, by + 0.5, c - 3, c - 3);
+        if (open && (r * 6 + q) % 4 === 1) {
+          var n = 1 + ((r + q) % 3);
+          x.fillStyle = ['#7de2ff', '#8effc1', '#ffcc4d', '#ff9ed2'][n % 4];
+          x.font = '800 ' + Math.round(c * 0.55) + 'px "Segoe UI", sans-serif';
+          x.textAlign = 'center'; x.textBaseline = 'middle';
+          x.fillText(String(n), bx + c / 2 - 1, by + c / 2 - 1);
+        }
+      }
+      var fx = w * 0.08 + 4 * c + c / 2, fy = h * 0.14 + 1 * c + c / 2;
+      x.strokeStyle = '#e8b84a'; x.lineWidth = 1.6;
+      x.beginPath(); x.moveTo(fx, fy + c * 0.28); x.lineTo(fx, fy - c * 0.28); x.stroke();
+      x.fillStyle = '#e8b84a';
+      x.beginPath(); x.moveTo(fx, fy - c * 0.28); x.lineTo(fx + c * 0.3, fy - c * 0.14); x.lineTo(fx, fy); x.closePath(); x.fill();
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'sprint', name: 'Sprint', cat: 'sports', tag: 'Track & Field', isNew: true,
+    desc: 'A three-event meet on a red track: the 100 metres, the hurdles and the long jump. Alternate your feet — mashing one key gets you nowhere.',
+    best: function () { var s = lsJSON('sprint_v1'); return s && s.dash > 0 ? ['100m', Number(s.dash).toFixed(2) + 's'] : null; },
+    cover: function (x, w, h) {
+      var sk = x.createLinearGradient(0, 0, 0, h * 0.42);
+      sk.addColorStop(0, '#6f9ec4'); sk.addColorStop(1, '#bcd4e4');
+      x.fillStyle = sk; x.fillRect(0, 0, w, h * 0.42);
+      x.fillStyle = '#4a5364'; x.fillRect(0, h * 0.28, w, h * 0.16);
+      for (var s2 = 0; s2 < 90; s2++) {
+        x.fillStyle = ['rgba(230,200,170,0.6)', 'rgba(170,190,220,0.55)', 'rgba(210,160,150,0.5)'][s2 % 3];
+        x.fillRect((s2 * 29) % w, h * 0.3 + (s2 % 5) * 4, 3, 3);
+      }
+      x.fillStyle = '#2f6b3a'; x.fillRect(0, h * 0.44, w, h * 0.08);
+      x.fillStyle = '#b8482f'; x.fillRect(0, h * 0.52, w, h * 0.48);
+      x.strokeStyle = 'rgba(255,255,255,0.8)'; x.lineWidth = 1.6;
+      for (var l = 1; l < 5; l++) { x.beginPath(); x.moveTo(0, h * 0.52 + l * h * 0.1); x.lineTo(w, h * 0.52 + l * h * 0.1); x.stroke(); }
+      x.save(); x.translate(w * 0.42, h * 0.78);
+      x.fillStyle = '#e8c9a0';
+      x.beginPath(); x.arc(0, -20, 4.4, 0, 7); x.fill();
+      x.fillStyle = '#2f5fa8'; x.fillRect(-3.4, -16, 7, 10);
+      x.strokeStyle = '#e8c9a0'; x.lineWidth = 2.6; x.lineCap = 'round';
+      x.beginPath(); x.moveTo(-2, -14); x.lineTo(-9, -19); x.moveTo(2, -14); x.lineTo(8, -9); x.stroke();
+      x.strokeStyle = '#2b3550';
+      x.beginPath(); x.moveTo(-1, -6); x.lineTo(-8, 3); x.moveTo(1, -6); x.lineTo(8, 1); x.stroke();
+      x.restore();
+    }
+  },
+  {
+    id: 'type', name: 'Type', cat: 'kids', tag: 'Typing', isNew: true,
+    desc: 'A data type, and learning to type. Nine lessons from the home row to real code, with a keyboard that shows the next key and which finger owns it.',
+    best: function () {
+      var s = lsJSON('type_v1');
+      if (!s || !s.best) return null;
+      var k = Object.keys(s.best)[0];
+      var b = k ? s.best[k] : null;
+      return b && b.w ? ['Best', b.w + ' wpm'] : null;
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      x.fillStyle = 'rgba(232,184,74,0.9)';
+      x.font = '800 ' + Math.round(h * 0.16) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText('asdf jkl;', w / 2, h * 0.3);
+      var keys = ['A', 'S', 'D', 'F', 'J', 'K', 'L', ';'];
+      var kw = w * 0.1, kh = h * 0.16, x0 = w / 2 - (kw * 8 + 4 * 7) / 2;
+      for (var i = 0; i < 8; i++) {
+        var kx = x0 + i * (kw + 4), ky = h * 0.56;
+        var hot = i === 3;
+        x.fillStyle = hot ? '#e8b84a' : '#1e2a55';
+        x.beginPath(); x.roundRect(kx, ky, kw, kh, 4); x.fill();
+        x.strokeStyle = hot ? '#f5d98a' : 'rgba(140,170,230,0.35)'; x.lineWidth = 1.2; x.stroke();
+        x.fillStyle = hot ? '#0d1430' : 'rgba(210,225,255,0.8)';
+        x.font = '700 ' + Math.round(kh * 0.5) + 'px "Segoe UI", sans-serif';
+        x.fillText(keys[i], kx + kw / 2, ky + kh / 2 + 1);
+      }
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'fragment', name: 'Fragment', cat: 'shooter', tag: 'Asteroids', isNew: true,
+    desc: 'Memory fragmentation, and rocks fragmenting. Newtonian drift with no friction, rocks that split all the way down, and a hyperspace that might kill you.',
+    best: function () { var s = lsJSON('fragment_v1'); return s && s.high > 0 ? ['High score', fmtInt(s.high)] : null; },
+    cover: function (x, w, h) {
+      x.fillStyle = '#04060a'; x.fillRect(0, 0, w, h);
+      x.strokeStyle = 'rgba(150,220,255,0.85)'; x.lineWidth = 1.4;
+      function rock(cx, cy, r, n, seed) {
+        x.beginPath();
+        for (var i = 0; i < n; i++) {
+          var a = i / n * 7;
+          var rr = r * (0.72 + ((Math.sin(seed + i * 2.3) + 1) / 2) * 0.45);
+          if (i) x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+          else x.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+        }
+        x.closePath(); x.stroke();
+      }
+      rock(w * 0.24, h * 0.3, 20, 9, 1.2);
+      rock(w * 0.74, h * 0.26, 13, 8, 3.7);
+      rock(w * 0.8, h * 0.74, 17, 9, 5.1);
+      rock(w * 0.18, h * 0.76, 9, 7, 2.4);
+      x.strokeStyle = '#ffffff'; x.lineWidth = 1.6;
+      x.save(); x.translate(w * 0.5, h * 0.52); x.rotate(-0.5);
+      x.beginPath(); x.moveTo(11, 0); x.lineTo(-8, 7); x.lineTo(-4, 0); x.lineTo(-8, -7); x.closePath(); x.stroke();
+      x.strokeStyle = 'rgba(255,190,120,0.9)';
+      x.beginPath(); x.moveTo(-5, 0); x.lineTo(-13, 0); x.stroke();
+      x.restore();
+      x.fillStyle = 'rgba(150,220,255,0.9)';
+      x.fillRect(w * 0.62, h * 0.44, 2, 2); x.fillRect(w * 0.66, h * 0.4, 2, 2);
+    }
+  },
+  {
+    id: 'scan', name: 'Scan', cat: 'kids', tag: 'Reading', isNew: true,
+    desc: 'A lexical scanner, and scanning a page. Letter sounds, blending c-a-t into cat, sight words and short passages — and it reads them aloud.',
+    best: function () { var s = lsJSON('scan_v1'); if (!s) return null; var st = s.stage || s.unlocked; return st > 0 ? ['Stage', st + ' / 7'] : null; },
+    cover: function (x, w, h) {
+      x.fillStyle = '#12101c'; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#e8934a';
+      x.font = '800 ' + Math.round(h * 0.3) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText('c a t', w / 2, h * 0.34);
+      x.strokeStyle = 'rgba(232,147,74,0.7)'; x.lineWidth = 2; x.lineCap = 'round';
+      x.beginPath();
+      x.moveTo(w * 0.34, h * 0.5); x.quadraticCurveTo(w * 0.42, h * 0.58, w * 0.5, h * 0.5);
+      x.moveTo(w * 0.5, h * 0.5); x.quadraticCurveTo(w * 0.58, h * 0.58, w * 0.66, h * 0.5);
+      x.stroke();
+      x.fillStyle = '#f2ead9';
+      x.font = '800 ' + Math.round(h * 0.24) + 'px "Segoe UI", sans-serif';
+      x.fillText('cat', w / 2, h * 0.74);
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'greedy', name: 'Greedy', cat: 'kids', tag: 'Party', isNew: true,
+    desc: 'A greedy algorithm takes whatever is nearest and never looks back. So do four daemons fighting over one buffer pool. Slide, chomp, out-eat them.',
+    best: function () { var s = lsJSON('greedy_v1'); return s && s.best > 0 ? ['Most eaten', fmtInt(s.best)] : null; },
+    cover: function (x, w, h) {
+      var cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.42;
+      x.fillStyle = '#0d1226'; x.fillRect(0, 0, w, h);
+      var g = x.createRadialGradient(cx, cy, R * 0.15, cx, cy, R);
+      g.addColorStop(0, '#151d3d'); g.addColorStop(1, '#0d1226');
+      x.fillStyle = g; x.beginPath(); x.arc(cx, cy, R, 0, 7); x.fill();
+      x.strokeStyle = '#222c4d'; x.lineWidth = 2; x.stroke();
+      var pk = [[-0.20, -0.10], [0.12, -0.26], [0.26, 0.10], [-0.06, 0.24], [0.02, -0.02], [-0.30, 0.16]];
+      for (var i = 0; i < pk.length; i++) {
+        x.fillStyle = i === 2 ? '#ffcc4d' : '#cfd8f5';
+        x.fillRect(cx + pk[i][0] * R * 2 - 4, cy + pk[i][1] * R * 2 - 4, 8, 8);
+      }
+      var cols = ['#ffcc4d', '#4dd2ff', '#ff6b8a', '#7CE38B'];
+      var ang = [Math.PI / 2, Math.PI, -Math.PI / 2, 0];
+      var open = [0.55, 0.15, 0.42, 0.10];
+      for (var d = 0; d < 4; d++) {
+        var a = ang[d], hx = cx + Math.cos(a) * R * 0.84, hy = cy + Math.sin(a) * R * 0.84, s2 = R * 0.17;
+        x.save(); x.translate(hx, hy); x.rotate(a + Math.PI);
+        x.fillStyle = cols[d];
+        x.beginPath(); x.arc(0, 0, s2, 0, 7); x.fill();
+        x.fillStyle = '#0d1226';
+        x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, s2 * 1.06, Math.PI - open[d], Math.PI + open[d]); x.closePath(); x.fill();
+        x.beginPath(); x.arc(s2 * 0.22, -s2 * 0.42, s2 * 0.2, 0, 7); x.fill();
+        x.beginPath(); x.arc(s2 * 0.22, s2 * 0.42, s2 * 0.2, 0, 7); x.fill();
+        x.restore();
+      }
+    }
+  },
+  {
+    id: 'sum', name: 'Sum', cat: 'kids', tag: 'Maths', isNew: true,
+    desc: 'A summation, and learning to add. Number bonds up to fractions, taught with ten-frames, number lines and dot arrays — and it remembers which facts you find hard.',
+    best: function () {
+      var s = lsJSON('sum_v1');
+      if (!s || !s.facts) return null;
+      var solid = 0, total = 0, k;
+      for (k in s.facts) { total++; if (s.facts[k] && s.facts[k].box >= 4) solid++; }
+      return total ? ['Facts solid', solid + ' / ' + total] : null;
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      /* a ten-frame with six dots */
+      var fw = w * 0.72, fh = h * 0.3, x0 = (w - fw) / 2, y0 = h * 0.16;
+      x.strokeStyle = 'rgba(232,184,74,0.7)'; x.lineWidth = 1.6;
+      x.strokeRect(x0, y0, fw, fh);
+      for (var i = 1; i < 5; i++) { x.beginPath(); x.moveTo(x0 + fw * i / 5, y0); x.lineTo(x0 + fw * i / 5, y0 + fh); x.stroke(); }
+      x.beginPath(); x.moveTo(x0, y0 + fh / 2); x.lineTo(x0 + fw, y0 + fh / 2); x.stroke();
+      x.fillStyle = '#e8b84a';
+      for (var d = 0; d < 6; d++) {
+        var cx = x0 + fw * ((d % 5) + 0.5) / 5, cy = y0 + fh * ((d < 5 ? 0 : 1) + 0.5) / 2;
+        x.beginPath(); x.arc(cx, cy, Math.min(fw / 5, fh / 2) * 0.3, 0, 7); x.fill();
+      }
+      /* a dot array for 3 x 4 */
+      x.fillStyle = 'rgba(125,226,255,0.9)';
+      var ax = w * 0.16, ay = h * 0.6, gap = Math.min(w, h) * 0.075;
+      for (var r = 0; r < 3; r++) for (var c = 0; c < 4; c++) {
+        x.beginPath(); x.arc(ax + c * gap, ay + r * gap, gap * 0.22, 0, 7); x.fill();
+      }
+      x.fillStyle = '#f2eee4';
+      x.font = '800 ' + Math.round(h * 0.16) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'left'; x.textBaseline = 'middle';
+      x.fillText('3 x 4 = 12', w * 0.52, ay + gap);
+      x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'syntax', name: 'Syntax', cat: 'kids', tag: 'Writing', isNew: true,
+    desc: 'Grammar syntax, and code syntax. Capitals, commas, apostrophes and the its/it’s trap — every wrong answer explains the actual rule in plain words.',
+    best: function () {
+      var s = lsJSON('syntax_v1');
+      if (!s) return null;
+      var n = s.unlocked || s.stage || 0;
+      return n > 0 ? ['Ladder', n + ' / 7'] : null;
+    },
+    cover: function (x, w, h) {
+      x.fillStyle = '#0d1430'; x.fillRect(0, 0, w, h);
+      /* word tiles forming a sentence, one needing a capital */
+      var words = ['sarah', 'rode', 'her', 'bike'];
+      var tw = w * 0.2, th = h * 0.17, gap = 6;
+      var total = words.length * tw + (words.length - 1) * gap;
+      var x0 = (w - total) / 2, y0 = h * 0.3;
+      for (var i = 0; i < words.length; i++) {
+        var tx = x0 + i * (tw + gap);
+        var flagged = i === 0;
+        x.fillStyle = flagged ? 'rgba(232,184,74,0.22)' : '#1e2a55';
+        x.beginPath(); x.roundRect(tx, y0, tw, th, 5); x.fill();
+        x.strokeStyle = flagged ? '#e8b84a' : 'rgba(140,170,230,0.3)';
+        x.lineWidth = flagged ? 2 : 1.2;
+        if (flagged) { x.save(); x.setLineDash([4, 3]); x.stroke(); x.restore(); } else x.stroke();
+        x.fillStyle = flagged ? '#e8b84a' : 'rgba(215,228,255,0.85)';
+        x.font = '700 ' + Math.round(th * 0.42) + 'px "Segoe UI", sans-serif';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(words[i], tx + tw / 2, y0 + th / 2);
+      }
+      /* the corrected form below, with a period tile */
+      x.fillStyle = '#f2eee4';
+      x.font = '800 ' + Math.round(h * 0.15) + 'px "Segoe UI", sans-serif';
+      x.fillText('Sarah rode her bike.', w / 2, h * 0.68);
+      x.fillStyle = 'rgba(142,255,193,0.9)';
+      x.font = '800 ' + Math.round(h * 0.13) + 'px "Segoe UI", sans-serif';
+      x.fillText('✓', w / 2, h * 0.85);
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'char', name: 'Char', cat: 'kids', tag: 'Letters & Sounds', isNew: true,
+    desc: 'A char is one letter of code. Find the letter, match big to little, hear the sound it makes. Everything is spoken aloud — no reading needed to play.',
+    best: function () {
+      /* Char stores {a: right, w: missed} per letter and calls a letter solid
+         at four-plus tries and 75%+ right — this used to read a `.ok` field
+         that Char has never written, so the card said Unplayed no matter how
+         much she played. Kept in step with Char's own lettersKnown(). */
+      var s = lsJSON('char_v1');
+      if (!s || !s.letters) return null;
+      var solid = 0, seen = 0, k, v, t;
+      /* Char writes the count itself now — read that in preference to
+         re-deriving it, so the two can never disagree. The loop below stays
+         for saves written before it did. */
+      var owned = (typeof s.solid === 'number' && isFinite(s.solid) && s.solid >= 0) ? Math.floor(s.solid) : null;
+      for (k in s.letters) {
+        if (!Object.prototype.hasOwnProperty.call(s.letters, k)) continue;
+        v = s.letters[k];
+        if (!v || typeof v !== 'object') continue;
+        t = (+v.a || 0) + (+v.w || 0);
+        if (t > 0) seen++;
+        if (t >= 4 && (+v.a || 0) / t >= 0.75) solid++;
+      }
+      /* still gated on having actually played — a fresh save carries solid:0,
+         and "0 letters solid" reads very differently from "unplayed" */
+      if (owned !== null && seen > 0) return ['Letters solid', owned];
+      return seen > 0 ? ['Letters solid', solid] : null;
+    },
+    cover: function (x, w, h) {
+      /* warm and friendly, not the arcade's dark neon — this one is for the littlest player */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#fdf3e2'); g.addColorStop(1, '#f6e3c8');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* three big letter tiles, the middle one chosen */
+      var letters = ['s', 'a', 't'];
+      var tw = w * 0.24, th = h * 0.42, gap = w * 0.045;
+      var x0 = (w - (tw * 3 + gap * 2)) / 2, y0 = h * 0.3;
+      for (var i = 0; i < 3; i++) {
+        var tx = x0 + i * (tw + gap);
+        var hot = i === 1;
+        x.fillStyle = hot ? '#ffd77a' : '#ffffff';
+        x.beginPath(); x.roundRect(tx, y0, tw, th, 12); x.fill();
+        x.strokeStyle = hot ? '#e0952c' : '#e6d3b4';
+        x.lineWidth = hot ? 3 : 2; x.stroke();
+        x.fillStyle = hot ? '#7a4a12' : '#8a7a63';
+        x.font = '800 ' + Math.round(th * 0.62) + 'px "Segoe UI", sans-serif';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(letters[i], tx + tw / 2, y0 + th / 2 + 2);
+      }
+      /* a speaker, because everything here is spoken */
+      x.fillStyle = '#e0952c';
+      var sx = w * 0.5, sy = h * 0.16, s2 = h * 0.055;
+      x.beginPath();
+      x.moveTo(sx - s2, sy - s2 * 0.45); x.lineTo(sx - s2 * 0.35, sy - s2 * 0.45);
+      x.lineTo(sx + s2 * 0.25, sy - s2); x.lineTo(sx + s2 * 0.25, sy + s2);
+      x.lineTo(sx - s2 * 0.35, sy + s2 * 0.45); x.lineTo(sx - s2, sy + s2 * 0.45);
+      x.closePath(); x.fill();
+      x.strokeStyle = '#e0952c'; x.lineWidth = 2.4; x.lineCap = 'round';
+      x.beginPath(); x.arc(sx + s2 * 0.4, sy, s2 * 0.7, -0.9, 0.9); x.stroke();
+      x.beginPath(); x.arc(sx + s2 * 0.4, sy, s2 * 1.15, -0.9, 0.9); x.stroke();
+      /* a star for getting it right */
+      x.fillStyle = '#f0b429';
+      var stx = w * 0.5, sty = h * 0.84, r = h * 0.075;
+      x.beginPath();
+      for (var p2 = 0; p2 < 10; p2++) {
+        var a = p2 / 10 * Math.PI * 2 - Math.PI / 2, rr = p2 % 2 ? r * 0.45 : r;
+        if (p2) x.lineTo(stx + Math.cos(a) * rr, sty + Math.sin(a) * rr);
+        else x.moveTo(stx + Math.cos(a) * rr, sty + Math.sin(a) * rr);
+      }
+      x.closePath(); x.fill();
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'trace', name: 'Trace', cat: 'kids', tag: 'Handwriting', isNew: true,
+    desc: 'Big letters on handwriting lines, with a green dot to start on and arrows to follow. Trace a letter, trace your own name, build a word. Very forgiving — a wobbly line still counts.',
+    best: function () {
+      var s = lsJSON('trace_v1'), n = 0, k;
+      if (!s || !s.letters || typeof s.letters !== 'object') return null;
+      for (k in s.letters) { if (Object.prototype.hasOwnProperty.call(s.letters, k) && s.letters[k]) n++; }
+      return n > 0 ? ['Letters written', n] : null;
+    },
+    cover: function (x, w, h) {
+      /* warm paper, not the arcade's dark neon — this one is for the littlest player */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#fdf3e2'); g.addColorStop(1, '#f5e6cf');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* the three handwriting lines she writes between */
+      var top = h * 0.26, mid = h * 0.55, base = h * 0.82;
+      x.strokeStyle = '#9dc4dd'; x.lineWidth = 1.6;
+      x.beginPath(); x.moveTo(w * 0.08, top); x.lineTo(w * 0.92, top); x.stroke();
+      x.strokeStyle = '#c9ad86'; x.setLineDash([6, 6]);
+      x.beginPath(); x.moveTo(w * 0.08, mid); x.lineTo(w * 0.92, mid); x.stroke();
+      x.setLineDash([]);
+      x.strokeStyle = '#8a5a2b'; x.lineWidth = 2.2;
+      x.beginPath(); x.moveTo(w * 0.08, base); x.lineTo(w * 0.92, base); x.stroke();
+      /* a fat letter L, the shape of the path she follows */
+      var lx = w * 0.34, thick = h * 0.13;
+      x.strokeStyle = '#e2d3bb'; x.lineWidth = thick;
+      x.lineCap = 'round'; x.lineJoin = 'round';
+      x.beginPath(); x.moveTo(lx, top); x.lineTo(lx, base); x.lineTo(w * 0.63, base); x.stroke();
+      /* the arrows that tell her which way to go */
+      x.fillStyle = '#e2762b';
+      var ay = [top + (base - top) * 0.36, top + (base - top) * 0.68], ai;
+      for (ai = 0; ai < ay.length; ai++) {
+        var a = ay[ai], s2 = h * 0.055;
+        x.beginPath();
+        x.moveTo(lx - s2 * 0.72, a - s2 * 0.5); x.lineTo(lx + s2 * 0.72, a - s2 * 0.5);
+        x.lineTo(lx, a + s2 * 0.62); x.closePath(); x.fill();
+      }
+      /* and the green dot she starts on */
+      x.fillStyle = 'rgba(95,177,78,0.28)';
+      x.beginPath(); x.arc(lx, top, h * 0.115, 0, TAU); x.fill();
+      x.fillStyle = '#3f9b34';
+      x.beginPath(); x.arc(lx, top, h * 0.072, 0, TAU); x.fill();
+      x.fillStyle = '#ffffff';
+      x.font = '800 ' + Math.round(h * 0.085) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText('1', lx, top + 1);
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'echo', name: 'Echo', cat: 'kids', tag: 'Listening', isNew: true,
+    desc: 'Short stories read aloud with a picture for every line, then a question about what happened. No reading needed — she listens, then taps a picture. Stories get longer as she grows.',
+    best: function () {
+      var s = lsJSON('echo_v1'), n = 0, k;
+      if (!s || !s.heard || typeof s.heard !== 'object') return null;
+      for (k in s.heard) { if (Object.prototype.hasOwnProperty.call(s.heard, k) && s.heard[k]) n++; }
+      return n > 0 ? ['Stories heard', n] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#fdf3e2'); g.addColorStop(1, '#f6e6cd');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* the story panel, with a little scene in it */
+      var pw = w * 0.62, ph = h * 0.36, px = (w - pw) / 2, py = h * 0.11;
+      x.fillStyle = '#ffe9c2';
+      x.beginPath(); x.roundRect(px, py, pw, ph, 10); x.fill();
+      x.strokeStyle = '#9dc4dd'; x.lineWidth = 2; x.stroke();
+      var gy = py + ph * 0.68;
+      x.fillStyle = '#b6803f';
+      x.fillRect(px + 2, gy, pw - 4, py + ph - gy - 2);
+      x.fillStyle = '#f2c53d';                       /* a low sun */
+      x.beginPath(); x.arc(px + pw * 0.76, py + ph * 0.28, ph * 0.13, 0, TAU); x.fill();
+      x.fillStyle = '#7f9f5e';                       /* a small mound on the ground line */
+      x.beginPath(); x.arc(px + pw * 0.34, gy, ph * 0.24, Math.PI, TAU); x.fill();
+      /* the two pictures she chooses between, one already picked */
+      var tw = w * 0.3, th = h * 0.27, ty = h * 0.58, gap = w * 0.06;
+      var tx0 = (w - (tw * 2 + gap)) / 2, i;
+      for (i = 0; i < 2; i++) {
+        var tx = tx0 + i * (tw + gap), hot = i === 1;
+        x.fillStyle = hot ? '#fff6e2' : '#f7ecd8';
+        x.beginPath(); x.roundRect(tx, ty, tw, th, 9); x.fill();
+        x.strokeStyle = hot ? '#5fb14e' : '#e0d0b4';
+        x.lineWidth = hot ? 3 : 1.8; x.stroke();
+        /* these tiles are far wider than they are tall, so every shape is sized
+           off the SHORT side or it grows straight out through the top and bottom */
+        var u = Math.min(tw, th), cx = tx + tw / 2;
+        if (hot) {                                    /* a duck */
+          x.fillStyle = '#f2c53d';
+          x.beginPath(); x.ellipse(cx - u * 0.06, ty + th * 0.64, u * 0.27, u * 0.19, 0, 0, TAU); x.fill();
+          x.beginPath(); x.arc(cx + u * 0.2, ty + th * 0.4, u * 0.155, 0, TAU); x.fill();
+          x.fillStyle = '#e2762b';
+          x.beginPath();
+          x.moveTo(cx + u * 0.32, ty + th * 0.36); x.lineTo(cx + u * 0.5, ty + th * 0.41);
+          x.lineTo(cx + u * 0.32, ty + th * 0.46); x.closePath(); x.fill();
+          x.fillStyle = '#4a3421';
+          x.beginPath(); x.arc(cx + u * 0.24, ty + th * 0.37, u * 0.03, 0, TAU); x.fill();
+        } else {                                      /* a tree */
+          x.fillStyle = '#a9773f';
+          x.fillRect(cx - u * 0.055, ty + th * 0.5, u * 0.11, th * 0.36);
+          x.fillStyle = '#7fae5c';
+          x.beginPath(); x.arc(cx, ty + th * 0.42, u * 0.24, 0, TAU); x.fill();
+        }
+      }
+      /* the speaker, because every word here is spoken */
+      x.fillStyle = '#e0952c';
+      var sx = w * 0.5, sy = h * 0.05, s2 = h * 0.042;
+      x.beginPath();
+      x.moveTo(sx - s2, sy - s2 * 0.45); x.lineTo(sx - s2 * 0.35, sy - s2 * 0.45);
+      x.lineTo(sx + s2 * 0.25, sy - s2); x.lineTo(sx + s2 * 0.25, sy + s2);
+      x.lineTo(sx - s2 * 0.35, sy + s2 * 0.45); x.lineTo(sx - s2, sy + s2 * 0.45);
+      x.closePath(); x.fill();
+      x.strokeStyle = '#e0952c'; x.lineWidth = 2.2; x.lineCap = 'round';
+      x.beginPath(); x.arc(sx + s2 * 0.4, sy, s2 * 0.8, -0.9, 0.9); x.stroke();
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'tally', name: 'Tally', cat: 'kids', tag: 'First Numbers', isNew: true,
+    desc: 'A tally is a count kept one mark at a time. How many, find the number, which has more, what comes next — all spoken aloud, no reading needed. Finds her level by playing with her, then keeps climbing.',
+    best: function () {
+      var s = lsJSON('tally_v1');
+      if (!s || !s.lvl || typeof s.lvl !== 'object') return null;
+      var acts = ['howmany', 'find', 'more', 'next'], climbed = 0, played = false, i, v;
+      for (i = 0; i < acts.length; i++) {
+        v = s.lvl[acts[i]];
+        if (typeof v === 'number' && isFinite(v) && v > 0) climbed += Math.min(10, Math.floor(v));
+      }
+      for (i = 0; i < acts.length; i++) {
+        if (s.played && typeof s.played[acts[i]] === 'number' && s.played[acts[i]] > 0) played = true;
+      }
+      return played ? ['Rungs climbed', climbed + ' / 40'] : null;
+    },
+    cover: function (x, w, h) {
+      /* warm and friendly like Char, Trace and Echo — the little-kid shelf
+         does not use the arcade's dark neon. A ten-frame with seven counters
+         and the numeral beside it: exactly what the game is. */
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#f6fbf3'); g.addColorStop(1, '#d9ead3');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+
+      var cell = Math.min(w * 0.105, h * 0.19);
+      var fw = cell * 5, fh = cell * 2;
+      var fx0 = w * 0.08, fy0 = (h - fh) / 2 + h * 0.04;
+      x.fillStyle = '#ffffff';
+      x.fillRect(fx0, fy0, fw, fh);
+      x.strokeStyle = 'rgba(47,64,48,0.4)'; x.lineWidth = 2.4;
+      x.strokeRect(fx0, fy0, fw, fh);
+      x.lineWidth = 1.4; x.strokeStyle = 'rgba(47,64,48,0.24)';
+      for (var c = 1; c < 5; c++) {
+        x.beginPath(); x.moveTo(fx0 + c * cell, fy0); x.lineTo(fx0 + c * cell, fy0 + fh); x.stroke();
+      }
+      x.beginPath(); x.moveTo(fx0, fy0 + cell); x.lineTo(fx0 + fw, fy0 + cell); x.stroke();
+      for (var i2 = 0; i2 < 7; i2++) {
+        var col = i2 % 5, row = (i2 / 5) | 0;
+        x.fillStyle = row ? '#43a047' : '#2e7d5b';
+        x.beginPath();
+        x.arc(fx0 + col * cell + cell / 2, fy0 + row * cell + cell / 2, cell * 0.32, 0, TAU);
+        x.fill();
+      }
+      /* the numeral it adds up to */
+      x.fillStyle = '#1565c0';
+      x.font = '800 ' + Math.round(h * 0.44) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText('7', w * 0.79, fy0 + fh / 2);
+      /* the speaker, because every question here is spoken */
+      x.fillStyle = '#2e7d5b';
+      var sx = w * 0.5, sy = h * 0.11, s2 = h * 0.05;
+      x.beginPath();
+      x.moveTo(sx - s2, sy - s2 * 0.45); x.lineTo(sx - s2 * 0.35, sy - s2 * 0.45);
+      x.lineTo(sx + s2 * 0.25, sy - s2); x.lineTo(sx + s2 * 0.25, sy + s2);
+      x.lineTo(sx - s2 * 0.35, sy + s2 * 0.45); x.lineTo(sx - s2, sy + s2 * 0.45);
+      x.closePath(); x.fill();
+      x.strokeStyle = '#2e7d5b'; x.lineWidth = 2.2; x.lineCap = 'round';
+      x.beginPath(); x.arc(sx + s2 * 0.4, sy, s2 * 0.8, -0.9, 0.9); x.stroke();
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'clock', name: 'Clock', cat: 'action', tag: 'Rhythm', isNew: true,
+    desc: 'The machine ticks, you hit the beat. Four buses, three tracks from 96 to 150 BPM, holds and chains. Every note is generated from the music itself, so a note can never land on silence.',
+    best: function () {
+      var s = lsJSON('clock_v1');
+      if (!s || !s.t || typeof s.t !== 'object') return null;
+      var top = 0, k, v;
+      for (k in s.t) {
+        if (!Object.prototype.hasOwnProperty.call(s.t, k)) continue;
+        v = s.t[k];
+        if (v && typeof v === 'object' && typeof v.s === 'number' && isFinite(v.s) && v.s > top) top = v.s;
+      }
+      return top > 0 ? ['High score', fmtInt(top)] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#0d1226'); g.addColorStop(1, '#161d3a');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* four lanes converging on the judgement line */
+      var n = 4, lw = w / n, i;
+      for (i = 1; i < n; i++) {
+        x.strokeStyle = 'rgba(255,255,255,0.09)'; x.lineWidth = 1;
+        x.beginPath(); x.moveTo(i * lw, 0); x.lineTo(i * lw, h * 0.82); x.stroke();
+      }
+      /* notes falling, two colours so the lanes read apart */
+      var rows = [[0, 0.14], [2, 0.24], [1, 0.4], [3, 0.4], [0, 0.56], [2, 0.68]];
+      for (i = 0; i < rows.length; i++) {
+        var lane = rows[i][0], y = h * rows[i][1];
+        x.fillStyle = lane < 2 ? '#ff6fae' : '#ffcc4d';
+        x.beginPath(); x.roundRect(lane * lw + lw * 0.14, y, lw * 0.72, h * 0.045, h * 0.022); x.fill();
+      }
+      /* the judgement line, drawn as an actual square-wave clock trace */
+      x.strokeStyle = '#ffcc4d'; x.lineWidth = 2.4; x.lineJoin = 'miter';
+      var base = h * 0.82, amp = h * 0.05, step = w / 8;
+      x.beginPath(); x.moveTo(0, base);
+      for (i = 0; i < 8; i++) {
+        var xx = i * step, hi = (i % 2 === 0);
+        x.lineTo(xx, hi ? base - amp : base);
+        x.lineTo(xx + step, hi ? base - amp : base);
+        x.lineTo(xx + step, hi ? base : base - amp);
+      }
+      x.stroke();
+      /* the pads */
+      for (i = 0; i < n; i++) {
+        x.strokeStyle = 'rgba(255,255,255,0.22)'; x.lineWidth = 1.4;
+        x.beginPath(); x.roundRect(i * lw + lw * 0.1, h * 0.88, lw * 0.8, h * 0.09, 4); x.stroke();
+      }
+    }
+  },
+  {
+    id: 'checksum', name: 'Checksum', cat: 'strategy', isNew: true, tag: 'Checkers',
+    desc: 'Checkers, played properly: captures are compulsory, chains must be finished, and a man crowned mid-jump stops there. Three CPU strengths from half-asleep to ROOT, or two players on one screen.',
+    best: function () {
+      var s = lsJSON('checksum_v1');
+      if (!s || typeof s !== 'object') return null;
+      var w = 0, l = 0, k, v;
+      for (k in s) {
+        if (!Object.prototype.hasOwnProperty.call(s, k)) continue;
+        v = s[k];
+        if (!v || typeof v !== 'object') continue;
+        if (typeof v.w === 'number' && isFinite(v.w) && v.w > 0) w += Math.floor(v.w);
+        if (typeof v.l === 'number' && isFinite(v.l) && v.l > 0) l += Math.floor(v.l);
+      }
+      return (w + l) > 0 ? ['Record', w + 'W ' + l + 'L'] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#0c1124'); g.addColorStop(1, '#141b33');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* a corner of the board, big enough to read as checkers at thumbnail size */
+      var n = 5, s = Math.min(w, h) * 0.19;
+      var x0 = (w - n * s) / 2, y0 = (h - n * s) / 2;
+      var r, c;
+      for (r = 0; r < n; r++) for (c = 0; c < n; c++) {
+        var isDark = ((r + c) & 1) === 1;
+        x.fillStyle = isDark ? '#182444' : '#0f1730';
+        x.fillRect(x0 + c * s, y0 + r * s, s, s);
+      }
+      x.strokeStyle = 'rgba(255,204,77,0.5)'; x.lineWidth = 1.6;
+      x.strokeRect(x0, y0, n * s, n * s);
+      /* two gold bits, one cyan, and a crowned king */
+      function bit(cr, cc, gold, king) {
+        var cx = x0 + cc * s + s / 2, cy = y0 + cr * s + s / 2, rad = s * 0.34;
+        x.fillStyle = gold ? '#ffcc4d' : '#6fe3ff';
+        x.beginPath(); x.arc(cx, cy, rad, 0, TAU); x.fill();
+        x.fillStyle = 'rgba(0,0,0,0.55)';
+        x.font = '700 ' + Math.round(rad * 1.15) + 'px "Segoe UI", sans-serif';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(gold ? '1' : '0', cx, cy + 1);
+        if (king) {
+          x.strokeStyle = 'rgba(0,0,0,0.6)'; x.lineWidth = 1.6;
+          x.beginPath(); x.arc(cx, cy, rad * 0.66, 0, TAU); x.stroke();
+        }
+        x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+      }
+      bit(0, 1, false, false);
+      bit(1, 2, false, false);
+      bit(3, 0, true, false);
+      bit(4, 3, true, true);
+      /* the jump the gold bit is about to make */
+      x.strokeStyle = 'rgba(255,204,77,0.75)'; x.lineWidth = 2;
+      x.setLineDash([5, 5]);
+      x.beginPath();
+      x.moveTo(x0 + 0 * s + s / 2, y0 + 3 * s + s / 2);
+      x.lineTo(x0 + 2 * s + s / 2, y0 + 1 * s + s / 2);
+      x.stroke();
+      x.setLineDash([]);
+    }
+  },
+  {
+    id: 'dunk', name: 'Dunk', cat: 'sports', tag: 'Basketball', isNew: true,
+    desc: 'Arcade hoops on a circuit-board floor. Hold to charge, release on the marker. Real ball physics off two irons and the glass, so a front-rim roll can still drop. Three straight and you are ON FIRE.',
+    best: function () {
+      var s = lsJSON('dunk_v1');
+      if (!s || typeof s !== 'object') return null;
+      var b = (typeof s.best === 'number' && isFinite(s.best)) ? Math.floor(s.best) : 0;
+      var w = (typeof s.wins === 'number' && isFinite(s.wins)) ? Math.floor(s.wins) : 0;
+      if (b > 0) return ['Best run', fmtInt(b)];
+      return w > 0 ? ['1-on-1 wins', w] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#0b1024'); g.addColorStop(0.7, '#111a36'); g.addColorStop(1, '#0d1428');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* crowd specks */
+      for (var i = 0; i < 34; i++) {
+        x.fillStyle = (i % 3 === 0) ? 'rgba(255,204,77,0.5)' : 'rgba(160,190,255,0.35)';
+        x.beginPath(); x.arc(Math.random() * w, Math.random() * h * 0.26, 1.6, 0, TAU); x.fill();
+      }
+      /* the floor */
+      x.fillStyle = '#101a34';
+      x.fillRect(0, h * 0.82, w, h * 0.18);
+      x.strokeStyle = 'rgba(111,227,255,0.35)'; x.lineWidth = 1.2;
+      x.beginPath(); x.moveTo(0, h * 0.82); x.lineTo(w, h * 0.82); x.stroke();
+      /* backboard, rim and net on the right */
+      var bx = w * 0.8, ry = h * 0.42;
+      x.strokeStyle = 'rgba(200,225,255,0.65)'; x.lineWidth = 2;
+      x.strokeRect(bx, ry - h * 0.16, w * 0.035, h * 0.2);
+      x.beginPath(); x.moveTo(bx + w * 0.017, ry + h * 0.04); x.lineTo(bx + w * 0.017, h * 0.82); x.stroke();
+      x.strokeStyle = '#ff7a3d'; x.lineWidth = 3.4;
+      x.beginPath(); x.moveTo(bx - w * 0.1, ry); x.lineTo(bx, ry); x.stroke();
+      x.strokeStyle = 'rgba(255,255,255,0.55)'; x.lineWidth = 1;
+      for (var k = 0; k <= 4; k++) {
+        var nx = bx - w * 0.1 + (w * 0.1) * (k / 4);
+        x.beginPath(); x.moveTo(nx, ry); x.lineTo(bx - w * 0.075 + (w * 0.05) * (k / 4), ry + h * 0.085); x.stroke();
+      }
+      x.beginPath(); x.moveTo(bx - w * 0.1, ry + h * 0.085); x.lineTo(bx - w * 0.025, ry + h * 0.085); x.stroke();
+      /* the shot: an arc from the left, ball in flight */
+      x.strokeStyle = 'rgba(255,204,77,0.5)'; x.lineWidth = 2; x.setLineDash([4, 5]);
+      x.beginPath();
+      x.moveTo(w * 0.16, h * 0.66);
+      x.quadraticCurveTo(w * 0.44, h * 0.05, bx - w * 0.05, ry - h * 0.02);
+      x.stroke(); x.setLineDash([]);
+      x.fillStyle = '#ff7a3d';
+      x.beginPath(); x.arc(w * 0.45, h * 0.24, h * 0.062, 0, TAU); x.fill();
+      x.strokeStyle = 'rgba(0,0,0,0.55)'; x.lineWidth = 1.3;
+      x.beginPath(); x.arc(w * 0.45, h * 0.24, h * 0.062, 0, TAU); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.45 - h * 0.062, h * 0.24); x.lineTo(w * 0.45 + h * 0.062, h * 0.24); x.stroke();
+      x.beginPath(); x.moveTo(w * 0.45, h * 0.24 - h * 0.062); x.lineTo(w * 0.45, h * 0.24 + h * 0.062); x.stroke();
+      /* The shooter. A stick figure the height of a fingernail is just noise
+         on a card this size — the first version drew one about 20px tall and
+         it read as a stray tick mark. Solid shapes, sized off the tile. */
+      var px = w * 0.155, py = h * 0.82;
+      var headR = h * 0.075, bodyTop = py - h * 0.34, bodyBot = py - h * 0.02;
+      x.fillStyle = '#2f6ea8';
+      x.beginPath(); x.roundRect(px - w * 0.022, bodyTop, w * 0.044, bodyBot - bodyTop, w * 0.02); x.fill();
+      x.strokeStyle = '#2f6ea8'; x.lineWidth = Math.max(3, h * 0.05); x.lineCap = 'round';
+      /* the shooting arm, up and toward the hoop */
+      x.beginPath();
+      x.moveTo(px + w * 0.012, bodyTop + h * 0.06);
+      x.lineTo(px + w * 0.055, bodyTop - h * 0.09);
+      x.stroke();
+      x.lineCap = 'butt';
+      x.fillStyle = '#e8b58c';
+      x.beginPath(); x.arc(px, bodyTop - headR * 0.55, headR, 0, TAU); x.fill();
+    }
+  },
+  {
+    id: 'branch', name: 'Branch', cat: 'strategy', tag: 'Chess', isNew: true,
+    desc: 'Chess, all of it — castling, en passant, promotion, stalemate, the fifty-move rule. Three opponents named for real branch predictors, from STATIC to PERCEPTRON. Legal moves light up and it tells you why a move is refused.',
+    best: function () {
+      var s = lsJSON('branch_v1');
+      if (!s || typeof s !== 'object') return null;
+      var w = 0, l = 0, d = 0, k, v;
+      for (k in s) {
+        if (!Object.prototype.hasOwnProperty.call(s, k)) continue;
+        v = s[k];
+        if (!v || typeof v !== 'object') continue;
+        if (typeof v.w === 'number' && isFinite(v.w) && v.w > 0) w += Math.floor(v.w);
+        if (typeof v.l === 'number' && isFinite(v.l) && v.l > 0) l += Math.floor(v.l);
+        if (typeof v.d === 'number' && isFinite(v.d) && v.d > 0) d += Math.floor(v.d);
+      }
+      return (w + l + d) > 0 ? ['Record', w + 'W ' + l + 'L' + (d ? ' ' + d + 'D' : '')] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#0c1124'); g.addColorStop(1, '#151d38');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* The cover tile is wide and short, so a whole board shrinks the piece
+         to about twenty pixels and it stops reading as a knight at all — the
+         same way Dunk's first cover drew a stick figure the size of a tick
+         mark. Board as a backdrop, ONE big knight as the subject. */
+      var s = h / 3, cols = Math.ceil(w / s) + 1;
+      var r, c;
+      for (r = 0; r < 3; r++) for (c = 0; c < cols; c++) {
+        x.fillStyle = ((r + c) & 1) ? 'rgba(27,39,72,0.9)' : 'rgba(15,24,50,0.9)';
+        x.fillRect(c * s, r * s, s, s);
+      }
+      /* the eight destinations — the branching the name is about */
+      var jumps = [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]];
+      var kr = 1, kc = 2, i, jr, jc;
+      x.fillStyle = 'rgba(255,204,77,0.9)';
+      for (i = 0; i < jumps.length; i++) {
+        jr = kr + jumps[i][0]; jc = kc + jumps[i][1];
+        if (jr < 0 || jr > 2 || jc < 0 || jc >= cols) continue;
+        x.beginPath();
+        x.arc(jc * s + s / 2, jr * s + s / 2, s * 0.15, 0, TAU);
+        x.fill();
+      }
+      /* the knight itself: a head profile, drawn big enough to be one */
+      var cx = kc * s + s / 2, cy = kr * s + s / 2, u = s * 0.46;
+      x.fillStyle = '#f4e3b6';
+      x.beginPath();
+      x.moveTo(cx - u * 0.75, cy + u);
+      x.lineTo(cx + u * 0.75, cy + u);
+      x.lineTo(cx + u * 0.5, cy + u * 0.55);
+      x.lineTo(cx + u * 0.62, cy - u * 0.1);
+      x.quadraticCurveTo(cx + u * 0.5, cy - u * 0.95, cx - u * 0.12, cy - u * 1.0);
+      x.lineTo(cx - u * 0.32, cy - u * 1.35);
+      x.lineTo(cx - u * 0.5, cy - u * 0.85);
+      x.quadraticCurveTo(cx - u * 0.95, cy - u * 0.5, cx - u * 0.62, cy + u * 0.55);
+      x.closePath(); x.fill();
+      x.fillStyle = '#1b2748';
+      x.beginPath(); x.arc(cx + u * 0.14, cy - u * 0.45, u * 0.1, 0, TAU); x.fill();
+      x.strokeStyle = 'rgba(27,39,72,0.65)'; x.lineWidth = 1.4;
+      x.beginPath(); x.moveTo(cx - u * 0.75, cy + u * 0.72); x.lineTo(cx + u * 0.75, cy + u * 0.72); x.stroke();
+    }
+  },
+  {
+    id: 'solve', name: 'Solve', cat: 'kids', tag: 'Algebra', isNew: true,
+    desc: 'Pre-algebra to equations, eight rungs from order of operations to brackets and fractions. It finds your level by playing, and every miss names the rule you broke and walks the answer out line by line.',
+    best: function () {
+      var s = lsJSON('solve_v1');
+      if (!s || typeof s !== 'object') return null;
+      var lv = (typeof s.lvl === 'number' && isFinite(s.lvl) && s.lvl >= 0) ? Math.min(7, Math.floor(s.lvl)) : 0;
+      var done = (typeof s.solved === 'number' && isFinite(s.solved) && s.solved > 0) ? Math.floor(s.solved) : 0;
+      return done > 0 ? ['Rung', (lv + 1) + ' of 8'] : null;
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#0d1226'); g.addColorStop(1, '#151c38');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* faint algebra behind, the way the game's own backdrop works */
+      x.fillStyle = 'rgba(125,226,255,0.07)';
+      x.font = '700 ' + Math.round(h * 0.3) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      var ghosts = ['x', '+', '=', 'y', '(', ')'];
+      for (var i = 0; i < 10; i++) {
+        x.fillText(ghosts[i % ghosts.length], (i * 97 % 100) / 100 * w, (i * 53 % 100) / 100 * h);
+      }
+      /* the equation, front and centre, being solved */
+      x.fillStyle = '#eaf6ff';
+      x.font = '800 ' + Math.round(h * 0.3) + 'px "Segoe UI", sans-serif';
+      x.fillText('2x + 5 = 17', w * 0.5, h * 0.33);
+      x.fillStyle = '#ffcc4d';
+      x.font = '800 ' + Math.round(h * 0.32) + 'px "Segoe UI", sans-serif';
+      x.fillText('x = 6', w * 0.5, h * 0.72);
+      /* the rung ladder it climbs */
+      x.strokeStyle = 'rgba(255,204,77,0.5)'; x.lineWidth = 2;
+      var lx = w * 0.06, ly0 = h * 0.16, ly1 = h * 0.86;
+      x.beginPath(); x.moveTo(lx, ly0); x.lineTo(lx, ly1);
+      x.moveTo(lx + w * 0.055, ly0); x.lineTo(lx + w * 0.055, ly1); x.stroke();
+      for (var k = 0; k < 5; k++) {
+        var ry = ly0 + (ly1 - ly0) * (k + 0.5) / 5;
+        x.strokeStyle = k < 2 ? '#ffcc4d' : 'rgba(255,204,77,0.35)';
+        x.beginPath(); x.moveTo(lx, ry); x.lineTo(lx + w * 0.055, ry); x.stroke();
+      }
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  },
+  {
+    id: 'break', name: 'Break', cat: 'sports', tag: 'Pool', isNew: true,
+    desc: 'Eight-ball with the real rules — open table, called groups, ball in hand on a foul, and the 8 last. Draw, follow and side spin, and cushions that behave. Play the machine or a person beside you.',
+    best: function () {
+      var s = lsJSON('break_v1');
+      if (!s || typeof s !== 'object') return null;
+      var clear = (typeof s.bestClear === 'number' && isFinite(s.bestClear) && s.bestClear > 0) ? Math.floor(s.bestClear) : 0;
+      var run = (typeof s.longestRun === 'number' && isFinite(s.longestRun) && s.longestRun > 0) ? Math.floor(s.longestRun) : 0;
+      if (clear > 0) return ['Best clear', clear + ' balls'];
+      return run > 0 ? ['Longest run', run] : null;
+    },
+    cover: function (x, w, h) {
+      /* circuit-board felt */
+      x.fillStyle = '#0f2f28'; x.fillRect(0, 0, w, h);
+      x.strokeStyle = 'rgba(111,227,255,0.13)'; x.lineWidth = 1;
+      for (var t = 0; t < 7; t++) {
+        var ty = (t + 0.5) * h / 7;
+        x.beginPath(); x.moveTo(0, ty); x.lineTo(w * 0.36, ty); x.lineTo(w * 0.44, ty - h * 0.09); x.lineTo(w, ty - h * 0.09); x.stroke();
+      }
+      /* rails */
+      x.strokeStyle = '#5a3a1e'; x.lineWidth = Math.max(4, h * 0.07);
+      x.strokeRect(x.lineWidth / 2, x.lineWidth / 2, w - x.lineWidth, h - x.lineWidth);
+      /* a corner pocket */
+      x.fillStyle = '#06120f';
+      x.beginPath(); x.arc(w * 0.955, h * 0.09, h * 0.11, 0, TAU); x.fill();
+      /* the cue ball, the dashed line, and the object ball on its way */
+      x.strokeStyle = 'rgba(255,255,255,0.55)'; x.lineWidth = 1.6; x.setLineDash([5, 5]);
+      x.beginPath(); x.moveTo(w * 0.16, h * 0.72); x.lineTo(w * 0.62, h * 0.36); x.stroke();
+      x.setLineDash([]);
+      x.strokeStyle = 'rgba(255,204,77,0.55)';
+      x.beginPath(); x.moveTo(w * 0.68, h * 0.32); x.lineTo(w * 0.93, h * 0.13); x.stroke();
+      function ball(cx, cy, rad, fill, stripe, label) {
+        x.fillStyle = fill;
+        x.beginPath(); x.arc(cx, cy, rad, 0, TAU); x.fill();
+        if (stripe) {
+          x.save();
+          x.beginPath(); x.arc(cx, cy, rad, 0, TAU); x.clip();
+          x.fillStyle = '#f3f3ef';
+          x.fillRect(cx - rad, cy - rad, rad * 2, rad * 0.62);
+          x.fillRect(cx - rad, cy + rad * 0.38, rad * 2, rad * 0.62);
+          x.restore();
+        }
+        x.fillStyle = '#f7f7f2';
+        x.beginPath(); x.arc(cx, cy, rad * 0.46, 0, TAU); x.fill();
+        if (label) {
+          x.fillStyle = '#101820';
+          x.font = '700 ' + Math.round(rad * 0.85) + 'px "Segoe UI", sans-serif';
+          x.textAlign = 'center'; x.textBaseline = 'middle';
+          x.fillText(label, cx, cy + 1);
+          x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+        }
+      }
+      var rr = h * 0.1;
+      x.fillStyle = '#f7f7f2';
+      x.beginPath(); x.arc(w * 0.16, h * 0.72, rr, 0, TAU); x.fill();   /* cue ball */
+      ball(w * 0.66, h * 0.34, rr, '#1d1d22', false, '8');
+      ball(w * 0.36, h * 0.2, rr * 0.92, '#c9202a', true, '11');
+      ball(w * 0.3, h * 0.82, rr * 0.92, '#f0a30a', false, '1');
+    }
+  },
+  {
+    id: 'forge', name: 'The Forge', cat: 'kids', tag: 'School', isNew: true,
+    desc: 'A tutor, not a quiz. It starts wherever you actually are, unlocks each skill only when the ones underneath it are solid, and on every miss it names the rule and walks the working line by line. Keeps the record.',
+    best: function () {
+      var s = lsJSON('forge_v1');
+      if (!s || !s.skills || typeof s.skills !== 'object') return null;
+      var answered = (typeof s.answered === 'number' && isFinite(s.answered)) ? s.answered : 0;
+      if (!answered) return null;
+      /* The game WRITES the count now, because the game owns the rule. This
+         card used to re-derive it with a fixed 7-of-8 gate and over-reported
+         by three: the real bar rises on multiple-choice skills, where four
+         options hand back a quarter of wrong answers as right. Telling a
+         parent a child is further along than she is, is the one direction
+         this number must never be wrong in. */
+      if (typeof s.solid === 'number' && isFinite(s.solid) && s.solid >= 0) {
+        return ['Skills solid', Math.floor(s.solid)];
+      }
+      /* a save written before the game recorded its own count — count only
+         what is unambiguous, and never round up */
+      var solid = 0, k, v, hits, i;
+      for (k in s.skills) {
+        if (!Object.prototype.hasOwnProperty.call(s.skills, k)) continue;
+        v = s.skills[k];
+        if (!v || typeof v !== 'object') continue;
+        hits = 0;
+        if (Object.prototype.toString.call(v.recent) === '[object Array]') {
+          for (i = 0; i < v.recent.length; i++) if (v.recent[i]) hits++;
+          if (v.recent.length >= 8 && hits >= 7 && v.a >= 8) solid++;
+        }
+      }
+      return ['Skills solid', solid];
+    },
+    cover: function (x, w, h) {
+      var g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#0c1226'); g.addColorStop(1, '#131b34');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      /* a growth chart climbing — the thing the family actually wants to see */
+      var cols = ['#ffcc4d', '#6fe3ff', '#6ee7a0', '#b48cff'];
+      var pts = 9, base = [], i, j, xx, prev;
+      for (j = 0; j < cols.length; j++) {
+        var up = [], dn = [];
+        for (i = 0; i < pts; i++) {
+          var t = i / (pts - 1);
+          xx = w * 0.08 + t * w * 0.86;
+          prev = base[i] || 0;
+          var addv = (0.06 + 0.16 * t) * (1 - j * 0.16) * (0.7 + 0.5 * Math.sin(i * 0.9 + j));
+          if (addv < 0.01) addv = 0.01;
+          base[i] = prev + addv;
+          up.push([xx, h * 0.9 - base[i] * h * 0.62]);
+          dn.unshift([xx, h * 0.9 - prev * h * 0.62]);
+        }
+        x.fillStyle = cols[j]; x.globalAlpha = 0.55;
+        x.beginPath();
+        x.moveTo(up[0][0], up[0][1]);
+        for (i = 1; i < up.length; i++) x.lineTo(up[i][0], up[i][1]);
+        for (i = 0; i < dn.length; i++) x.lineTo(dn[i][0], dn[i][1]);
+        x.closePath(); x.fill();
+      }
+      x.globalAlpha = 1;
+      x.strokeStyle = 'rgba(140,170,220,0.4)'; x.lineWidth = 1.4;
+      x.beginPath();
+      x.moveTo(w * 0.08, h * 0.12); x.lineTo(w * 0.08, h * 0.9); x.lineTo(w * 0.96, h * 0.9);
+      x.stroke();
+      x.fillStyle = 'rgba(234,242,255,0.9)';
+      x.font = '800 ' + Math.round(h * 0.15) + 'px "Segoe UI", sans-serif';
+      x.textAlign = 'left'; x.textBaseline = 'top';
+      x.fillText('why', w * 0.13, h * 0.15);
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    }
+  }
+];
+
+
+
+
+/* ------------------------------------------------------------ rendering -- */
+var CATS = [
+  ['all', 'All'],
+  ['action', 'Action'],
+  ['shooter', 'Shooters'],
+  ['racing', 'Racing'],
+  ['sports', 'Sports'],
+  ['outdoors', 'Outdoors'],
+  ['puzzle', 'Puzzle'],
+  ['strategy', 'Strategy'],
+  ['kids', 'Kids']
+];
+
+var grid = document.getElementById('grid');
+var playedCount = 0;
+
+GAMES.forEach(function (g) {
+  var a = document.createElement('a');
+  a.className = 'card'; a.href = g.id + '/'; a.dataset.cat = g.cat;
+
+  var best = null;
+  try { best = g.best(); } catch (e) { best = null; }
+  if (best) playedCount++;
+
+  var bestHTML = best
+    ? '<div class="best">' + best[0] + '<br><b>' + best[1] + '</b></div>'
+    : '<div class="best unplayed">Unplayed</div>';
+
+  a.innerHTML =
+    '<div class="cover"><canvas></canvas>' + (g.isNew && !best ? '<span class="new">NEW</span>' : '') + '</div>' +
+    '<div class="body"><h2>' + g.name + '</h2><p>' + g.desc + '</p>' +
+    '<div class="meta"><span class="tag">' + g.tag + '</span>' + bestHTML + '</div></div>';
+  grid.appendChild(a);
+
+  /* paint the cover at the card's real size */
+  var cv = a.querySelector('canvas');
+  requestAnimationFrame(function () {
+    var r = cv.getBoundingClientRect();
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.max(60, Math.round(r.width * dpr));
+    cv.height = Math.max(30, Math.round(r.height * dpr));
+    var x = cv.getContext('2d');
+    x.scale(dpr, dpr);
+    var w = r.width, h = r.height;
+    x.fillStyle = '#0a0e1c'; x.fillRect(0, 0, w, h);
+    try { g.cover(x, w, h); } catch (e) { /* a broken cover must never break the hub */ }
+  });
+});
+
+document.getElementById('stats').innerHTML =
+  '<b>' + GAMES.length + '</b> games &middot; <b>' + playedCount + '</b> played on this device';
+
+/* filter chips */
+var chipsEl = document.getElementById('chips');
+CATS.forEach(function (c, i) {
+  var b = document.createElement('button');
+  b.className = 'chip' + (i === 0 ? ' on' : ''); b.textContent = c[1]; b.dataset.cat = c[0];
+  b.addEventListener('click', function () {
+    chipsEl.querySelectorAll('.chip').forEach(function (o) { o.classList.remove('on'); });
+    b.classList.add('on');
+    grid.querySelectorAll('.card').forEach(function (card) {
+      card.classList.toggle('hidden', c[0] !== 'all' && card.dataset.cat !== c[0]);
+    });
+  });
+  chipsEl.appendChild(b);
+});
+</script>
+</body>
+</html>
